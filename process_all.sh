@@ -32,7 +32,7 @@ LOCKFILE_PRE=${LOCKFILE_PRE:-"fam_concurrency_lock"}  # Leading name for temp lo
 MAX_RUNTIME=${MAX_RUNTIME:-60}                         # Number of mins.
 DEBUG=${DEBUG:-false}                                  # Set default debug state to off.
 LOGOUT=true
-DEBUG=true
+DEBUG=false
 
 #
 # Globals.

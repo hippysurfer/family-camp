@@ -9,6 +9,10 @@
 # of itself.
 #
 
+# Force running to the correct location.
+cd /home/rjt/family-camp
+source ../scout-records/py/bin/activate
+
 #
 # Set defensive shell options
 #
@@ -16,9 +20,6 @@ set -e    # exit is a not trival command fails (use || : if it is OK for it to f
 set -u    # treat unset variables as an error. (you have have to surround some contructs with
           # set +u; set -u if you need to deal with unset variables.
 
-# Force running to the correct location.
-cd /home/rjt/family_camp
-source ../scout_records/py/bin/active
 
 #
 # Defaults. These can be overidden in calling scripts.

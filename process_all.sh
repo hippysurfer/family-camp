@@ -252,7 +252,7 @@ then
 fi
 
 # Main script
-(python process_fam_bookings.py --debug && python ./gen_invoices.py) >> process_all.log
+(python process_fam_bookings.py && python ./gen_invoices.py) >> process_all.log
 
 if ! release_lock
 then

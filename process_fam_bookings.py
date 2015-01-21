@@ -14,10 +14,12 @@ Options:
 
 """
 
+import sys
 import logging
+import socket
 from docopt import docopt
 
-
+import bufferingsmtphandler
 import gspread
 import creds
 
@@ -45,7 +47,7 @@ def _main(gc):
 
     for i, ref in missing_refs.iteritems():
         b_rec = nb[nb[camp_records.I_REF] == ref]
-        log.debug("Adding booking for: {}".format(
+        log.info("Adding booking for: {}".format(
             b_rec[camp_records.FAMILY].iloc[0]))
         invoices.add_booking(
             ref=ref,
@@ -78,7 +80,7 @@ def _main(gc):
     for i, ref in missing_refs.iteritems():
         b_recs = b[b[camp_records.I_REF] == ref]
         for i, b_rec in b_recs.iterrows():
-            log.debug("Adding camper: {}".format(b_rec[camp_records.FAMILY]))
+            log.info("Adding camper: {}".format(b_rec[camp_records.FAMILY]))
             activities.add_booking(
                 b_rec)
 
@@ -94,8 +96,22 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    # creds needs to contain a tuple of the following form
-    #     creds = ('username','password')
-    gc = gspread.login(*creds.creds)
+    HOST = 'www.thegrindstone.me.uk' \
+           if not socket.gethostname() == 'rat' else 'localhost'
+    FROM = "rjt@thegrindstone.me.uk"
+    TO = "hippysurfer@gmail.com"
+    SUBJECT = "Family Camp: process_fam_bookings"
+    handler = bufferingsmtphandler.BufferingSMTPHandler(
+        HOST, FROM, TO, SUBJECT)
+    log.addHandler(handler)
 
-    _main(gc)
+    try:
+        # creds needs to contain a tuple of the following form
+        #     creds = ('username','password')
+        gc = gspread.login(*creds.creds)
+
+        _main(gc)
+
+    except:
+        log.error("Uncaught exception.", exc_info=True)
+        sys.exit(1)

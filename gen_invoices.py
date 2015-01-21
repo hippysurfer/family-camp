@@ -22,6 +22,8 @@ import gspread
 import creds
 import camp_records as cr
 import logging
+
+import bufferingsmtphandler
 from InvoiceGenerator.generator import Address, Item, Invoice, Remittance
 
 log = logging.getLogger(__name__)
@@ -196,6 +198,7 @@ def _main(gs):
 
     # Generate invoices and send emails
     for invoice in pending_invoices:
+        log.info("Generating invoice for: {}".format(invoice[cr.I_REF]))
         (filename, total) = make_invoice(invoice)
         send_email_with_attachment(
             "Family Camp Invoice  - {}".format(invoice[cr.I_REF]),
@@ -213,8 +216,6 @@ def _main(gs):
         invoices.mark_sent(invoice, total)
 
 
-
-
 if __name__ == '__main__':
 
     args = docopt(__doc__, version='1.0')
@@ -227,8 +228,19 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    # creds needs to contain a tuple of the following form
-    #     creds = ('username','password')
-    gc = gspread.login(*creds.creds)
+    LOG_FROM = "rjt@thegrindstone.me.uk"
+    LOG_TO = "hippysurfer@gmail.com"
+    LOG_SUBJECT = "Family Camp: gen_invoices"
+    handler = bufferingsmtphandler.BufferingSMTPHandler(
+        HOSTNAME, LOG_FROM, LOG_TO, LOG_SUBJECT)
+    log.addHandler(handler)
 
-    _main(gc)
+    try:
+        # creds needs to contain a tuple of the following form
+        #     creds = ('username','password')
+        gc = gspread.login(*creds.creds)
+
+        _main(gc)
+    except:
+        log.error("Uncaught exception.", exc_info=True)
+        sys.exit(1)

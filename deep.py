@@ -1,6 +1,5 @@
 # coding: utf-8
 
-import time
 import random
 from functools import partial
 from datetime import timedelta
@@ -46,6 +45,8 @@ class Camper:
     def __str__(self):
         return "{}/{}".format(self.group, self.name)
 
+    __repr__ = __str__
+
 
 class Session:
 
@@ -57,6 +58,8 @@ class Session:
     def __str__(self):
         return "Session:{} {}".format(self.activity.name,
                                       self.start.strftime(DATEFORMAT))
+
+    __repr__ = __str__
 
 
 class SessionInst:
@@ -77,6 +80,8 @@ class SessionInst:
             self.session.activity.name,
             self.session.start.strftime(DATEFORMAT),
             ", ".join([str(_) for _ in self.campers]))
+
+    __repr__ = __str__
 
 
 class Individual:
@@ -131,18 +136,18 @@ class Individual:
 
         return out
 
-    def export_by_camper(self):
+    def export_by_family(self):
         """Return a dictionary of the following form:
 
-           camper => [session_inst,]
+           family => {session_inst => [campers,]}
         """
 
         ret = {}
-        for c in self.campers:
-            ret[c] = sorted(
-                [s for s in self.session_inst
-                 if c in s.campers],
-                key=lambda s: s.session.start)
+        for f in set(c.group for c in self.campers):
+            ret[f] = {}
+            for s in [s for s in self.session_inst if f in
+                      [camper.group for camper in s.campers]]:
+                ret[f][s] = [c for c in s.campers if c.group == f]
 
         return ret
 
@@ -421,35 +426,35 @@ def print_best(hof, campers, sessions):
     individual = Individual(hof[0], campers, sessions)
     print("\nFitness = {}".format(individual.fitness(debug=True)))
     print("Goodness = {}%".format(individual.goodness(debug=True)))
-    pprint.pprint(individual.export_by_camper())
+    pprint.pprint(individual.export_by_family())
     pprint.pprint(individual.export_by_activity())
+
+from scoop import futures
+
+(acts, sessions, campers) = get_source_data()
+
+toolbox = base.Toolbox()
+
+creator.create("FitnessMin", base.Fitness, weights=(1.0, -1.0))
+creator.create("Individual", list, fitness=creator.FitnessMin)
+
+toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
+                 gen_seed_individual(campers, sessions,
+                                     creator=creator.Individual))
+toolbox.register(
+    "population", tools.initRepeat, list, toolbox.individual, n=500)
+toolbox.register("mate", tools.cxUniform, indpb=0.5)
+toolbox.register("mutate", partial(mutate, campers=campers,
+                                   sessions=sessions))
+toolbox.register("select", tools.selTournament, tournsize=10)
+toolbox.register("evaluate", partial(evaluate, campers=campers,
+                                     sessions=sessions))
+toolbox.register("map", futures.map)
 
 
 if __name__ == '__main__':
 
-    # import multiprocessing
-    # pool = multiprocessing.Pool()
-    # toolbox.register("map", pool.map)
-
-    (acts, sessions, campers) = get_source_data()
-
-    toolbox = base.Toolbox()
-
-    creator.create("FitnessMin", base.Fitness, weights=(1.0, -1.0))
-    creator.create("Individual", list, fitness=creator.FitnessMin)
-
-    toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
-                     gen_seed_individual(campers, sessions,
-                                         creator=creator.Individual))
-    toolbox.register(
-        "population", tools.initRepeat, list, toolbox.individual, n=1000)
-    toolbox.register("mate", tools.cxUniform, indpb=0.5)
-    toolbox.register("mutate", partial(mutate, campers=campers,
-                                       sessions=sessions))
-    toolbox.register("select", tools.selTournament, tournsize=10)
-    toolbox.register("evaluate", partial(evaluate, campers=campers,
-                                         sessions=sessions))
-
+    
     hof = HallOfFame(10)
     stats = Statistics(key=lambda ind: ind.fitness.values)
     stats.register("avg", numpy.mean, axis=0)
@@ -467,7 +472,7 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=500,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=10,
         stats=stats,
         halloffame=hof,
         verbose=True)

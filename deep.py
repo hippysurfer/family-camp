@@ -4,7 +4,7 @@ import random
 from functools import partial
 from datetime import timedelta
 from datetime import datetime
-import gspread as gs
+import google
 from deap import base
 from deap import creator
 from deap import tools
@@ -13,8 +13,6 @@ import numpy
 from deap import algorithms
 from deap.tools import HallOfFame
 from deap.tools import Statistics
-
-import creds
 
 
 DATEFORMAT = "%a %H:%M"
@@ -84,6 +82,14 @@ class SessionInst:
     __repr__ = __str__
 
 
+def overlapping_sessions(session_inst, session_insts):
+    """Return a list of sessions from sessions that overlap
+    with session."""
+    return [_ for _ in session_insts
+            if (_ != session_inst and sessions_overlap(
+                _.session, session_inst.session))]
+
+
 class Individual:
 
     def __init__(self, timetable, campers, sessions):
@@ -97,6 +103,11 @@ class Individual:
                 SessionInst(sessions[session_name],
                             campers,
                             timetable[session_idx:session_idx + len(campers)]))
+
+        self.overlapping_sessions_map = dict(
+            [(session_inst, overlapping_sessions(session_inst,
+                                                 self.session_inst))
+             for session_inst in self.session_inst])
 
     def export_map(self):
         """Returns a row for each interval. A column for each activity.
@@ -173,18 +184,14 @@ class Individual:
             # Count the number of times we have the same camper in two sessions
             # that overlap.
             for c in s.campers:
-                for other_s in [_ for _ in self.session_inst
-                                if (_ != s and sessions_overlap(
-                                    _.session, s.session))]:
+                for other_s in self.overlapping_sessions_map[s]:
                     if c in other_s.campers:
                         count += 1
 
             # Count the number of times we have a family split accross two
             # sessions that overlap
             for g in set([c.group for c in s.campers]):
-                for other_s in [_ for _ in self.session_inst
-                                if (_ != s and sessions_overlap(
-                                    _.session, s.session))]:
+                for other_s in self.overlapping_sessions_map[s]:
                     if g in set([c.group for c in other_s.campers]):
                         if debug:
                             print(
@@ -315,7 +322,7 @@ def sessions_overlap(first, second):
 
 def get_source_data():
     """Return the activities, sessions and campers."""
-    gc = gs.login(*creds.creds)
+    gc = google.conn()
     spread = gc.open("Timetable")
     acts_wks = spread.worksheet("Activities").get_all_values()
     session_wks = spread.worksheet("Sessions").get_all_values()
@@ -442,7 +449,7 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=500)
+    "population", tools.initRepeat, list, toolbox.individual, n=100)
 toolbox.register("mate", tools.cxUniform, indpb=0.5)
 toolbox.register("mutate", partial(mutate, campers=campers,
                                    sessions=sessions))
@@ -472,7 +479,7 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=10,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=3,
         stats=stats,
         halloffame=hof,
         verbose=True)

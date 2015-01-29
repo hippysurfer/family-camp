@@ -18,29 +18,19 @@ import sys
 import logging
 import socket
 from docopt import docopt
-from oauth2client.client import SignedJwtAssertionCredentials
 
 import bufferingsmtphandler
-import gspread
-import creds
 
 import camp_records
+import google
 
 log = logging.getLogger(__name__)
 
-KEY_FILE = "key.pem"
-ACCOUNT = '111027059515-1iafiu8cv4h8m3i664s578vt7pngcsun@developer'\
-          '.gserviceaccount.com'
 
-
-def _main(gc):
+def _main():
     # Connect to booking workbook.
-    scope = ['https://spreadsheets.google.com/feeds',
-             'https://docs.google.com/feeds']
-    SIGNED_KEY = open(KEY_FILE, 'rb').read()
-    credentials = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, scope)
-    gc = gspread.authorize(credentials)
 
+    gc = google.conn()
     spread = gc.open(camp_records.BOOKING_SPREADSHEET_NAME)
 
     # Extract the bookings sheet from the workbook.
@@ -117,11 +107,7 @@ if __name__ == '__main__':
     log.addHandler(handler)
 
     try:
-        # creds needs to contain a tuple of the following form
-        #     creds = ('username','password')
-        gc = gspread.login(*creds.creds)
-
-        _main(gc)
+        _main()
 
     except:
         log.error("Uncaught exception.", exc_info=True)

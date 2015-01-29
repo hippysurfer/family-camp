@@ -18,8 +18,7 @@ import smtplib
 import sys
 import socket
 from docopt import docopt
-import gspread
-import creds
+import google
 import camp_records as cr
 import logging
 
@@ -238,7 +237,7 @@ if __name__ == '__main__':
     try:
         # creds needs to contain a tuple of the following form
         #     creds = ('username','password')
-        gc = gspread.login(*creds.creds)
+        gc = google.conn()
 
         _main(gc)
     except:

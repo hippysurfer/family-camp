@@ -1,8 +1,5 @@
 import logging
 import time
-import errno
-import os
-import signal
 
 log = logging.getLogger(__name__)
 
@@ -36,12 +33,7 @@ def conn():
 
 def retry(sheet, wks, func):
 
-    def _handle_timeout(signum, frame):
-            raise TimeoutError()
-
     def _wrapper(*args, **kwargs):
-        signal.signal(signal.SIGALRM, _handle_timeout)
-        signal.alarm(100)
 
         # log.debug("In retry wrapper for func: {} {!r} {!r}: ".format(
         #    func.__name__, args, kwargs))
@@ -86,9 +78,6 @@ def retry(sheet, wks, func):
                 if attempt > CREDS_THRESHOLD:
                     log.warn("Attempting to refresh creds.")
                     sheet.gc.gc.login()
-
-            finally:
-                signal.alarm(0)
         return ret
 
     return _wrapper

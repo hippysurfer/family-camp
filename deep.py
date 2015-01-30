@@ -1,21 +1,46 @@
 # coding: utf-8
+"""Generate Family Camp Timetable.
 
+Usage:
+  deep.py [-d|--debug] [-r|--refresh]
+  deep.py (-h | --help)
+  deep.py --version
+
+
+Options:
+  -r,--refresh   Refresh cache from Google Docs
+  -d,--debug     Turn on debug output.
+  -h,--help      Show this screen.
+  --version      Show version.
+
+"""
+
+import os.path
+import sys
 import random
 from functools import partial
+import itertools as it
 from datetime import timedelta
 from datetime import datetime
+import logging
+from docopt import docopt
+import pickle
 import google
 from deap import base
 from deap import creator
 from deap import tools
+import scoop
 
 import numpy
 from deap import algorithms
 from deap.tools import HallOfFame
 from deap.tools import Statistics
 
+log = logging.getLogger(__name__)
+
 
 DATEFORMAT = "%a %H:%M"
+CACHE = ".cache.pickle"
 
 
 class Activity:
@@ -68,10 +93,12 @@ class SessionInst:
         self.set_campers(campers)
 
     def set_campers(self, campers):
-        self.campers = []
-        for i in range(0, len(campers)):
-            if campers[i]:
-                self.campers.append(self.all_campers[i])
+        self.campers = list(it.compress(self.all_campers,
+                                        campers))
+        # self.campers = []
+        # for i in range(0, len(campers)):
+        #     if campers[i]:
+        #         self.campers.append(self.all_campers[i])
 
     def __str__(self):
         return "Session: {} {} / Campers: {}".format(
@@ -95,19 +122,27 @@ class Individual:
     def __init__(self, timetable, campers, sessions):
         self.campers = campers
         self.sessions = sessions
-        self.session_inst = []
-        for (session_name, session_idx) in zip(
-                range(0, len(sessions)),
-                range(0, len(campers) * len(sessions), len(campers))):
-            self.session_inst.append(
-                SessionInst(sessions[session_name],
-                            campers,
-                            timetable[session_idx:session_idx + len(campers)]))
+        self.session_inst = [
+            SessionInst(session,
+                        campers,
+                        timetable[session_idx:session_idx + len(campers)])
+            for session, session_idx in
+            zip(sessions,
+                range(0, len(campers) * len(sessions), len(campers)))
+        ]
+        # self.session_inst = []
+        # for (session_name, session_idx) in zip(
+        #         range(0, len(sessions)),
+        #         range(0, len(campers) * len(sessions), len(campers))):
+        #     self.session_inst.append(
+        #         SessionInst(sessions[session_name],
+        #                     campers,
+        #                     timetable[session_idx:session_idx + len(campers)]))
 
-        self.overlapping_sessions_map = dict(
-            [(session_inst, overlapping_sessions(session_inst,
-                                                 self.session_inst))
-             for session_inst in self.session_inst])
+        self.overlapping_sessions_map = \
+            {session_inst: overlapping_sessions(session_inst,
+                                                self.session_inst)
+             for session_inst in self.session_inst}
 
     def export_map(self):
         """Returns a row for each interval. A column for each activity.
@@ -156,8 +191,9 @@ class Individual:
         ret = {}
         for f in set(c.group for c in self.campers):
             ret[f] = {}
-            for s in [s for s in self.session_inst if f in
-                      [camper.group for camper in s.campers]]:
+            for s in sorted([s for s in self.session_inst if f in
+                             [camper.group for camper in s.campers]],
+                            key=lambda s: s.session.start):
                 ret[f][s] = [c for c in s.campers if c.group == f]
 
         return ret
@@ -240,7 +276,6 @@ class Individual:
         return count
 
     def goodness(self, debug=False):
-
         # What percentage of the other activities have been met?
 
         # Total number of other activities requested.
@@ -292,6 +327,28 @@ def sessions_overlap(first, second):
     return False
 
 
+class MyHallOfFame(HallOfFame):
+
+    def __init__(self, campers, sessions, dest, *args, **kwargs):
+        HallOfFame.__init__(self, *args, **kwargs)
+        self.campers = campers
+        self.sessions = sessions
+        self.count = 0
+        self.dest = dest
+
+    def insert(self, item):
+        HallOfFame.insert(self, item)
+
+        ind = Individual(item, self.campers, self.sessions)
+        scoop.logger.info("fitness = {}, goodness = {}".format(ind.fitness(),
+                                                               ind.goodness()))
+        if ind.fitness() == 1 and ind.goodness() == 100:
+            path = os.path.join(self.dest, str(self.count))
+            with open(path, 'w') as f:
+                f.write(print_individual(ind))
+                scoop.logger.info("Written {}\n".format(path))
+            self.count += 1
+
 # import random
 # from datetime import timedelta
 # from datetime import datetime
@@ -321,17 +378,23 @@ def sessions_overlap(first, second):
 # print(individual)
 
 
-def get_source_data():
+def get_source_data(use_cache=True):
     """Return the activities, sessions and campers."""
-    gc = google.conn()
-    spread = gc.open("Timetable")
-    acts_wks = spread.worksheet("Activities").get_all_values()
-    session_wks = spread.worksheet("Sessions").get_all_values()
-    campers_wks = gc.open("Family Camp Bookings").worksheet(
-        "Activities").get_all_values()
+    if use_cache and os.path.exists(CACHE):
+        (acts_wks, session_wks, campers_wks) = pickle.load(
+            open(CACHE, 'rb'))
+    else:
+        gc = google.conn()
+        spread = gc.open("Timetable")
+        acts_wks = spread.worksheet("Activities").get_all_values()
+        session_wks = spread.worksheet("Sessions").get_all_values()
+        campers_wks = gc.open("Family Camp Bookings").worksheet(
+            "Activities").get_all_values()
 
-    acts = dict([(_[0], Activity(_[0], timedelta(minutes=int(_[1])), _[2]))
-                 for _ in acts_wks[1:] if _[0] != ''])
+        pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
+
+    acts = {_[0]: Activity(_[0], timedelta(minutes=int(_[1])), _[2])
+            for _ in acts_wks[1:] if _[0] != ''}
 
     sessions = [Session(acts[_[0]],
                         datetime.strptime(_[1], "%d/%m/%Y %H:%M:%S"))
@@ -427,37 +490,52 @@ def gen_seed_individual(campers, sessions, creator):
 def gen_individual(seed_individual, toolbox):
     return toolbox.mutate(seed_individual)[0]
 
-import pprint
 
+def print_individual(individual):
+    out = ["Fitness = {}".format(individual.fitness()),
+           "Goodness = {}\n\n".format(individual.goodness())]
 
-def print_best(hof, campers, sessions):
-    individual = Individual(hof[0], campers, sessions)
-    print("\nFitness = {}".format(individual.fitness(debug=True)))
-    print("Goodness = {}%".format(individual.goodness(debug=True)))
-
-    out = []
     previous_f = None
-    for f in individual.export_by_family():
-        previous_s = None
-        for s, campers in f:
+    previous_i = None
+    for f, s in individual.export_by_family().items():
+        for i, campers in sorted(s.items(), key=lambda s: s[0].session.start):
             previous_c = None
             for c in campers:
-                out.append("{<:20} {<:20} {<:20}".format(
+                out.append("{:<20} {:<20} {:<20} {:<20}".format(
                     f if f != previous_f else '',
-                    s if s != previous_s else '',
-                    c if c != previous_c else ''
+                    i.session.start.strftime(DATEFORMAT) if i != previous_i else '',
+                    i.session.activity.name if i != previous_i else '',
+                    c.name if c != previous_c else ''
                 ))
                 previous_f = f
-                previous_s = s
-                previous_s = c
+                previous_i = i
+                previous_c = c
+            out.append('\n')
 
-    print("\n".join(out))
-        
-    #pprint.pprint(individual.export_by_activity())
+    out.append("**********************************************************\n")
+
+    previous_a = None
+    previous_i = None
+    previous_c = None
+    for a, s in individual.export_by_activity().items():
+        for i in s:
+            for c in i.campers:
+                out.append("{:<20} {:<20} {:<20}".format(
+                    a.name if a != previous_a else '',
+                    i.session.start.strftime(DATEFORMAT)
+                    if i != previous_i else '',
+                    c.name if c != previous_c else ''
+                ))
+                previous_a = a
+                previous_i = i
+                previous_c = c
+        out.append('\n')
+
+    return "\n".join(out)
 
 from scoop import futures
 
-(acts, sessions, campers) = get_source_data()
+(acts, sessions, campers) = get_source_data(use_cache=True)
 
 toolbox = base.Toolbox()
 
@@ -468,7 +546,7 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=100)
+    "population", tools.initRepeat, list, toolbox.individual, n=500)
 toolbox.register("mate", tools.cxUniform, indpb=0.5)
 toolbox.register("mutate", partial(mutate, campers=campers,
                                    sessions=sessions))
@@ -479,33 +557,36 @@ toolbox.register("map", futures.map)
 
 
 if __name__ == '__main__':
+    args = docopt(__doc__, version='1.0')
 
-    
-    hof = HallOfFame(10)
+    level = logging.DEBUG if args['--debug'] else logging.INFO
+    refresh = args['--refresh']
+
+    if refresh:
+        log.info('Fetching fresh data.')
+        get_source_data(use_cache=False)
+        log.info('Done. restart without the --refresh flag.')
+        sys.exit(0)
+
+    logging.basicConfig(level=level)
+    log.debug("Debug On\n")
+
+    hof = MyHallOfFame(campers, sessions, 'timetables', 100)
     stats = Statistics(key=lambda ind: ind.fitness.values)
     stats.register("avg", numpy.mean, axis=0)
     stats.register("std", numpy.std, axis=0)
     stats.register("min", numpy.min, axis=0)
     stats.register("max", numpy.max, axis=0)
 
-    import signal
-
-    def signal_handler(signal, frame):
-        print_best(hof, campers, sessions)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    print('Press Ctrl+C')
-
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=3,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=500,
         stats=stats,
         halloffame=hof,
         verbose=True)
 
-    print_best(hof, campers, sessions)
+    print(print_individual(Individual(hof[0], campers, sessions)))
 
-    # print(individual)
 
     # gc = gs.login(*creds.creds)
     # spread = gc.open("Timetable")

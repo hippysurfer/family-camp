@@ -212,11 +212,12 @@ class Individual:
             for s in self.session_inst:
                 if c in s.campers:
                     activities.append(s.session.activity)
+
             # How many campers are missing their priorities?
             missing = set(c.priorities) - set(activities)
             if len(missing):
                 if debug:
-                    print ("{} missing {}\n".format(
+                    print("{} missing {}\n".format(
                         str(c), " ".join([str(_) for _ in missing])))
             count += len(missing)
 
@@ -224,7 +225,7 @@ class Individual:
             unwanted = set(activities) - (set(c.priorities) | set(c.others))
             if len(unwanted):
                 if debug:
-                    print ("{} unwanted {}\n".format(
+                    print("{} unwanted {}\n".format(
                         str(c), " ".join([str(_) for _ in unwanted])))
             count += len(unwanted)
 
@@ -233,7 +234,7 @@ class Individual:
             duplicates = len(activities) - len(set(activities))
             if duplicates:
                 if debug:
-                    print ("{} duplicated {}".format(str(c), duplicates))
+                    print("{} duplicated {}".format(str(c), duplicates))
             count += duplicates
 
         return count
@@ -433,8 +434,26 @@ def print_best(hof, campers, sessions):
     individual = Individual(hof[0], campers, sessions)
     print("\nFitness = {}".format(individual.fitness(debug=True)))
     print("Goodness = {}%".format(individual.goodness(debug=True)))
-    pprint.pprint(individual.export_by_family())
-    pprint.pprint(individual.export_by_activity())
+
+    out = []
+    previous_f = None
+    for f in individual.export_by_family():
+        previous_s = None
+        for s, campers in f:
+            previous_c = None
+            for c in campers:
+                out.append("{<:20} {<:20} {<:20}".format(
+                    f if f != previous_f else '',
+                    s if s != previous_s else '',
+                    c if c != previous_c else ''
+                ))
+                previous_f = f
+                previous_s = s
+                previous_s = c
+
+    print("\n".join(out))
+        
+    #pprint.pprint(individual.export_by_activity())
 
 from scoop import futures
 

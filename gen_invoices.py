@@ -207,7 +207,9 @@ def _main(gs):
                  get_booking_details(campers, invoice),
                  "\n\nPlease find your invoice attached and note that your",
                  " place is not confirmed until we have received payment.\n\n",
-                 "Please send any queries to familycamp@7thlichfield.org.uk.",
+                 "You can find answers to Frequenty Asked Questions at the ",
+                 "following address: http://goo.gl/2wK1A8 \n\n"
+                 "Please send any queries to familycamp@7thlichfield.org.uk \n",
                  "Yours in Scouting.\n\n7th Lichfield Social Team."]),
             [invoice[cr.I_EMAIL]],
             [COPY_TO], [COPY_TO], filename)

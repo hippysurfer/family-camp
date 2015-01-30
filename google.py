@@ -31,7 +31,7 @@ def conn():
     return Google()
 
 
-def retry(sheet, wks, func):
+def retry(func, sheet=None):
 
     def _wrapper(*args, **kwargs):
 
@@ -75,7 +75,7 @@ def retry(sheet, wks, func):
                 time.sleep(sleep_time)
                 sleep_time *= BACKOFF_FACTOR
 
-                if attempt > CREDS_THRESHOLD:
+                if attempt > CREDS_THRESHOLD and sheet:
                     log.warn("Attempting to refresh creds.")
                     sheet.gc.gc.login()
         return ret
@@ -89,15 +89,14 @@ class Worksheet():
         self.sheet = sheet
         self.wks = wks
 
-        self.get_all_values = retry(self.sheet, self.wks,
-                                    self.wks.get_all_values)
-        self.row_values = retry(self.sheet, self.wks, self.wks.row_values)
-        self.add_rows = retry(self.sheet, self.wks, self.wks.add_rows)
+        self.get_all_values = retry(self.wks.get_all_values, self.sheet)
+        self.row_values = retry(self.wks.row_values, self.sheet)
+        self.add_rows = retry(self.wks.add_rows, self.sheet)
         self.row_count = self.wks.row_count
-        self.col_values = retry(self.sheet, self.wks, self.wks.col_values)
-        self.cell = retry(self.sheet, self.wks, self.wks.cell)
-        self.update_cells = retry(self.sheet, self.wks, self.wks.update_cells)
-        self.update_cell = retry(self.sheet, self.wks, self.wks.update_cell)
+        self.col_values = retry(self.wks.col_values, self.sheet)
+        self.cell = retry(self.wks.cell, self.sheet)
+        self.update_cells = retry(self.wks.update_cells, self.sheet)
+        self.update_cell = retry(self.wks.update_cell, self.sheet)
 
 
 class Sheet():
@@ -107,7 +106,7 @@ class Sheet():
         self.sheet = sheet
 
     def worksheet(self, name):
-        return Worksheet(self, self.sheet.worksheet(name))
+        return Worksheet(self, retry(self.sheet.worksheet)(name))
 
 
 class Google:
@@ -116,7 +115,7 @@ class Google:
         self.gc = gspread.authorize(CREDS)
 
     def open(self, name):
-        return Sheet(self, self.gc.open(name))
+        return Sheet(self, retry(self.gc.open)(name))
 
     def open_by_ref(self, ref):
-        return Sheet(self, self.gc.open(ref))
+        return Sheet(self, retry(self.gc.open)(ref))

@@ -84,7 +84,7 @@ ACTIVITIES = ['Archery',
               'Caving',
               'Climbing',
               'Crystal Maze',
-              'Backward Cooking',
+              'Fire Lighting',
               'Pottery Painting',
               "It's a Knockout"]
 

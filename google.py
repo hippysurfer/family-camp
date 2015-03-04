@@ -59,6 +59,10 @@ def retry(func, sheet=None):
                 break
             except:
                 if attempt > MAX_ATTEMPTS/2:
+                    log.warn("- retrying - "
+                             "attempt: {} - delay: {}s".format(
+                            attempt, sleep_time))
+
                     log.warn(
                         "Caught exception in {} {!r} {!r}: ".format(func.__name__,
                                                                     args, kwargs),
@@ -68,9 +72,6 @@ def retry(func, sheet=None):
                     log.warn("Retries exausted, giving up")
                     raise
 
-                log.warn("- retrying - "
-                         "attempt: {} - delay: {}s".format(
-                             attempt, sleep_time))
 
                 attempt += 1
                 time.sleep(sleep_time)

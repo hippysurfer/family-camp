@@ -483,6 +483,9 @@ def mutate(ind1, sessions, campers):
 def gen_seed_individual(campers, sessions, creator):
     activities = set([s.activity for s in sessions])
     campers_per_activity = {}
+
+    # Build a map of the list of campers that wish to do
+    # each activity.
     for c in campers:
         for activity in activities:
             if activity in c.priorities or activity in c.others:
@@ -490,19 +493,45 @@ def gen_seed_individual(campers, sessions, creator):
                     campers_per_activity[activity].append(c)
                 else:
                     campers_per_activity[activity] = [c, ]
+
+    # Place holder for final timetable. The timetable is represented as
+    # a list of True/False values. Each session has a list element for
+    # each camper.
     timetable = []
+
+    # For each session decided randomly whether a camper will be allocated.
+    # If a camper is allocated all of the family members of that camper
+    # (that also selected the activity) will also be added. This ensures that
+    # families are not split.
     for s in sessions:
-        families = []
+        session_timetable = [False] * len(campers)
         for c in campers:
-            if ((s.activity in campers_per_activity.keys()) and
-                (c in campers_per_activity[s.activity]) and
-                    ((c.group in families) or random.choice([True, False]))):
-                timetable.append(True)
-                campers_per_activity[s.activity].pop(
-                    campers_per_activity[s.activity].index(c))
-                families.append(c.group)
-            else:
-                timetable.append(False)
+            # Deal with the special case of an activity that has
+            # noone signed up.
+            if not (s.activity in campers_per_activity.keys()):
+                continue
+            # If the camper has selected the activity, flip the coin to see if
+            # they will be allocated.
+            if ((c in campers_per_activity[s.activity]) and
+                random.choice([True, False])):
+
+                # Find all members of the family that have selected
+                # the activity
+                f_members = [_ for _ in campers_per_activity[s.activity]
+                             if _.group == c.group]
+
+                # For each member of the family, add them to this
+                # session and remove them from the list waiting to
+                # be allocated to this activity.
+                for member in f_members:
+                    session_timetable[campers.index(member)] = True
+
+                    campers_per_activity[s.activity].pop(
+                        campers_per_activity[s.activity].index(member))
+
+        # Add the session to the timetable
+        timetable.extend(session_timetable)
+
     ind = creator(timetable)
     return ind
 
@@ -575,8 +604,8 @@ toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))
 toolbox.register("map", futures.map)
 
-
 if __name__ == '__main__':
+
     args = docopt(__doc__, version='1.0')
 
     level = logging.DEBUG if args['--debug'] else logging.INFO

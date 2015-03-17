@@ -502,6 +502,7 @@ def gen_seed_individual(campers, sessions, creator):
     # For each session decided randomly whether a camper will be allocated.
     # If a camper is allocated all of the family members of that camper
     # (that also selected the activity) will also be added. This ensures that
+
     # families are not split.
     for s in sessions:
         session_timetable = [False] * len(campers)
@@ -534,6 +535,43 @@ def gen_seed_individual(campers, sessions, creator):
 
     ind = creator(timetable)
     return ind
+
+
+def mate(campers, sessions, ind1, ind2):
+    """Mate two timetables by selecting families at random and swaping
+    their schedules from one timetable to the other."""
+
+    # create a list of all families to keep track of which have been
+    # considered.
+    families = set([_.group for _ in campers])
+
+    # for each family randomly swap the families schedule between
+    # the two timetables.
+    for c in campers:
+        # Stop if we have considered every family.
+        if len(families) == 0:
+                break
+
+        # Only proced of the family has not already been swapped.        
+        if (c.group in families):
+            # remove from the list so that we do not process this
+            # family again.
+            families.pop(families.index(c.group))
+
+            # Flip a coin to decide whether to swap the schedules.
+            if random.choice([True, False]):
+                for s_indx,s in enumerate(sessions):
+                    for c_indx,l_c in enumerate(campers):
+                        # search for each occurance of this family
+                        # in the timetable. Then swap their schedule
+                        # from one timetable to the other.
+                        if l_c.group == c.group:
+                            indx = (s_index*len(campers)) + c_indx
+                            tmp = ind1[indx]
+                            ind1[indx] = ind2[indx]
+                            ind1[inx] = tmp
+
+    return (ind1, ind2)
 
 
 def gen_individual(seed_individual, toolbox):
@@ -596,7 +634,8 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                                      creator=creator.Individual))
 toolbox.register(
     "population", tools.initRepeat, list, toolbox.individual, n=500)
-toolbox.register("mate", tools.cxUniform, indpb=0.5)
+toolbox.register("mate", partial(mate, campers=campers,
+                                 sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
                                    sessions=sessions))
 toolbox.register("select", tools.selTournament, tournsize=10)

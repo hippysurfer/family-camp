@@ -1,6 +1,9 @@
 # coding: utf-8
 """Generate Family Camp Timetable.
 
+Example:
+  stdbuf -oL -eL python -m scoop -n 8 deep.py | tee timetables/best.txt
+
 Usage:
   deep.py [-d|--debug] [-r|--refresh]
   deep.py (-h | --help)
@@ -42,6 +45,8 @@ log = logging.getLogger(__name__)
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
+# List of activities that everyone must be allocated.
+COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch"]
 
 class Activity:
 
@@ -282,19 +287,33 @@ class Individual:
         other_total = sum([len(c.others) for c in self.campers])
         met = 0
         for c in self.campers:
-            activities = []
-            for s in self.session_inst:
-                if c in s.campers:
-                    activities.append(s.session.activity)
+            activities = [s.session.activity for s in self.session_inst
+                          if c in s.campers]
             # The intersection is the list of activities that have been met.
-            met += len(set(c.others) & set(activities))
-            if len(set(c.others)) > len(set(c.others) & set(activities)):
+            # we divide this by the number that have been asked for. This
+            # give 1 if they have all been met and 0 if none have been met.
+            # It gives a weight score depending on how many have been
+            # requested. The more requested the less the effect on the overall
+            # goodness. This should favour those that have only request a
+            # small number of activites.
+            num_others = len(c.others)
+            set_others = set(c.others)
+            set_acts = set(activities)
+
+            met += (1 if num_others == 0 else
+                    len(set_others & set_acts) / num_others)
+
+            if (len(set_others) > len(set_others & set_acts)):
                 if debug:
                     print("Others not met: {} missing - {}".format(
                         str(c), " ".join(str(_) for _ in
-                                         set(c.others) - set(activities))))
+                                         set_others - set_acts)))
 
-        percentage_met = ((met / other_total) * 100)
+        # If all campers have all activitites met == len(campers)
+        # so met / len(campers) is the fraction of activities not met
+        # wieghted by the greediness of each camper.
+        percentage_met = ((met / len(campers)) * 100)
+
         if debug and percentage_met != 100:
             print("Percentation met: {} {} {}\n".format(
                 percentage_met, other_total, met))
@@ -340,8 +359,8 @@ class MyHallOfFame(HallOfFame):
         HallOfFame.insert(self, item)
 
         ind = Individual(item, self.campers, self.sessions)
-        scoop.logger.info("fitness = {}, goodness = {}".format(ind.fitness(),
-                                                               ind.goodness()))
+        # scoop.logger.info("fitness = {}, goodness = {}".format(ind.fitness(),
+        #                                                       ind.goodness()))
         if ind.fitness() == 1 and ind.goodness() == 100:
             path = os.path.join(self.dest, str(self.count))
             with open(path, 'w') as f:
@@ -402,7 +421,8 @@ def get_source_data(use_cache=True):
 
     campers = [Camper("{} {}".format(_[1], _[2]), _[0],
                       [acts[a.strip()]
-                       for a in _[8].split(',') if a.strip() != ''],
+                       for a in _[8].split(',') if a.strip() != ''] +
+                      [acts[c] for c in COMPULSARY_ACTIVITIES],
                       [acts[b.strip()] for b in _[9].split(',')
                        if b.strip() != '']) for _ in campers_wks[1:]]
 
@@ -492,8 +512,8 @@ def gen_individual(seed_individual, toolbox):
 
 
 def print_individual(individual):
-    out = ["Fitness = {}".format(individual.fitness()),
-           "Goodness = {}\n\n".format(individual.goodness())]
+    out = ["Fitness = {}".format(individual.fitness(debug=True)),
+           "Goodness = {}\n\n".format(individual.goodness(debug=True))]
 
     previous_f = None
     previous_i = None

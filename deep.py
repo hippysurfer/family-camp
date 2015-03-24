@@ -441,7 +441,7 @@ def evaluate(individual, campers, sessions, debug=False):
 def mutate(ind1, sessions, campers):
     mutant = toolbox.clone(ind1)
 
-    for _ in range(0, random.randrange(0, 3)):
+    for _ in range(0, random.randrange(0, 10)):
 
         # Select a session at random
         session_idx = random.randrange(0, len(sessions))
@@ -505,8 +505,13 @@ def gen_seed_individual(campers, sessions, creator):
 
     # families are not split.
     for s in sessions:
+        campers_in_session = 0  # keep track of campers in session
         session_timetable = [False] * len(campers)
         for c in campers:
+            # short cut to stop once the session is full.
+            if campers_in_session >= s.activity.limit:
+                break
+
             # Deal with the special case of an activity that has
             # noone signed up.
             if not (s.activity in campers_per_activity.keys()):
@@ -521,14 +526,18 @@ def gen_seed_individual(campers, sessions, creator):
                 f_members = [_ for _ in campers_per_activity[s.activity]
                              if _.group == c.group]
 
-                # For each member of the family, add them to this
-                # session and remove them from the list waiting to
-                # be allocated to this activity.
-                for member in f_members:
-                    session_timetable[campers.index(member)] = True
+                # If there is room in this session for this family.
+                if (campers_in_session + len(f_members)) <= s.activity.limit:
+                    # For each member of the family, add them to this
+                    # session and remove them from the list waiting to
+                    # be allocated to this activity.
+                    for member in f_members:
+                        session_timetable[campers.index(member)] = True
 
-                    campers_per_activity[s.activity].pop(
-                        campers_per_activity[s.activity].index(member))
+                        campers_per_activity[s.activity].pop(
+                            campers_per_activity[s.activity].index(member))
+
+                    campers_in_session += len(f_members)
 
         # Add the session to the timetable
         timetable.extend(session_timetable)
@@ -537,13 +546,13 @@ def gen_seed_individual(campers, sessions, creator):
     return ind
 
 
-def mate(campers, sessions, ind1, ind2):
+def mate(ind1, ind2, campers, sessions):
     """Mate two timetables by selecting families at random and swaping
     their schedules from one timetable to the other."""
 
     # create a list of all families to keep track of which have been
     # considered.
-    families = set([_.group for _ in campers])
+    families = list(set([_.group for _ in campers]))
 
     # for each family randomly swap the families schedule between
     # the two timetables.
@@ -552,7 +561,7 @@ def mate(campers, sessions, ind1, ind2):
         if len(families) == 0:
                 break
 
-        # Only proced of the family has not already been swapped.        
+        # Only proced of the family has not already been swapped.
         if (c.group in families):
             # remove from the list so that we do not process this
             # family again.
@@ -560,16 +569,20 @@ def mate(campers, sessions, ind1, ind2):
 
             # Flip a coin to decide whether to swap the schedules.
             if random.choice([True, False]):
-                for s_indx,s in enumerate(sessions):
-                    for c_indx,l_c in enumerate(campers):
+                for s_indx, s in enumerate(sessions):
+                    for c_indx, l_c in enumerate(campers):
                         # search for each occurance of this family
                         # in the timetable. Then swap their schedule
                         # from one timetable to the other.
                         if l_c.group == c.group:
-                            indx = (s_index*len(campers)) + c_indx
+                            indx = (s_indx*len(campers)) + c_indx
                             tmp = ind1[indx]
                             ind1[indx] = ind2[indx]
-                            ind1[inx] = tmp
+                            ind1[indx] = tmp
+
+    # Remove fitness values
+    del ind1.fitness.values
+    del ind2.fitness.values
 
     return (ind1, ind2)
 
@@ -633,12 +646,12 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=500)
+    "population", tools.initRepeat, list, toolbox.individual, n=1000)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
                                    sessions=sessions))
-toolbox.register("select", tools.selTournament, tournsize=10)
+toolbox.register("select", tools.selTournament, tournsize=20)
 toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))
 toolbox.register("map", futures.map)
@@ -668,7 +681,7 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=500,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=10000,
         stats=stats,
         halloffame=hof,
         verbose=True)

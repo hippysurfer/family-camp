@@ -1,43 +1,15 @@
 # coding: utf-8
-"""Generate Family Camp Timetable.
-
-Example:
-  stdbuf -oL -eL python -m scoop -n 8 deep.py | tee timetables/best.txt
-
-Usage:
-  deep.py [-d|--debug] [-r|--refresh]
-  deep.py (-h | --help)
-  deep.py --version
-
-
-Options:
-  -r,--refresh   Refresh cache from Google Docs
-  -d,--debug     Turn on debug output.
-  -h,--help      Show this screen.
-  --version      Show version.
-
-"""
-
 import os.path
-import sys
 import random
-from functools import partial
 import itertools as it
 from datetime import timedelta
 from datetime import datetime
 import logging
-from docopt import docopt
 import pickle
 import google
-from deap import base
-from deap import creator
-from deap import tools
 import scoop
 
-import numpy
-from deap import algorithms
 from deap.tools import HallOfFame
-from deap.tools import Statistics
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +19,7 @@ CACHE = ".cache.pickle"
 
 # List of activities that everyone must be allocated.
 COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch"]
+
 
 class Activity:
 
@@ -120,6 +93,15 @@ def overlapping_sessions(session_inst, session_insts):
     return [_ for _ in session_insts
             if (_ != session_inst and sessions_overlap(
                 _.session, session_inst.session))]
+
+
+def overlapping_sessions2(session, sessions):
+    """Return a list of sessions from sessions that overlap
+    with session."""
+    return [_ for _ in sessions
+            if (_ != session
+                and sessions_overlap(
+                    _, session))]
 
 
 class Individual:
@@ -280,7 +262,7 @@ class Individual:
 
         return count
 
-    def goodness(self, debug=False):
+    def goodness(self, campers, debug=False):
         # What percentage of the other activities have been met?
 
         # Total number of other activities requested.
@@ -361,10 +343,10 @@ class MyHallOfFame(HallOfFame):
         ind = Individual(item, self.campers, self.sessions)
         # scoop.logger.info("fitness = {}, goodness = {}".format(ind.fitness(),
         #                                                       ind.goodness()))
-        if ind.fitness() == 1 and ind.goodness() == 100:
+        if ind.fitness() == 1 and ind.goodness(self.campers) == 100:
             path = os.path.join(self.dest, str(self.count))
             with open(path, 'w') as f:
-                f.write(print_individual(ind))
+                f.write(print_individual(self.campers, ind))
                 scoop.logger.info("Written {}\n".format(path))
             self.count += 1
 
@@ -433,15 +415,20 @@ def evaluate(individual, campers, sessions, debug=False):
     # Do some hard computing on the individual
     ind = Individual(individual, campers, sessions)
     fitness = 1. / ind.fitness(debug=debug)
-    goodness = 1. / ind.goodness(debug=debug)
+    goodness = 1. / ind.goodness(campers, debug=debug)
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
     return fitness, goodness
 
 
-def mutate(ind1, sessions, campers):
+def mutate(ind1, sessions, campers, toolbox):
     mutant = toolbox.clone(ind1)
+    # Remove fitness values
+    del mutant.fitness.values
 
     for _ in range(0, random.randrange(0, 10)):
+
+        #import ipdb
+        #ipdb.set_trace()
 
         # Select a session at random
         session_idx = random.randrange(0, len(sessions))
@@ -458,24 +445,33 @@ def mutate(ind1, sessions, campers):
         matching_campers = [_ for _ in campers if (
             (_.group == c.group) and (act in _.priorities or act in _.others))]
         # print("Matching campers: {}".format(" ".join(str(_) for _ in
-        # matching_campers)))
+        #                                             matching_campers)))
 
         # If they are already allocated to another session, remove them
         for s in [_ for _ in sessions if _.activity == act]:
             for indx in [campers.index(_) for _ in matching_campers]:
-                # print("Removing {} from
-                # {}.".format(str(campers[indx]),str(s)))
+                # print("Removing {} from {}.".format(
+                #    str(campers[indx]), str(s)))
                 old_session_idx = sessions.index(s) * len(campers)
                 mutant[old_session_idx + indx] = False
 
         # Add them to the randomaly allocated session
         for indx in [campers.index(_) for _ in matching_campers]:
             # print("Adding {} to {}.".format(str(campers[indx]),
-            # str(sessions[session_idx])))
+            #                                str(sessions[session_idx])))
             mutant[session_idx * len(campers) + indx] = True
 
-        # Remove fitness values
-        del mutant.fitness.values
+        # Remove the group from any other sessions that overlap
+        # with the session we have just added them to.
+        group_campers = [_ for _ in campers if _.group == c.group]
+        for overlapping_session in overlapping_sessions2(
+                sessions[session_idx],
+                sessions):
+            for indx in [campers.index(_) for _ in group_campers]:
+                # print("Removing {} from {}.".format(
+                #    str(campers[indx]), str(overlapping_session)))
+                mutant[sessions.index(overlapping_session) * len(campers)
+                       + indx] = False
 
     return mutant,
 
@@ -591,9 +587,9 @@ def gen_individual(seed_individual, toolbox):
     return toolbox.mutate(seed_individual)[0]
 
 
-def print_individual(individual):
+def print_individual(individual, campers):
     out = ["Fitness = {}".format(individual.fitness(debug=True)),
-           "Goodness = {}\n\n".format(individual.goodness(debug=True))]
+           "Goodness = {}\n\n".format(individual.goodness(campers, debug=True))]
 
     previous_f = None
     previous_i = None
@@ -632,96 +628,5 @@ def print_individual(individual):
         out.append('\n')
 
     return "\n".join(out)
-
-from scoop import futures
-
-(acts, sessions, campers) = get_source_data(use_cache=True)
-
-toolbox = base.Toolbox()
-
-creator.create("FitnessMin", base.Fitness, weights=(1.0, -1.0))
-creator.create("Individual", list, fitness=creator.FitnessMin)
-
-toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
-                 gen_seed_individual(campers, sessions,
-                                     creator=creator.Individual))
-toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=1000)
-toolbox.register("mate", partial(mate, campers=campers,
-                                 sessions=sessions))
-toolbox.register("mutate", partial(mutate, campers=campers,
-                                   sessions=sessions))
-toolbox.register("select", tools.selTournament, tournsize=20)
-toolbox.register("evaluate", partial(evaluate, campers=campers,
-                                     sessions=sessions))
-toolbox.register("map", futures.map)
-
-if __name__ == '__main__':
-
-    args = docopt(__doc__, version='1.0')
-
-    level = logging.DEBUG if args['--debug'] else logging.INFO
-    refresh = args['--refresh']
-
-    if refresh:
-        log.info('Fetching fresh data.')
-        get_source_data(use_cache=False)
-        log.info('Done. restart without the --refresh flag.')
-        sys.exit(0)
-
-    logging.basicConfig(level=level)
-    log.debug("Debug On\n")
-
-    hof = MyHallOfFame(campers, sessions, 'timetables', 100)
-    stats = Statistics(key=lambda ind: ind.fitness.values)
-    stats.register("avg", numpy.mean, axis=0)
-    stats.register("std", numpy.std, axis=0)
-    stats.register("min", numpy.min, axis=0)
-    stats.register("max", numpy.max, axis=0)
-
-    (timetables, log) = algorithms.eaSimple(
-        toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=10000,
-        stats=stats,
-        halloffame=hof,
-        verbose=True)
-
-    print(print_individual(Individual(hof[0], campers, sessions)))
-
-
-    # gc = gs.login(*creds.creds)
-    # spread = gc.open("Timetable")
-    # results_wks = spread.worksheet("Timetable")
-
-    # ind_sheet = individual.export_map()
-
-    # for row in range(0, len(ind_sheet)):
-    #     cells = []
-    #     for col in range(0, len(ind_sheet[row])):
-    #         for i in range(0, 10):
-    #             try:
-    #                 cell = results_wks.cell(row + 1, col + 1)
-    #                 cell.value = ind_sheet[row][col]
-    #                 cells.append(cell)
-    #                 break
-    #             except:
-    #                 print("row = {}, col = {}".format(row, col))
-    #                 print("sleep 5")
-    #                 time.sleep(5)
-    #                 gc = gs.login(*creds.creds)
-    #                 spread = gc.open("Timetable")
-    #                 results_wks = spread.worksheet("Timetable")
-
-    #     for i in range(0, 10):
-    #         try:
-    #             results_wks.update_cells(cells)
-    #             break
-    #         except:
-    #             print("Get exception writing row: {}".format(row))
-    #             print("wait 5 and try again...")
-    #             time.sleep(5)
-    #             gc = gs.login(*creds.creds)
-    #             spread = gc.open("Timetable")
-    #             results_wks = spread.worksheet("Timetable")
 
 

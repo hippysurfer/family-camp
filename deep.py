@@ -106,17 +106,20 @@ def overlapping_sessions2(session, sessions):
 
 class Individual:
 
-    def __init__(self, timetable, campers, sessions):
+    def __init__(self, timetable, campers, sessions, session_insts=None):
         self.campers = campers
         self.sessions = sessions
-        self.session_inst = [
-            SessionInst(session,
-                        campers,
-                        timetable[session_idx:session_idx + len(campers)])
-            for session, session_idx in
-            zip(sessions,
-                range(0, len(campers) * len(sessions), len(campers)))
-        ]
+        if session_insts:
+            self.session_inst = session_insts
+        else:
+            self.session_inst = [
+                SessionInst(session,
+                            campers,
+                            timetable[session_idx:session_idx + len(campers)])
+                for session, session_idx in
+                zip(sessions,
+                    range(0, len(campers) * len(sessions), len(campers)))
+            ]
         # self.session_inst = []
         # for (session_name, session_idx) in zip(
         #         range(0, len(sessions)),
@@ -130,6 +133,7 @@ class Individual:
             {session_inst: overlapping_sessions(session_inst,
                                                 self.session_inst)
              for session_inst in self.session_inst}
+
 
     def export_map(self):
         """Returns a row for each interval. A column for each activity.
@@ -169,6 +173,19 @@ class Individual:
 
         return out
 
+    def export_by_camper(self):
+        """Return a dictionary of the following form:
+
+        camper => [sessions_inst]
+        """
+
+        campers = {}
+
+        for c in self.campers:
+            campers[c] = [s for s in self.session_inst if c in s.campers]
+
+        return campers
+
     def export_by_family(self):
         """Return a dictionary of the following form:
 
@@ -199,6 +216,19 @@ class Individual:
                 key=lambda s: s.session.start)
 
         return ret
+
+    def export_cvs(self):
+        """Return a cvs format:
+        Group, Camper Name, Activity, Session
+        """
+        out = []
+        for c, sessions in self.export_by_camper().items():
+            for session in sessions:
+                out.append(",".join([c.group, c.name,
+                                     session.session.activity.name,
+                                     str(session.session.start)]))
+
+        return "\n".join(out)
 
     def fitness(self, debug=False):
         count = 1
@@ -394,7 +424,11 @@ def get_source_data(use_cache=True):
 
         pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
 
-    acts = {_[0]: Activity(_[0], timedelta(minutes=int(_[1])), _[2])
+    def strpdelta(s):
+        hr, min, sec = map(float, s.split(':'))
+        return timedelta(hours=hr, minutes=min, seconds=sec)
+
+    acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2])
             for _ in acts_wks[1:] if _[0] != ''}
 
     sessions = [Session(acts[_[0]],

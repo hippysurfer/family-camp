@@ -18,16 +18,11 @@ Options:
 
 """
 
-import sys
 from functools import partial
 import logging
-from docopt import docopt
 from deap import base
 from deap import creator
 from deap import tools
-import numpy
-from deap import algorithms
-from deap.tools import Statistics
 from scoop import futures
 from deep import *
 
@@ -91,7 +86,4 @@ print(print_individual(Individual(individual, campers, sessions), campers))
 mutant = toolbox.mutate(individual)[0]
 print(print_individual(Individual(mutant, campers, sessions), campers))
 
-
-
-
-
+print(Individual(individual, campers, sessions).export_cvs())

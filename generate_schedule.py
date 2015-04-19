@@ -91,5 +91,4 @@ if __name__ == '__main__':
         verbose=True)
 
     print(print_individual(Individual(hof[0], campers, sessions), campers))
-
-
+    print(Individual(hof[0], campers, sessions).export_cvs())

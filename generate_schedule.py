@@ -56,7 +56,7 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=1000)
+    "population", tools.initRepeat, list, toolbox.individual, n=20)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
@@ -104,9 +104,9 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=1000,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=2,
         stats=stats,
         halloffame=hof,
         verbose=True)
 
-    hof.dump_to_dir(outdir)
+    hof.dump_to_dir()

@@ -2,13 +2,16 @@
 """Generate Family Camp Timetable.
 
 Example:
-  stdbuf -oL -eL python -m scoop -n 8 deep.py | tee timetables/best.txt
+  stdbuf -oL -eL python -m scoop -n 8 test_schedule.py outdir
 
 Usage:
-  deep.py [-d|--debug] [-r|--refresh]
-  deep.py (-h | --help)
-  deep.py --version
+  test_schedule.py [-d|--debug] [-r|--refresh] <outdir>
+  test_schedule.py (-h | --help)
+  test_schedule.py --version
 
+Arguments:
+
+  outdir         Directory to hold results.
 
 Options:
   -r,--refresh   Refresh cache from Google Docs
@@ -20,10 +23,16 @@ Options:
 
 from functools import partial
 import logging
+import threading
+from docopt import docopt
+
 from deap import base
 from deap import creator
 from deap import tools
 from scoop import futures
+import numpy
+from deap import algorithms
+from deap.tools import Statistics
 from deep import *
 
 log = logging.getLogger(__name__)
@@ -80,10 +89,48 @@ toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))
 toolbox.register("map", futures.map)
 
-individual = toolbox.individual()
-toolbox.evaluate(individual)
-mutant = toolbox.mutate(individual)[0]
+if __name__ == '__main__':
 
-print(print_individual(Individual(mutant, campers, sessions), campers))
+    args = docopt(__doc__, version='1.0')
 
-print(Individual(individual, campers, sessions).export_cvs())
+    level = logging.DEBUG if args['--debug'] else logging.INFO
+    outdir = args['<outdir>']
+
+    logging.basicConfig(level=level)
+    log.debug("Debug On\n")
+
+    # individual = toolbox.individual()
+    # toolbox.evaluate(individual)
+    # mutant = toolbox.mutate(individual)[0]
+
+    # print(print_individual(Individual(mutant, campers, sessions), campers))
+
+    # print(Individual(individual, campers, sessions).export_cvs())
+
+    hof = MyHallOfFame(campers, sessions, outdir, 100)
+    stats = Statistics(key=lambda ind: ind.fitness.values)
+    stats.register("avg", numpy.mean, axis=0)
+    stats.register("std", numpy.std, axis=0)
+    stats.register("min", numpy.min, axis=0)
+    stats.register("max", numpy.max, axis=0)
+
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+
+    def responder():
+        while sys.stdin.readline():
+            print("Dumping current Hall of Fame to {}".format(outdir))
+            hof.dump_to_dir()
+
+    #t = threading.Thread(target=responder)
+    #t.daemon = True
+    #t.start()
+
+    (timetables, log) = algorithms.eaSimple(
+        toolbox.population(),
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=1,
+        stats=stats,
+        halloffame=hof,
+        verbose=True)
+
+    hof.dump_to_dir()

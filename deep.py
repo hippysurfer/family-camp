@@ -232,6 +232,7 @@ class Individual:
 
         return "\n".join(out)
 
+    #@profile
     def fitness(self, debug=False):
         count = 1
 
@@ -375,19 +376,19 @@ class MyHallOfFame(HallOfFame):
         ind = Individual(item, self.campers, self.sessions)
         # scoop.logger.info("fitness = {}, goodness = {}".format(ind.fitness(),
         #                                                       ind.goodness()))
-        if ind.fitness() == 1 and ind.goodness(self.campers) == 100:
-            path = os.path.join(self.dest, str(self.count))
-            with open(path, 'w') as f:
-                f.write(print_individual(self.campers, ind))
-                scoop.logger.info("Written {}\n".format(path))
-            self.count += 1
+        # if ind.fitness() == 1 and ind.goodness(self.campers) == 100:
+        #     path = os.path.join(self.dest, str(self.count))
+        #     with open(path, 'w') as f:
+        #         f.write(print_individual(self.campers, ind))
+        #         scoop.logger.info("Written {}\n".format(path))
+        #     self.count += 1
 
     def dump_to_dir(self, num_timetables=10):
         """Write details of the current hall to the output directory."""
 
         dt = datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
 
-        for i in range(0, num_timetables):
+        for i in range(0, min(num_timetables, len(self))):
             filename = "{} - {}".format(dt, i)
 
             with open(os.path.join(self.dest, filename+"_summary.txt"), "w") as summary:

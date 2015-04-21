@@ -140,13 +140,16 @@ class Individual:
         #                     campers,
         #                     timetable[session_idx:session_idx + len(campers)]))
 
-        if self.__class__.__overlapping_sessions_map__ is None:
-            self.__class__.__overlapping_sessions_map__ = \
+        # if self.__class__.__overlapping_sessions_map__ is None:
+        #     self.__class__.__overlapping_sessions_map__ = \
+        #         {session: overlapping_sessions(session,
+        #                                        self.sessions)
+        #          for session in self.sessions}
+            
+        self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__ = \
                 {session: overlapping_sessions(session,
                                                self.sessions)
                  for session in self.sessions}
-            
-        self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__
 
         # Create a lookup map from session to its matching instance.
         self.session_inst_map = \

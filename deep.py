@@ -69,11 +69,15 @@ class SessionInst:
     def __init__(self, session, all_campers, campers):
         self.session = session
         self.all_campers = all_campers
+        self.family_groups = None
         self.set_campers(campers)
+
 
     def set_campers(self, campers):
         self.campers = list(it.compress(self.all_campers,
                                         campers))
+        self.family_groups = set([c.group for c in self.campers])
+
         # self.campers = []
         # for i in range(0, len(campers)):
         #     if campers[i]:
@@ -88,15 +92,15 @@ class SessionInst:
     __repr__ = __str__
 
 
-def overlapping_sessions(session_inst, session_insts):
-    """Return a list of sessions from sessions that overlap
-    with session."""
-    return [_ for _ in session_insts
-            if (_ != session_inst and sessions_overlap(
-                _.session, session_inst.session))]
+#def overlapping_sessions(session_inst, session_insts):
+#    """Return a list of sessions from sessions that overlap
+#    with session."""
+#    return [_ for _ in session_insts
+#            if (_ != session_inst and sessions_overlap(
+#                _.session, session_inst.session))]
 
 
-def overlapping_sessions2(session, sessions):
+def overlapping_sessions(session, sessions):
     """Return a list of sessions from sessions that overlap
     with session."""
     return [_ for _ in sessions
@@ -106,6 +110,11 @@ def overlapping_sessions2(session, sessions):
 
 
 class Individual:
+
+    # There is a basic assumption that the sessions and campers lists never change.
+    # So we can cache the results of some operations for performance.
+
+    __overlapping_sessions_map__ = None
 
     def __init__(self, timetable, campers, sessions, session_insts=None, summary_file=sys.stderr):
         self.campers = campers
@@ -131,10 +140,17 @@ class Individual:
         #                     campers,
         #                     timetable[session_idx:session_idx + len(campers)]))
 
-        self.overlapping_sessions_map = \
-            {session_inst: overlapping_sessions(session_inst,
-                                                self.session_inst)
-             for session_inst in self.session_inst}
+        if self.__class__.__overlapping_sessions_map__ is None:
+            self.__class__.__overlapping_sessions_map__ = \
+                {session: overlapping_sessions(session,
+                                               self.sessions)
+                 for session in self.sessions}
+            
+        self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__
+
+        # Create a lookup map from session to its matching instance.
+        self.session_inst_map = \
+            {inst.session: inst for inst in self.session_inst}
 
 
     def export_map(self):
@@ -232,28 +248,30 @@ class Individual:
 
         return "\n".join(out)
 
-    #@profile
+        #@profile
     def fitness(self, debug=False):
         count = 1
 
         for s in self.session_inst:
             # Count the number of times we have the same camper in two sessions
             # that overlap.
-            for c in s.campers:
-                for other_s in self.overlapping_sessions_map[s]:
-                    if c in other_s.campers:
-                        count += 1
+            count += len([other_s for c in s.campers 
+                          for other_s in self.overlapping_sessions_map[s.session] 
+                          if c in self.session_inst_map[other_s].campers])
 
             # Count the number of times we have a family split accross two
             # sessions that overlap
-            for g in set([c.group for c in s.campers]):
-                for other_s in self.overlapping_sessions_map[s]:
-                    if g in set([c.group for c in other_s.campers]):
-                        if debug:
-                            self.summary_file.write(
-                                "{} Found in other session: {}\n".format(
-                                    str(g), str(s)))
-                        count += 1
+            split_families = [g for g in s.family_groups
+                              for other_s in self.overlapping_sessions_map[s.session]
+                              if g in self.session_inst_map[other_s].family_groups]
+            count += len(split_families)
+
+            if debug:
+                for g in split_families:
+                    self.summary_file.write(
+                        "{} Found in other session: {}\n".format(
+                            str(g), str(s)))
+
 
             # How badly have we exceeded session limits?
             if len(s.campers) - s.session.activity.limit > 0:
@@ -264,10 +282,9 @@ class Individual:
 
         # How many campers are missing their priorities?
         for c in self.campers:
-            activities = []
-            for s in self.session_inst:
-                if c in s.campers:
-                    activities.append(s.session.activity)
+            activities = [s.session.activity
+                          for s in self.session_inst
+                          if c in s.campers]
 
             # How many campers are missing their priorities?
             missing = set(c.priorities) - set(activities)
@@ -519,7 +536,7 @@ def mutate(ind1, sessions, campers, toolbox):
         # Remove the group from any other sessions that overlap
         # with the session we have just added them to.
         group_campers = [_ for _ in campers if _.group == c.group]
-        for overlapping_session in overlapping_sessions2(
+        for overlapping_session in overlapping_sessions(
                 sessions[session_idx],
                 sessions):
             for indx in [campers.index(_) for _ in group_campers]:
@@ -605,6 +622,11 @@ def mate(ind1, ind2, campers, sessions):
     # considered.
     families = list(set([_.group for _ in campers]))
 
+    # Optimsations
+    len_campers = len(campers)
+    sessions_enum = enumerate(sessions)
+    campers_enum = enumerate(campers)
+
     # for each family randomly swap the families schedule between
     # the two timetables.
     for c in campers:
@@ -620,16 +642,14 @@ def mate(ind1, ind2, campers, sessions):
 
             # Flip a coin to decide whether to swap the schedules.
             if random.choice([True, False]):
-                for s_indx, s in enumerate(sessions):
-                    for c_indx, l_c in enumerate(campers):
-                        # search for each occurance of this family
-                        # in the timetable. Then swap their schedule
-                        # from one timetable to the other.
-                        if l_c.group == c.group:
-                            indx = (s_indx*len(campers)) + c_indx
-                            tmp = ind1[indx]
-                            ind1[indx] = ind2[indx]
-                            ind1[indx] = tmp
+                # search for each occurance of this family
+                # in the timetable. Then swap their schedule
+                # from one timetable to the other.
+                for indx in [ (s_indx*len_campers) + c_indx
+                              for s_indx, s in sessions_enum
+                              for c_indx, l_c in campers_enum
+                              if l_c.group == c.group]:
+                    ind2[indx], ind1[indx] = ind1[indx], ind2[indx]
 
     # Remove fitness values
     del ind1.fitness.values

@@ -2,13 +2,16 @@
 """Generate Family Camp Timetable.
 
 Example:
-  stdbuf -oL -eL python -m scoop -n 8 deep.py | tee timetables/best.txt
+  stdbuf -oL -eL python -m scoop -n 8 generate_schedule.py outdir
 
 Usage:
-  deep.py [-d|--debug] [-r|--refresh]
-  deep.py (-h | --help)
-  deep.py --version
+  generate_schedule.py [-d|--debug] [-r|--refresh] <outdir>
+  generate_schedule.py (-h | --help)
+  generate_schedule.py --version
 
+Arguments:
+
+  outdir         Directory to hold results.
 
 Options:
   -r,--refresh   Refresh cache from Google Docs
@@ -19,6 +22,9 @@ Options:
 """
 
 import sys
+import os
+import os.path
+import threading
 from functools import partial
 import logging
 from docopt import docopt
@@ -66,6 +72,7 @@ if __name__ == '__main__':
 
     level = logging.DEBUG if args['--debug'] else logging.INFO
     refresh = args['--refresh']
+    outdir = args['<outdir>']
 
     if refresh:
         log.info('Fetching fresh data.')
@@ -76,12 +83,24 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    hof = MyHallOfFame(campers, sessions, 'timetables', 100)
+    hof = MyHallOfFame(campers, sessions, outdir, 100)
     stats = Statistics(key=lambda ind: ind.fitness.values)
     stats.register("avg", numpy.mean, axis=0)
     stats.register("std", numpy.std, axis=0)
     stats.register("min", numpy.min, axis=0)
     stats.register("max", numpy.max, axis=0)
+
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+
+    def responder():
+        while sys.stdin.readline():
+            print("Dumping current Hall of Fame to {}".format(outdir))
+            hof.dump_to_dir()
+
+    t = threading.Thread(target=responder)
+    t.daemon = True
+    t.start()
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
@@ -90,5 +109,4 @@ if __name__ == '__main__':
         halloffame=hof,
         verbose=True)
 
-    print(print_individual(Individual(hof[0], campers, sessions), campers))
-    print(Individual(hof[0], campers, sessions).export_cvs())
+    hof.dump_to_dir(outdir)

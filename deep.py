@@ -1,5 +1,6 @@
 # coding: utf-8
 import os.path
+import sys
 import random
 import itertools as it
 from datetime import timedelta
@@ -106,9 +107,10 @@ def overlapping_sessions2(session, sessions):
 
 class Individual:
 
-    def __init__(self, timetable, campers, sessions, session_insts=None):
+    def __init__(self, timetable, campers, sessions, session_insts=None, summary_file=sys.stderr):
         self.campers = campers
         self.sessions = sessions
+        self.summary_file = summary_file
         if session_insts:
             self.session_inst = session_insts
         else:
@@ -247,15 +249,15 @@ class Individual:
                 for other_s in self.overlapping_sessions_map[s]:
                     if g in set([c.group for c in other_s.campers]):
                         if debug:
-                            print(
-                                "{} Found in other session: {}".format(
+                            self.summary_file.write(
+                                "{} Found in other session: {}\n".format(
                                     str(g), str(s)))
                         count += 1
 
             # How badly have we exceeded session limits?
             if len(s.campers) - s.session.activity.limit > 0:
                 if debug:
-                    print("{} Exceeded limit: {} > {}".format(
+                    self.summary_file.write("{} Exceeded limit: {} > {}\n".format(
                         str(s), len(s.campers), s.session.activity.limit))
                 count += len(s.campers) - s.session.activity.limit
 
@@ -270,7 +272,7 @@ class Individual:
             missing = set(c.priorities) - set(activities)
             if len(missing):
                 if debug:
-                    print("{} missing {}\n".format(
+                    self.summary_file.write("{} missing {}\n".format(
                         str(c), " ".join([str(_) for _ in missing])))
             count += len(missing)
 
@@ -278,7 +280,7 @@ class Individual:
             unwanted = set(activities) - (set(c.priorities) | set(c.others))
             if len(unwanted):
                 if debug:
-                    print("{} unwanted {}\n".format(
+                    self.summary_file.write("{} unwanted {}\n".format(
                         str(c), " ".join([str(_) for _ in unwanted])))
             count += len(unwanted)
 
@@ -287,7 +289,7 @@ class Individual:
             duplicates = len(activities) - len(set(activities))
             if duplicates:
                 if debug:
-                    print("{} duplicated {}".format(str(c), duplicates))
+                    self.summary_file.write("{} duplicated {}".format(str(c), duplicates))
             count += duplicates
 
         return count
@@ -317,7 +319,7 @@ class Individual:
 
             if (len(set_others) > len(set_others & set_acts)):
                 if debug:
-                    print("Others not met: {} missing - {}".format(
+                    self.summary_file.write("Others not met: {} missing - {}\n".format(
                         str(c), " ".join(str(_) for _ in
                                          set_others - set_acts)))
 
@@ -327,7 +329,7 @@ class Individual:
         percentage_met = ((met / len(campers)) * 100)
 
         if debug and percentage_met != 100:
-            print("Percentation met: {} {} {}\n".format(
+            self.summary_file.write("Percentation met: {} {} {}\n".format(
                 percentage_met, other_total, met))
 
         return percentage_met if percentage_met != 0 else 1
@@ -379,6 +381,24 @@ class MyHallOfFame(HallOfFame):
                 f.write(print_individual(self.campers, ind))
                 scoop.logger.info("Written {}\n".format(path))
             self.count += 1
+
+    def dump_to_dir(self, num_timetables=10):
+        """Write details of the current hall to the output directory."""
+
+        dt = datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
+
+        for i in range(0, num_timetables):
+            filename = "{} - {}".format(dt, i)
+
+            with open(os.path.join(self.dest, filename+"_summary.txt"), "w") as summary:
+                timetable = Individual(self[i], self.campers, self.sessions,
+                                       summary_file=summary)
+
+                with open(os.path.join(self.dest, filename+"_timetable.txt"), 'w') as f:
+                    f.write(print_individual(timetable, self.campers))
+
+                with open(os.path.join(self.dest, filename+".csv"), 'w') as f:
+                    f.write(timetable.export_cvs())
 
 # import random
 # from datetime import timedelta

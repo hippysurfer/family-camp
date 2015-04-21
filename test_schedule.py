@@ -82,8 +82,8 @@ toolbox.register("map", futures.map)
 
 individual = toolbox.individual()
 toolbox.evaluate(individual)
-print(print_individual(Individual(individual, campers, sessions), campers))
 mutant = toolbox.mutate(individual)[0]
+
 print(print_individual(Individual(mutant, campers, sessions), campers))
 
 print(Individual(individual, campers, sessions).export_cvs())

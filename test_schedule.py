@@ -73,7 +73,7 @@ timetable = [random.choice([True, False])
 
 toolbox = base.Toolbox()
 
-creator.create("FitnessMin", base.Fitness, weights=(1.0, -1.0))
+creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, 1.0))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,

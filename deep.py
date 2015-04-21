@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 import pickle
 import google
-import scoop
+from statistics import pvariance
 
 from deap.tools import HallOfFame
 
@@ -253,6 +253,10 @@ class Individual:
 
         #@profile
     def fitness(self, debug=False):
+        """Measure the number of violations of the validity criteria.
+        The higher the number the worse it is.
+        A value of 1 means no violations.
+        """
         count = 1
 
         for s in self.session_inst:
@@ -316,6 +320,10 @@ class Individual:
         return count
 
     def goodness(self, campers, debug=False):
+        """Measure how many of the other activities we have met.
+
+        The higher the value the better."""
+
         # What percentage of the other activities have been met?
 
         # Total number of other activities requested.
@@ -327,7 +335,7 @@ class Individual:
             # The intersection is the list of activities that have been met.
             # we divide this by the number that have been asked for. This
             # give 1 if they have all been met and 0 if none have been met.
-            # It gives a weight score depending on how many have been
+            # It gives a weighted score depending on how many have been
             # requested. The more requested the less the effect on the overall
             # goodness. This should favour those that have only request a
             # small number of activites.
@@ -355,10 +363,22 @@ class Individual:
 
         return percentage_met if percentage_met != 0 else 1
 
+    def bestness(self):
+        """Return a composite measure of how 'good' the individual is.
+
+        The smaller the value the better it is."""
+
+        count = 0
+        
+        # Start by using a simple variance to favour a timetable
+        # where the sessions have an even spread of campers.
+        count += pvariance([len(inst.campers) for inst in self.session_inst])
+
+        return count
+
     def __str__(self):
         return "{}".format("\n".join([str(_) for _ in self.session_inst]))
-
-
+    
 def sessions_overlap(first, second):
     "If the start of the first sesssion is between the start "
     "and end of the second or the end of the first session is "
@@ -491,8 +511,9 @@ def evaluate(individual, campers, sessions, debug=False):
     ind = Individual(individual, campers, sessions)
     fitness = 1. / ind.fitness(debug=debug)
     goodness = 1. / ind.goodness(campers, debug=debug)
+    bestness = 1. / ind.bestness()
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
-    return fitness, goodness
+    return fitness, goodness, bestness
 
 
 def mutate(ind1, sessions, campers, toolbox):

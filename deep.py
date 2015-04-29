@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 import pickle
 import google
-import scoop
+from statistics import pvariance
 
 from deap.tools import HallOfFame
 
@@ -69,11 +69,15 @@ class SessionInst:
     def __init__(self, session, all_campers, campers):
         self.session = session
         self.all_campers = all_campers
+        self.family_groups = None
         self.set_campers(campers)
+
 
     def set_campers(self, campers):
         self.campers = list(it.compress(self.all_campers,
                                         campers))
+        self.family_groups = set([c.group for c in self.campers])
+
         # self.campers = []
         # for i in range(0, len(campers)):
         #     if campers[i]:
@@ -88,15 +92,15 @@ class SessionInst:
     __repr__ = __str__
 
 
-def overlapping_sessions(session_inst, session_insts):
-    """Return a list of sessions from sessions that overlap
-    with session."""
-    return [_ for _ in session_insts
-            if (_ != session_inst and sessions_overlap(
-                _.session, session_inst.session))]
+#def overlapping_sessions(session_inst, session_insts):
+#    """Return a list of sessions from sessions that overlap
+#    with session."""
+#    return [_ for _ in session_insts
+#            if (_ != session_inst and sessions_overlap(
+#                _.session, session_inst.session))]
 
 
-def overlapping_sessions2(session, sessions):
+def overlapping_sessions(session, sessions):
     """Return a list of sessions from sessions that overlap
     with session."""
     return [_ for _ in sessions
@@ -106,6 +110,11 @@ def overlapping_sessions2(session, sessions):
 
 
 class Individual:
+
+    # There is a basic assumption that the sessions and campers lists never change.
+    # So we can cache the results of some operations for performance.
+
+    __overlapping_sessions_map__ = None
 
     def __init__(self, timetable, campers, sessions, session_insts=None, summary_file=sys.stderr):
         self.campers = campers
@@ -131,10 +140,20 @@ class Individual:
         #                     campers,
         #                     timetable[session_idx:session_idx + len(campers)]))
 
-        self.overlapping_sessions_map = \
-            {session_inst: overlapping_sessions(session_inst,
-                                                self.session_inst)
-             for session_inst in self.session_inst}
+        # if self.__class__.__overlapping_sessions_map__ is None:
+        #     self.__class__.__overlapping_sessions_map__ = \
+        #         {session: overlapping_sessions(session,
+        #                                        self.sessions)
+        #          for session in self.sessions}
+            
+        self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__ = \
+                {session: overlapping_sessions(session,
+                                               self.sessions)
+                 for session in self.sessions}
+
+        # Create a lookup map from session to its matching instance.
+        self.session_inst_map = \
+            {inst.session: inst for inst in self.session_inst}
 
 
     def export_map(self):
@@ -232,28 +251,34 @@ class Individual:
 
         return "\n".join(out)
 
-    #@profile
+        #@profile
     def fitness(self, debug=False):
+        """Measure the number of violations of the validity criteria.
+        The higher the number the worse it is.
+        A value of 1 means no violations.
+        """
         count = 1
 
         for s in self.session_inst:
             # Count the number of times we have the same camper in two sessions
             # that overlap.
-            for c in s.campers:
-                for other_s in self.overlapping_sessions_map[s]:
-                    if c in other_s.campers:
-                        count += 1
+            count += len([other_s for c in s.campers 
+                          for other_s in self.overlapping_sessions_map[s.session] 
+                          if c in self.session_inst_map[other_s].campers])
 
             # Count the number of times we have a family split accross two
             # sessions that overlap
-            for g in set([c.group for c in s.campers]):
-                for other_s in self.overlapping_sessions_map[s]:
-                    if g in set([c.group for c in other_s.campers]):
-                        if debug:
-                            self.summary_file.write(
-                                "{} Found in other session: {}\n".format(
-                                    str(g), str(s)))
-                        count += 1
+            split_families = [g for g in s.family_groups
+                              for other_s in self.overlapping_sessions_map[s.session]
+                              if g in self.session_inst_map[other_s].family_groups]
+            count += len(split_families)
+
+            if debug:
+                for g in split_families:
+                    self.summary_file.write(
+                        "{} Found in other session: {}\n".format(
+                            str(g), str(s)))
+
 
             # How badly have we exceeded session limits?
             if len(s.campers) - s.session.activity.limit > 0:
@@ -264,10 +289,9 @@ class Individual:
 
         # How many campers are missing their priorities?
         for c in self.campers:
-            activities = []
-            for s in self.session_inst:
-                if c in s.campers:
-                    activities.append(s.session.activity)
+            activities = [s.session.activity
+                          for s in self.session_inst
+                          if c in s.campers]
 
             # How many campers are missing their priorities?
             missing = set(c.priorities) - set(activities)
@@ -296,6 +320,10 @@ class Individual:
         return count
 
     def goodness(self, campers, debug=False):
+        """Measure how many of the other activities we have met.
+
+        The higher the value the better."""
+
         # What percentage of the other activities have been met?
 
         # Total number of other activities requested.
@@ -307,7 +335,7 @@ class Individual:
             # The intersection is the list of activities that have been met.
             # we divide this by the number that have been asked for. This
             # give 1 if they have all been met and 0 if none have been met.
-            # It gives a weight score depending on how many have been
+            # It gives a weighted score depending on how many have been
             # requested. The more requested the less the effect on the overall
             # goodness. This should favour those that have only request a
             # small number of activites.
@@ -335,10 +363,22 @@ class Individual:
 
         return percentage_met if percentage_met != 0 else 1
 
+    def bestness(self):
+        """Return a composite measure of how 'good' the individual is.
+
+        The smaller the value the better it is."""
+
+        count = 0
+        
+        # Start by using a simple variance to favour a timetable
+        # where the sessions have an even spread of campers.
+        count += pvariance([len(inst.campers) for inst in self.session_inst])
+
+        return count
+
     def __str__(self):
         return "{}".format("\n".join([str(_) for _ in self.session_inst]))
-
-
+    
 def sessions_overlap(first, second):
     "If the start of the first sesssion is between the start "
     "and end of the second or the end of the first session is "
@@ -471,8 +511,9 @@ def evaluate(individual, campers, sessions, debug=False):
     ind = Individual(individual, campers, sessions)
     fitness = 1. / ind.fitness(debug=debug)
     goodness = 1. / ind.goodness(campers, debug=debug)
+    bestness = 1. / ind.bestness()
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
-    return fitness, goodness
+    return fitness, goodness, bestness
 
 
 def mutate(ind1, sessions, campers, toolbox):
@@ -519,7 +560,7 @@ def mutate(ind1, sessions, campers, toolbox):
         # Remove the group from any other sessions that overlap
         # with the session we have just added them to.
         group_campers = [_ for _ in campers if _.group == c.group]
-        for overlapping_session in overlapping_sessions2(
+        for overlapping_session in overlapping_sessions(
                 sessions[session_idx],
                 sessions):
             for indx in [campers.index(_) for _ in group_campers]:
@@ -605,6 +646,11 @@ def mate(ind1, ind2, campers, sessions):
     # considered.
     families = list(set([_.group for _ in campers]))
 
+    # Optimsations
+    len_campers = len(campers)
+    sessions_enum = enumerate(sessions)
+    campers_enum = enumerate(campers)
+
     # for each family randomly swap the families schedule between
     # the two timetables.
     for c in campers:
@@ -620,16 +666,14 @@ def mate(ind1, ind2, campers, sessions):
 
             # Flip a coin to decide whether to swap the schedules.
             if random.choice([True, False]):
-                for s_indx, s in enumerate(sessions):
-                    for c_indx, l_c in enumerate(campers):
-                        # search for each occurance of this family
-                        # in the timetable. Then swap their schedule
-                        # from one timetable to the other.
-                        if l_c.group == c.group:
-                            indx = (s_indx*len(campers)) + c_indx
-                            tmp = ind1[indx]
-                            ind1[indx] = ind2[indx]
-                            ind1[indx] = tmp
+                # search for each occurance of this family
+                # in the timetable. Then swap their schedule
+                # from one timetable to the other.
+                for indx in [ (s_indx*len_campers) + c_indx
+                              for s_indx, s in sessions_enum
+                              for c_indx, l_c in campers_enum
+                              if l_c.group == c.group]:
+                    ind2[indx], ind1[indx] = ind1[indx], ind2[indx]
 
     # Remove fitness values
     del ind1.fitness.values

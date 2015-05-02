@@ -72,11 +72,17 @@ class SessionInst:
         self.family_groups = None
         self.set_campers(campers)
 
+    def update_family_groups(self):
+        self.family_groups = set([c.group for c in self.campers])
+
+    def add_camper(self, camper):
+        self.campers.append(camper)
+        self.update_family_groups()
 
     def set_campers(self, campers):
         self.campers = list(it.compress(self.all_campers,
                                         campers))
-        self.family_groups = set([c.group for c in self.campers])
+        self.update_family_groups()
 
         # self.campers = []
         # for i in range(0, len(campers)):
@@ -378,7 +384,30 @@ class Individual:
 
     def __str__(self):
         return "{}".format("\n".join([str(_) for _ in self.session_inst]))
-    
+
+
+def timetable_from_list(schedule, campers, activities, sessions):
+    """Generate a Timetable object from a list of the form:
+
+       (group, camper, activity, start datetime)
+
+     Timetable object."""
+
+    # map of all possible session instances, initialised with no campers.
+    session_insts = {s: SessionInst(s, campers, [False, ] * len(campers))
+                     for s in sessions}
+
+    for (group, camper, activity, start_datetime) in schedule:
+        c = [_ for _ in campers if _.group == group and _.name == camper][0]
+        a = activities[activity]
+        s = [_ for _ in sessions if _.activity == a and
+             _.start == datetime.strptime(start_datetime,
+                                          "%Y-%m-%d %H:%M:%S")][0]
+        session_insts[s].add_camper(c)
+
+    return Individual(None, campers, sessions, session_insts.values())
+
+
 def sessions_overlap(first, second):
     "If the start of the first sesssion is between the start "
     "and end of the second or the end of the first session is "

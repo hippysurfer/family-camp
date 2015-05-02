@@ -52,14 +52,16 @@ class Camper:
 
 class Session:
 
-    def __init__(self, activity, start):
+    def __init__(self, activity, label, start):
         self.activity = activity
+        self.label = label
         self.start = start
         self.end = start + activity.duration
 
     def __str__(self):
-        return "Session:{} {}".format(self.activity.name,
-                                      self.start.strftime(DATEFORMAT))
+        return "Session:{} ({}) {}".format(self.activity.name,
+                                           self.label,
+                                           self.start.strftime(DATEFORMAT))
 
     __repr__ = __str__
 
@@ -90,8 +92,9 @@ class SessionInst:
         #         self.campers.append(self.all_campers[i])
 
     def __str__(self):
-        return "Session: {} {} / Campers: {}".format(
+        return "Session: {} ({}) {} / Campers: {}".format(
             self.session.activity.name,
+            self.session.label,
             self.session.start.strftime(DATEFORMAT),
             ", ".join([str(_) for _ in self.campers]))
 
@@ -252,7 +255,7 @@ class Individual:
         for c, sessions in self.export_by_camper().items():
             for session in sessions:
                 out.append(",".join([c.group, c.name,
-                                     session.session.activity.name,
+                                     session.session.label,
                                      str(session.session.start)]))
 
         return "\n".join(out)
@@ -739,10 +742,10 @@ def print_individual(individual, campers):
     out.append("**********************************************************\n")
 
     previous_a = None
-    previous_i = None
-    previous_c = None
     for a, s in individual.export_by_activity().items():
+        previous_i = None
         for i in s:
+            previous_c = None
             for c in i.campers:
                 out.append("{:<20} {:<20} {:<20}".format(
                     a.name if a != previous_a else '',

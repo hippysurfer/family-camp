@@ -47,26 +47,29 @@ from datetime import timedelta
 from datetime import datetime
 
 
-acts = [Activity('BMX', timedelta(minutes=30), 2),
+acts = [Activity('Archery', timedelta(minutes=30), 2),
+        Activity('BMX', timedelta(minutes=30), 3),
         Activity('Caving', timedelta(minutes=30), 10),
         Activity('Maze', timedelta(minutes=30), 10)]
 
-BMX, Caving, Maze = acts
+Archery, BMX, Caving, Maze = acts
 
-campers = [Camper('camper1', 'group1', [BMX, Caving], []),
-           Camper('camper2', 'group1', [BMX, ], [Maze, Caving]),
-           Camper('camper3', 'group2', [Caving, ], [BMX]), ]
+campers = [Camper('camper1', 'group1', [BMX, Archery], [Caving]),
+           Camper('camper2', 'group1', [BMX, Archery], [Maze, Caving]),
+           Camper('camper3', 'group2', [Caving, Archery], [BMX]), ]
 
 
-s = [(acts[0], datetime(2014, 7, 5, 9, 0)),
-     (acts[0], datetime(2014, 7, 5, 10, 0)),
-     (acts[0], datetime(2014, 7, 5, 11, 0)),
-     (acts[1], datetime(2014, 7, 5, 9, 0)),
-     (acts[1], datetime(2014, 7, 5, 10, 0)),
-     (acts[2], datetime(2014, 7, 5, 9, 0)),
-     (acts[2], datetime(2014, 7, 5, 10, 0))]
+s = [(Archery, "Archery Indoor", datetime(2014, 7, 5, 9, 0)),
+     (Archery, "Archery Outdoor", datetime(2014, 7, 5, 9, 0)),
+     (BMX, "BMX", datetime(2014, 7, 5, 11, 0)),
+     (BMX, "BMX", datetime(2014, 7, 5, 12, 0)),
+     (Caving, "Caving", datetime(2014, 7, 5, 9, 0)),
+     (Caving, "Caving", datetime(2014, 7, 5, 10, 0)),
+     (Maze, "Maze", datetime(2014, 7, 5, 9, 0)),
+     (Maze, "Maze", datetime(2014, 7, 5, 10, 0)),
+     (Maze, "Maze", datetime(2014, 7, 5, 11, 0))]
 
-sessions = [Session(_[0], _[1]) for _ in s]
+sessions = [Session(_[0], _[1], _[2]) for _ in s]
 
 timetable = [random.choice([True, False])
              for _ in range(0, len(campers)*len(sessions))]
@@ -128,7 +131,7 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=1,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=100,
         stats=stats,
         halloffame=hof,
         verbose=True)

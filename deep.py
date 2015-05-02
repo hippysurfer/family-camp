@@ -19,7 +19,7 @@ DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
 # List of activities that everyone must be allocated.
-COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch"]
+COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
 
 
 class Activity:
@@ -521,11 +521,20 @@ def get_source_data(use_cache=True):
         hr, min, sec = map(float, s.split(':'))
         return timedelta(hours=hr, minutes=min, seconds=sec)
 
+    # Deal with the problem of non-empty rows in the worksheet after the
+    # end of the table that we are interested in.
+    raw_acts = []
+    for row in acts_wks[1:]:
+        if row[0] == '':
+            break
+        raw_acts.append(row)
+
     acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2])
-            for _ in acts_wks[1:] if _[0] != ''}
+            for _ in raw_acts if _[0] != ''}
 
     sessions = [Session(acts[_[0]],
-                        datetime.strptime(_[1], "%d/%m/%Y %H:%M:%S"))
+                        _[1],
+                        datetime.strptime(_[2], "%d/%m/%Y %H:%M:%S"))
                 for _ in session_wks[1:]]
 
     campers = [Camper("{} {}".format(_[1], _[2]), _[0],

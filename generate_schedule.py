@@ -5,15 +5,19 @@ Example:
   stdbuf -oL -eL python -m scoop -n 8 generate_schedule.py outdir
 
 Usage:
-  generate_schedule.py [-d|--debug] [-r|--refresh] <outdir>
+  generate_schedule.py [-d|--debug] -r|--refresh
+  generate_schedule.py [-d|--debug] <outdir>
+  generate_schedule.py [-d|--debug] <timetable> <outdir>
   generate_schedule.py (-h | --help)
   generate_schedule.py --version
 
 Arguments:
 
   outdir         Directory to hold results.
+  timetable      A csv of an existing timetable.
 
 Options:
+
   -r,--refresh   Refresh cache from Google Docs
   -d,--debug     Turn on debug output.
   -h,--help      Show this screen.
@@ -24,6 +28,7 @@ Options:
 import sys
 import os
 import os.path
+import csv
 import threading
 from functools import partial
 import logging
@@ -49,14 +54,14 @@ from scoop import futures
 
 toolbox = base.Toolbox()
 
-creator.create("FitnessMin", base.Fitness, weights=(1.0, -1.0))
+creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=2000)
+    "population", tools.initRepeat, list, toolbox.individual, n=500)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
@@ -72,7 +77,6 @@ if __name__ == '__main__':
 
     level = logging.DEBUG if args['--debug'] else logging.INFO
     refresh = args['--refresh']
-    outdir = args['<outdir>']
 
     if refresh:
         log.info('Fetching fresh data.')
@@ -82,6 +86,20 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
+
+    if args['<timetable>']:
+        log.info('Reading seed individual from {}.'.format(args['<timetable>']))
+        with open(args['<timetable>']) as csvfile:
+            individual = individual_from_list(
+                list(csv.reader(csvfile, delimiter=',')),
+                campers, acts, sessions)
+
+        toolbox.register("individual",
+                         partial(gen_individual, toolbox=toolbox),
+                         Individual(individual, campers, sessions))
+
+    outdir = args['<outdir>']
+
 
     hof = MyHallOfFame(campers, sessions, outdir, 100)
     stats = Statistics(key=lambda ind: ind.fitness.values)

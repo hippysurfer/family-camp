@@ -24,7 +24,11 @@ import logging
 log = logging.getLogger(__name__)
 
 
-from deep import get_source_data, print_individual, timetable_from_list
+from deep import (
+    get_source_data,
+    print_individual,
+    individual_from_list,
+    Individual)
 
 if __name__ == '__main__':
 
@@ -39,8 +43,9 @@ if __name__ == '__main__':
     csv_file = args['FILE']
 
     with open(csv_file) as csvfile:
-        individual = timetable_from_list(
+        individual = individual_from_list(
             list(csv.reader(csvfile, delimiter=',')),
             campers, acts, sessions)
 
-    print(print_individual(individual, campers))
+    print(print_individual(Individual(individual, campers,
+                                      sessions), campers))

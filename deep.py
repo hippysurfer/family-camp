@@ -412,6 +412,26 @@ def timetable_from_list(schedule, campers, activities, sessions):
     return Individual(None, campers, sessions, session_insts.values())
 
 
+def individual_from_list(schedule, campers, activities, sessions):
+    """Generate an individual from a list of the form:
+
+       (group, camper, activity, start datetime)
+
+    """
+
+    # create an empty individual
+    ind = [False,] * len(sessions) * len(campers)
+
+    for (group, camper, activity, start_datetime) in schedule:
+        c = [_ for _ in campers if _.group == group and _.name == camper][0]
+        s = [_ for _ in sessions if _.label == activity and
+             _.start == datetime.strptime(start_datetime,
+                                          "%Y-%m-%d %H:%M:%S")][0]
+        ind[(sessions.index(s) * len(campers)) + campers.index(c)] = True
+
+    return ind
+
+
 def sessions_overlap(first, second):
     "If the start of the first sesssion is between the start "
     "and end of the second or the end of the first session is "

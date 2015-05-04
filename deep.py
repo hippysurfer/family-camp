@@ -3,6 +3,7 @@ import os.path
 import sys
 import random
 import itertools as it
+from copy import deepcopy
 from datetime import timedelta
 from datetime import datetime
 import logging
@@ -552,7 +553,7 @@ def evaluate(individual, campers, sessions, debug=False):
     ind = Individual(individual, campers, sessions)
     fitness = 1. / ind.fitness(debug=debug)
     goodness = 1. / ind.goodness(campers, debug=debug)
-    bestness = 1. / ind.bestness()
+    bestness = (1. / ind.bestness()) if ind.bestness() != 0 else 0
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
     return fitness, goodness, bestness
 
@@ -562,10 +563,12 @@ def mutate(ind1, sessions, campers, toolbox):
     # Remove fitness values
     del mutant.fitness.values
 
-    for _ in range(0, random.randrange(0, 10)):
+    # print("Mutating")
 
-        #import ipdb
-        #ipdb.set_trace()
+    for _ in range(0, random.randrange(0, 100)):
+
+        # import ipdb
+        # ipdb.set_trace()
 
         # Select a session at random
         session_idx = random.randrange(0, len(sessions))
@@ -588,27 +591,63 @@ def mutate(ind1, sessions, campers, toolbox):
         for s in [_ for _ in sessions if _.activity == act]:
             for indx in [campers.index(_) for _ in matching_campers]:
                 # print("Removing {} from {}.".format(
-                #    str(campers[indx]), str(s)))
+                #     str(campers[indx]), str(s)))
                 old_session_idx = sessions.index(s) * len(campers)
                 mutant[old_session_idx + indx] = False
 
         # Add them to the randomaly allocated session
         for indx in [campers.index(_) for _ in matching_campers]:
             # print("Adding {} to {}.".format(str(campers[indx]),
-            #                                str(sessions[session_idx])))
+            #                                 str(sessions[session_idx])))
             mutant[session_idx * len(campers) + indx] = True
 
         # Remove the group from any other sessions that overlap
         # with the session we have just added them to.
+        # And reallocate them to another session at random.
         group_campers = [_ for _ in campers if _.group == c.group]
+        camper_idxes = [campers.index(_) for _ in group_campers]
         for overlapping_session in overlapping_sessions(
                 sessions[session_idx],
                 sessions):
-            for indx in [campers.index(_) for _ in group_campers]:
-                # print("Removing {} from {}.".format(
-                #    str(campers[indx]), str(overlapping_session)))
-                mutant[sessions.index(overlapping_session) * len(campers)
-                       + indx] = False
+
+            # Keep track of whether the group is already in the session.
+            group_in_session = False
+            overlapping_session_idx = sessions.index(overlapping_session)
+
+            for indx in camper_idxes:
+                # If a member of the group is in this session.
+                # Remember that the group was in the session and remove
+                # the camper from it.
+                if mutant[overlapping_session_idx * len(campers)
+                          + indx]:
+                    # print("Removing {} from {}.".format(
+                    #     str(campers[indx]), str(overlapping_session)))
+
+                    group_in_session = True
+
+                    mutant[overlapping_session_idx * len(campers)
+                           + indx] = False
+
+            # If we removed a camper from the session we need to try to
+            # replace the whole family in another instance of the same
+            # session.
+            if group_in_session:
+                matching_campers = [_ for _ in group_campers if (
+                    overlapping_session.activity in _.priorities or
+                    overlapping_session.activity in _.others)]
+
+                # Select a new instance of the activity.
+                new_session = random.choice(
+                    [_ for _ in sessions
+                     if _.activity == overlapping_session.activity])
+
+                # Put all of the group members that want the activity in
+                # the newly selected session.
+                for indx in [campers.index(_) for _ in matching_campers]:
+                    # print("Adding {} to {}.".format(str(campers[indx]),
+                    #                                str(new_session)))
+                    mutant[sessions.index(new_session)
+                           * len(campers) + indx] = True
 
     return mutant,
 
@@ -640,6 +679,11 @@ def gen_seed_individual(campers, sessions, creator):
     for s in sessions:
         campers_in_session = 0  # keep track of campers in session
         session_timetable = [False] * len(campers)
+
+        # Make a random order of the campers.
+        #shuffled_campers = deepcopy(campers)
+        #random.shuffle(shuffled_campers)
+
         for c in campers:
             # short cut to stop once the session is full.
             if campers_in_session >= s.activity.limit:
@@ -649,10 +693,11 @@ def gen_seed_individual(campers, sessions, creator):
             # noone signed up.
             if not (s.activity in campers_per_activity.keys()):
                 continue
-            # If the camper has selected the activity, flip the coin to see if
-            # they will be allocated.
-            if ((c in campers_per_activity[s.activity]) and
-                random.choice([True, False])):
+
+            # If the camper has selected the activity, flip the weighted
+            # coin to see if they will be allocated.
+            if ((c in campers_per_activity[s.activity])
+                and random.choice([True, False, False, False])):
 
                 # Find all members of the family that have selected
                 # the activity

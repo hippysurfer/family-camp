@@ -87,7 +87,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    if '<timetable>' in args:
+    if args['<timetable>']:
         log.info('Reading seed individual from {}.'.format(args['<timetable>']))
         with open(args['<timetable>']) as csvfile:
             individual = individual_from_list(

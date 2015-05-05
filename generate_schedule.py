@@ -61,7 +61,7 @@ toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
 toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=500)
+    "population", tools.initRepeat, list, toolbox.individual, n=2000)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,

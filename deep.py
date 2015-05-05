@@ -813,42 +813,42 @@ def mate(ind1, ind2, campers, sessions):
     """Mate two timetables by selecting families at random and swaping
     their schedules from one timetable to the other."""
 
-    # create a list of all families to keep track of which have been
-    # considered.
-    families = list(set([_.group for _ in campers]))
+    # # create a list of all families to keep track of which have been
+    # # considered.
+    # families = list(set([_.group for _ in campers]))
 
-    # Optimsations
-    len_campers = len(campers)
-    sessions_enum = enumerate(sessions)
-    campers_enum = enumerate(campers)
+    # # Optimsations
+    # len_campers = len(campers)
+    # sessions_enum = enumerate(sessions)
+    # campers_enum = enumerate(campers)
 
-    # for each family randomly swap the families schedule between
-    # the two timetables.
-    for c in campers:
-        # Stop if we have considered every family.
-        if len(families) == 0:
-                break
+    # # for each family randomly swap the families schedule between
+    # # the two timetables.
+    # for c in campers:
+    #     # Stop if we have considered every family.
+    #     if len(families) == 0:
+    #             break
 
-        # Only proced of the family has not already been swapped.
-        if (c.group in families):
-            # remove from the list so that we do not process this
-            # family again.
-            families.pop(families.index(c.group))
+    #     # Only proced of the family has not already been swapped.
+    #     if (c.group in families):
+    #         # remove from the list so that we do not process this
+    #         # family again.
+    #         families.pop(families.index(c.group))
 
-            # Flip a coin to decide whether to swap the schedules.
-            if random.choice([True, False]):
-                # search for each occurance of this family
-                # in the timetable. Then swap their schedule
-                # from one timetable to the other.
-                for indx in [ (s_indx*len_campers) + c_indx
-                              for s_indx, s in sessions_enum
-                              for c_indx, l_c in campers_enum
-                              if l_c.group == c.group]:
-                    ind2[indx], ind1[indx] = ind1[indx], ind2[indx]
+    #         # Flip a coin to decide whether to swap the schedules.
+    #         if random.choice([True, False]):
+    #             # search for each occurance of this family
+    #             # in the timetable. Then swap their schedule
+    #             # from one timetable to the other.
+    #             for indx in [ (s_indx*len_campers) + c_indx
+    #                           for s_indx, s in sessions_enum
+    #                           for c_indx, l_c in campers_enum
+    #                           if l_c.group == c.group]:
+    #                 ind2[indx], ind1[indx] = ind1[indx], ind2[indx]
 
-    # Remove fitness values
-    del ind1.fitness.values
-    del ind2.fitness.values
+    # # Remove fitness values
+    # del ind1.fitness.values
+    # del ind2.fitness.values
 
     return (ind1, ind2)
 

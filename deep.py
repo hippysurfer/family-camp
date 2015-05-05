@@ -50,6 +50,27 @@ class Camper:
 
     __repr__ = __str__
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __ne__(self, other):
+        return str(self) != str(other)
+
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __gt__(self, other):
+        return str(self) > str(other)
+
+    def __le__(self, other):
+        return str(self) <= str(other)
+
+    def __ge__(self, other):
+        return str(self) >= str(other)
+
+    def __hash__(self):
+        return hash(str(self))
+
 
 class Session:
 
@@ -66,7 +87,28 @@ class Session:
 
     __repr__ = __str__
 
+    def __eq__(self, other):
+        return str(self) == str(other)
 
+    def __ne__(self, other):
+        return str(self) != str(other)
+
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __gt__(self, other):
+        return str(self) > str(other)
+
+    def __le__(self, other):
+        return str(self) <= str(other)
+
+    def __ge__(self, other):
+        return str(self) >= str(other)
+
+    def __hash__(self):
+        return hash(str(self))
+
+    
 class SessionInst:
 
     def __init__(self, session, all_campers, campers):

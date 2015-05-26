@@ -243,10 +243,10 @@ class Individual:
         """
 
         ret = {}
-        for a in set([s.session.activity for s in self.session_inst]):
+        for a in set([s.session.label for s in self.session_inst]):
             ret[a] = sorted(
                 [s for s in self.session_inst
-                 if s.session.activity == a],
+                 if s.session.label == a],
                 key=lambda s: s.session.start)
 
         return ret
@@ -426,10 +426,45 @@ def individual_from_list(schedule, campers, activities, sessions):
     ind = [False,] * len(sessions) * len(campers)
 
     for (group, camper, activity, start_datetime) in schedule:
-        c = [_ for _ in campers if _.group == group and _.name == camper][0]
-        s = [_ for _ in sessions if _.label == activity and
-             _.start == datetime.strptime(start_datetime,
-                                          "%Y-%m-%d %H:%M:%S")][0]
+        c = [_ for _ in campers if _.group.strip() == group.strip() and _.name.strip() == camper.strip()]
+        if not c:
+            log.error("Unknown camper: '{}/{}'".format(group, camper))
+            log.error("All campers {}".format("\n".join(["'{}/{}'".format(_.group,_.name) for _ in campers
+                                                         if _.group == group])))
+
+        c = c[0]
+        try:
+            s = [_ for _ in sessions if _.label == activity and
+                 _.start == datetime.strptime(start_datetime,
+
+                                              "%Y-%m-%d %H:%M:%S")]
+            if not s:
+                log.error("Unknown session: {}/{} '{}' - '{}'".format(
+                    group, camper,
+                    activity.strip(),
+                    datetime.strptime(start_datetime,
+                                      "%Y-%m-%d %H:%M:%S")))
+                log.error("All sessions: {}".format(
+                    "\n".join(["'{}' - '{}'".format(_.label, _.start) for _ in sessions])))
+                
+
+        except ValueError:
+            # Almost certainly the wrong date format, try again.
+            s = [_ for _ in sessions if _.label.strip() == activity.strip() and
+                 _.start == datetime.strptime(start_datetime,
+                                              "%d/%m/%Y %H:%M:%S")]
+            if not s:
+                log.error("Unknown session: {}/{} '{}' - '{}'".format(
+                    group, camper,
+                    activity.strip(),
+                    datetime.strptime(start_datetime,
+                                      "%d/%m/%Y %H:%M:%S")))
+                log.error("All sessions: {}".format(
+                    "\n".join(["'{}' - '{}'".format(_.label, _.start) for _ in sessions])))
+                
+                
+        s = s[0]
+
         ind[(sessions.index(s) * len(campers)) + campers.index(c)] = True
 
     return ind
@@ -863,14 +898,14 @@ def print_individual(individual, campers):
 
     previous_f = None
     previous_i = None
-    for f, s in individual.export_by_family().items():
+    for f, s in sorted(individual.export_by_family().items(), key=lambda _: _[0]):
         for i, campers in sorted(s.items(), key=lambda s: s[0].session.start):
             previous_c = None
             for c in campers:
                 out.append("{:<20} {:<20} {:<20} {:<20}".format(
                     f if f != previous_f else '',
                     i.session.start.strftime(DATEFORMAT) if i != previous_i else '',
-                    i.session.activity.name if i != previous_i else '',
+                    i.session.label if i != previous_i else '',
                     c.name if c != previous_c else ''
                 ))
                 previous_f = f
@@ -881,13 +916,13 @@ def print_individual(individual, campers):
     out.append("**********************************************************\n")
 
     previous_a = None
-    for a, s in individual.export_by_activity().items():
+    for a, s in sorted(individual.export_by_activity().items(), key=lambda _: _[0]):
         previous_i = None
         for i in s:
             previous_c = None
             for c in i.campers:
                 out.append("{:<20} {:<20} {:<20}".format(
-                    a.name if a != previous_a else '',
+                    a if a != previous_a else '',
                     i.session.start.strftime(DATEFORMAT)
                     if i != previous_i else '',
                     c.name if c != previous_c else ''

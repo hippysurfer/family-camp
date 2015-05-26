@@ -122,7 +122,7 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=1000,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=30000,
         stats=stats,
         halloffame=hof,
         verbose=True)

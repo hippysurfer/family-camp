@@ -406,8 +406,7 @@ def timetable_from_list(schedule, campers, activities, sessions):
 
     for (group, camper, activity, start_datetime) in schedule:
         c = [_ for _ in campers if _.group == group and _.name == camper][0]
-        a = activities[activity]
-        s = [_ for _ in sessions if _.activity == a and
+        s = [_ for _ in sessions if _.label == activity and
              _.start == datetime.strptime(start_datetime,
                                           "%Y-%m-%d %H:%M:%S")][0]
         session_insts[s].add_camper(c)

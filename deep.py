@@ -405,10 +405,20 @@ def timetable_from_list(schedule, campers, activities, sessions):
                      for s in sessions}
 
     for (group, camper, activity, start_datetime) in schedule:
-        c = [_ for _ in campers if _.group == group and _.name == camper][0]
-        s = [_ for _ in sessions if _.label == activity and
-             _.start == datetime.strptime(start_datetime,
-                                          "%Y-%m-%d %H:%M:%S")][0]
+        c = [_ for _ in campers if _.group.strip() == group.strip() and 
+             _.name.strip() == camper.strip()][0]
+
+        try:
+            s = [_ for _ in sessions if _.label == activity and
+                 _.start == datetime.strptime(start_datetime,
+                                              "%Y-%m-%d %H:%M:%S")][0]
+        except ValueError:
+            # Almost certainly the wrong date format, try again.
+
+            s = [_ for _ in sessions if _.label == activity and
+                 _.start == datetime.strptime(start_datetime,
+                                              "%d/%m/%Y %H:%M:%S")][0]
+
         session_insts[s].add_camper(c)
 
     return Individual(None, campers, sessions, session_insts.values())
@@ -445,7 +455,6 @@ def individual_from_list(schedule, campers, activities, sessions):
                                       "%Y-%m-%d %H:%M:%S")))
                 log.error("All sessions: {}".format(
                     "\n".join(["'{}' - '{}'".format(_.label, _.start) for _ in sessions])))
-                
 
         except ValueError:
             # Almost certainly the wrong date format, try again.

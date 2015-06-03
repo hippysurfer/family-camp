@@ -210,11 +210,25 @@ styles['ActDesc'] = ParagraphStyle(
     alignment=TA_LEFT,
     textColor=colors.black,
 )
+
 styles['Body'] = ParagraphStyle(
     'Body',
     parent=styles['default'],
     fontName='Helvetica-Bold',
     fontSize=11,
+    spaceBefore=2,
+    spaceAfter=2,
+    leftIndent= 0.75 * cm,
+    leading=14,
+    alignment=TA_JUSTIFY,
+    textColor=colors.black,
+)
+
+styles['BodySmall'] = ParagraphStyle(
+    'BodySmall',
+    parent=styles['default'],
+    fontName='Helvetica-Bold',
+    fontSize=9,
     spaceBefore=2,
     spaceAfter=2,
     leftIndent= 0.75 * cm,
@@ -275,6 +289,9 @@ def activity_desc(text):
 
 def para(text):
     return Paragraph(text, styles['Body'])
+
+def para_small(text):
+    return Paragraph(text, styles['BodySmall'])
 
 
 def tbody(text):

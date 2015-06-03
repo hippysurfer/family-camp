@@ -91,16 +91,26 @@ def gen_story(doc, family, sat_data, sun_data):
     elements.append(KeepTogether([
         sun,
         Spacer(0*cm, 1*cm),
-        gen_info_pack.para("Please note that Saturday Lunch and Sunday Lunch "
-                           "have been included on your timetable to ensure "
-                           "that families with a packed schedule get a slot "
-                           "for lunch. You are, of course, free to take your "
-                           "meals whenever you choose."),
-        Spacer(0*cm, 0.5*cm),
-        gen_info_pack.para("Please try to arrive at the Saturday BBQ close "
-                           "to your allotted time. By staggering the arrival "
-                           "times, we are trying hard to limit the length of "
-                           "time that you need to queue.")
+        gen_info_pack.para_small(
+            "Please note that Saturday Lunch and Sunday Lunch "
+            "have been included on your timetable to ensure "
+            "that families with a packed schedule get a slot "
+            "for lunch. You are, of course, free to take your "
+            "meals whenever you choose."),
+        Spacer(0*cm, 0.4*cm),
+        gen_info_pack.para_small(
+            "Please try to arrive at the Saturday BBQ close "
+            "to your allotted time. By staggering the arrival "
+            "times, we are trying hard to limit the length of "
+            "time that you need to queue."),
+        Spacer(0*cm, 0.4*cm),
+        gen_info_pack.para_small(
+            "There are a very few occasions where we have "
+            "had to split a group so that members of the  "
+            "group are doing different activities at the same "
+            "time. This has been necessary to give as many "
+            "people as possible the activities that they have "
+            "requested.")
     ]))
 
     return elements

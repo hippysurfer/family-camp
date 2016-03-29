@@ -43,42 +43,35 @@ TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Family Camp"
-SUBTITLE = "2015 Family Camp"
+SUBTITLE = "2016 Family Camp"
 
 ACTS = {
     'Archery (Outdoor and Indoor)':
-    'Please meet your instructor by the archery range. (Please wear a top '
-    'with long sleeves to protect your arms).',
+        'Please meet your instructor by the archery range. (Please wear a top '
+        'with long sleeves to protect your arms).',
     'Blindfold Trail':
-    'Please meet your instructor at the flag. (You are advised to wear '
-    'long trousers, long sleeves and sturdy shoes).',
+        'Please meet your instructor at the flag. (You are advised to wear '
+        'long trousers, long sleeves and sturdy shoes).',
     'BMX Biking':
-    'Please meet your instructor at the BMX track. (You are strongly advised '
-    'to ensure all those participating wear long trousers and long sleeves '
-    'as it is a loose gravel track).',
+        'Please meet your instructor at the BMX track. (You are strongly advised '
+        'to ensure all those participating wear long trousers and long sleeves '
+        'as it is a loose gravel track).',
     'Canoeing':
-    'Please meet your instructor at the river bank. (No valuables i.e. '
-    'watches, mobile phones, wallets, keys etc. as these may be lost or '
-    'damaged as falling in is always a possibility. Wear old clothes).',
-    'Caving':
-    'Please meet your instructor at the man-made caves. (This activity '
-    'can be a bit wet and muddy. If possible, please wear old '
-    'clothes/waterproof\'s. It is also stony so long trousers are a good '
-    'idea).',
+        'Please meet your instructor at the river bank. (No valuables i.e. '
+        'watches, mobile phones, wallets, keys etc. as these may be lost or '
+        'damaged as falling in is always a possibility. Wear old clothes).',
     'Climbing Quarry':
-    'Please meet your instructor in the climbing quarry.',
-    'Climbing Tower':
-    'Please meet your instructor by the climbing tower. (Note that the '
-    'climbing tower is not on the map - head for the BMX track and you '
-    'will see the climbing tower).',
+        'Please meet your instructor in the climbing quarry.',
+    'Compass Trail':
+        'Please wear comfortable walking shoes.',
     'The Crystal Maze':
-    'Please meet your instructor at the flag.',
-    'Pottery Painting':
-    'Please wait outside the large Yurt.',
+        'Please meet your instructor at the flag.',
     'Fire Lighting':
-    'Please meet at the entrance to the fire area.',
-    "It’s a Knockout":
-    'Please meet your instructor at the flag.',
+        'Please meet at the entrance to the fire area.',
+    'Orienteering':
+        'XXXXXXXXXXXXXXXX  Add meeting instructions. XXXXXXXXXXXXX',
+    'Woodland Craft':
+        'XXXXXXXXXXXXXXXX  Add meeting instructions. XXXXXXXXXXXXX'
 }
 
 programme = [
@@ -88,11 +81,11 @@ programme = [
     ]],
     ['Saturday', [
         ['8.40am', 'Flag Break'],
-        ['9.00am-5.00pm', 'Site staff led Activities'],
-        ['5.15pm-6.00pm', 'BBQ'],
-        ['7.00pm-7.30pm', 'Tuck shop and 7th shop open'],
-        ['7.45pm', 'Flag down'],
-        ['8.00pm', 'Campfire (marquee if wet)']
+        ['9.00am-5.00pm', 'Activities'],
+        ['5.00pm-6.00pm', 'BBQ and Ice Cream Van'],
+        ['6.00pm-7.00pm', 'Tuck shop and 7th Lichfield hoodies shop pen'],
+        ['7.15pm', 'Flag down'],
+        ['7.30pm', 'Campfire (marquee if wet)']
     ]],
     ['Sunday', [
         ['8.40am', 'Flag Break'],
@@ -301,8 +294,8 @@ def tbody(text):
 def gen_story(doc):
     e = []
     e.append(Spacer(0*cm, 1*cm))
-    e.append(title2("Welcome to this year's family camp."))
-    e.append(title2("We hope that you have a great weekend!!"))
+    e.append(title2("Welcome to Family Camp."))
+    e.append(title2("Let the action begin!!"))
 
     e.append(title2('Programme'))
 
@@ -339,57 +332,59 @@ def gen_story(doc):
 
     e.append(PageBreak())
 
+    e.append(subtitle('Quiet Zone'))
+    e.append(para('If you are camped in the Quiet Zone (marked on the map) '
+                  'please keep noise to a minimum after 10:00pm.'))
+
     e.append(subtitle('Friday Evening Games'))
-    e.append(para('Approximately 8.30pm on Friday evening we play a '
-                  'traditional game for all who wish to take part. A '
+    e.append(para('At approximately 8.30pm on Friday evening we will have a '
+                  'social gathering and play a '
+                  'traditional game for all who wish to take part. It is a '
                   'great way to meet others and take part in a scouting '
                   'favourite.'))
 
     e.append(subtitle("BBQ"))
 
-    e.append(para('We will be serving hotdogs and burgers from '
-                  '5.15pm – 6pm (approx) on Saturday evening '
+    e.append(para('The BBQ will be on Saturday evening '
                   '(see your timetable for your family\'s allocated time). '
                   'Please adhere to your allotted time slot to reduce queuing '
-                  'times. Vegetarian & special diets alternatives are '
-                  'available.'))
-    e.append(para('The BBQ is an opportunity to gather together for a meal, so '
+                  'times. Vegetarian & special diet alternatives are '
+                  'available if you have informed us in advance. '
+                  'The BBQ is an opportunity to gather together for a meal, so '
                   'please bring your tables and chairs, drinks & extra snacks '
-                  'up to the bbq area. If conditions are wet we will use '
-                  'indoor facilities. We are expecting an ice-cream van to pay '
-                  'us a visit around 6pm so maybe have some change ready as '
+                  'up to the bbq area. We are hoping that an ice-cream van to pay '
+                  'us a visit, so maybe have some change ready as '
                   'these are not pre-paid.'))
-    e.append(para('After the BBQ join us to cut cake to celebrate 20 years of '
-                  'family camp!'))
 
     e.append(subtitle('Camp Fire'))
     e.append(para('Saturday 8.00pm -9.00pm. If the weather is dry there '
                   'will be a campfire at the campfire circle. Please come '
                   'along and join in the fun and games. All children must '
-                  'be supervised. If wet, this activity will take place '
-                  'indoors.'))
+                  'be supervised.'))
 
     e.append(subtitle('Flag Break & Flag Down'))
     e.append(para("This is when we all congregate round the flag to receive "
                   "information about camp and to update you on the day’s "
                   "activities. If running a wet program we will hold this "
                   "indoors. Fri 8.00pm, Sat 8.40am, Sat 7.45pm, Sun 8.40am and "
-                  "Sun 1.40pm."))
+                  "Sun 1.40pm. "
+                  "Many campers choose to wear their 7th Lichfield Hoodie or "
+                  "T-shirt (and knecker if they are invested). Beavers, Cubs, "
+                  "Scouts and Leaders might like to wear uniform for the Sunday "
+                  "morning Flag Break."))
 
     e.append(subtitle('Tuck Shop'))
     e.append(para('There is a tuck shop on site which will open over the '
-                  'weekend to purchase souvenirs. There will also be an '
-                  'opportunity to have a look at 7th Lichfield t-shirts and '
-                  'hoodies etc, all available to try and order. There will '
+                  'weekend to purchase souvenirs. There will '
                   'also be an opportunity to purchase/order 7th Lichfield '
                   'hoodies. Please remember cash or cheques only for the Tuck '
-                  'Shop/ hoodies. Opening hours will be Sat 7.00pm-7:30pm'))
+                  'Shop/Hoodies. Opening hours will be Sat 6.00pm-7:00pm'))
 
-    e.append(subtitle('Other activities'))
-    e.append(para("Other activities such as orienteering, pond dipping and "
+    e.append(subtitle('Other Activities'))
+    e.append(para("Other activities such as pond dipping and "
                   "local walks are available. Information and equipment can "
                   "be sourced from the site managers, so please see them in "
-                  "the main office should you wish to do any of the above."))
+                  "the main office should you require nets or further information."))
 
     e.append(subtitle('General Information'))
     e.append(para('The campsite does not permit pets but does allow barbeques '

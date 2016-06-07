@@ -17,20 +17,22 @@ Options:
   --version      Show version.
 
 """
+import csv
+import logging
+
+from docopt import docopt
+import random
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     SimpleDocTemplate,
     Table,
     TableStyle,
-    Image,
     PageBreak,
     KeepTogether,
     Spacer)
-from reportlab.lib.units import mm, cm
-from docopt import docopt
-import csv
-import logging
+
 log = logging.getLogger(__name__)
 
 from deep import get_source_data, timetable_from_list
@@ -46,7 +48,7 @@ TITLE = "7th Lichfield Scout Group"
 SUBTITLE = "2016 Family Camp"
 
 
-def pageTemplate(family):
+def pageTemplate(family, bingo_name):
     def familyTemplate(canvas, doc):
         canvas.saveState()
         canvas.drawImage(TH_LOGO, 1 * cm, H - 4.5 * cm,
@@ -59,6 +61,12 @@ def pageTemplate(family):
         canvas.drawCentredString(W / 2.0, H - 2 * cm, SUBTITLE)
         canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
         canvas.drawCentredString(W / 2.0, H - 3 * cm, "Group: " + family)
+
+        canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
+        canvas.setFillColor(colors.purple)
+        canvas.drawRightString(W - 2 * cm, H - 1.3 * cm, "Bingo Name")
+        canvas.drawRightString(W - 2 * cm, H - 2 * cm, bingo_name)
+
         canvas.restoreState()
 
     return familyTemplate
@@ -91,13 +99,13 @@ def gen_story(doc, family, sat_data, sun_data):
     elements.append(KeepTogether([
         sun,
         Spacer(0*cm, 1*cm),
-        gen_info_pack.para_small(
-            "Please note that Saturday Lunch and Sunday Lunch "
-            "have been included on your timetable to ensure "
-            "that families with a packed schedule get a slot "
-            "for lunch. You are, of course, free to take your "
-            "meals whenever you choose."),
-        Spacer(0*cm, 0.4*cm),
+        # gen_info_pack.para_small(
+        #     "Please note that Saturday Lunch and Sunday Lunch "
+        #     "have been included on your timetable to ensure "
+        #     "that families with a packed schedule get a slot "
+        #     "for lunch. You are, of course, free to take your "
+        #     "meals whenever you choose."),
+        #Spacer(0*cm, 0.4*cm),
         gen_info_pack.para_small(
             "Please try to arrive at the Saturday BBQ close "
             "to your allotted time. By staggering the arrival "
@@ -116,7 +124,7 @@ def gen_story(doc, family, sat_data, sun_data):
     return elements
 
 
-def gen_pdf(filename, family, sat_data, sun_data):
+def gen_pdf(filename, family, sat_data, sun_data, bingo_name):
     doc = SimpleDocTemplate(filename, pagesize=A4,
                             topMargin=3.25 * cm, bottomMargin=0)
 
@@ -124,8 +132,8 @@ def gen_pdf(filename, family, sat_data, sun_data):
     e = gen_story(doc, family, sat_data, sun_data)
 
     # write the document to disk
-    doc.build(info_pack+e, onFirstPage=pageTemplate(family),
-              onLaterPages=pageTemplate(family))
+    doc.build(info_pack+e, onFirstPage=pageTemplate(family, bingo_name),
+              onLaterPages=pageTemplate(family, bingo_name))
 
 
 def get_schedule(sessions):
@@ -167,8 +175,48 @@ if __name__ == '__main__':
             list(csv.reader(csvfile, delimiter=',')),
             campers, acts, sessions)
 
-    for f, s in individual.export_by_family().items():
+    BINGO_NAMES = [('Flag Flyer', 5),
+                   ('Cliff Hangers', 5),
+                   ('River Ripplers', 5),
+                   ('Trail Blazers', 5),
+                   ("T'rific Troglodytes", 5),
+                   ('Naughty Navigators', 5),
+                   ('Star gazers', 5),
+                   ('Firestarters', 5),
+                   ('Rope Wranglers', 5),
+                   ('Knot Knitters', 5),
+                   ('Lumberjacks', 4),
+                   ('Wood Choppers', 4),
+                   ('Walking Wanderers', 4),
+                   ('Fletch Fettlers', 4),
+                   ('Woggle Worriers', 4),
+                   ('Peg Pullers', 4),
+                   ('Wood Whittlers', 4),
+                   ('Clever Climbers', 4),
+                   ('Necker Knockers', 4),
+                   ('Bewildered Bikers', 4),
+                   ('Crazy Canoeists', 4)]
+
+    num_fams = len(individual.export_by_family())
+    name_list = []
+    for name, repeat in BINGO_NAMES:
+        name_list.extend([name,] * repeat)
+
+    # for name in BINGO_NAMES:
+    #     name_list.extend([name,] * (num_fams//len(BINGO_NAMES)))
+    #
+    # if len(name_list) < num_fams:
+    #     name_list.extend(random.sample(BINGO_NAMES,num_fams-len(name_list)))
+
+    total = 0
+    for name in set(name_list):
+        print("{} = {}".format(name, name_list.count(name)))
+        total += name_list.count(name)
+    print("total = {}".format(total))
+
+    for name, (f, s) in zip(name_list, individual.export_by_family().items()):
 
         sat_sessions, sun_sessions = get_schedule(s)
         gen_pdf("{}/{}_timetable.pdf".format(out_dir, f.replace('/', '_')),
-                f, sat_sessions, sun_sessions)
+                f, sat_sessions, sun_sessions, name)
+

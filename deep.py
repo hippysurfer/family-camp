@@ -2,6 +2,7 @@
 import os.path
 import sys
 import random
+import functools
 import itertools as it
 from copy import deepcopy
 from datetime import timedelta
@@ -20,7 +21,20 @@ DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
 # List of activities that everyone must be allocated.
-COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
+#COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
+COMPULSARY_ACTIVITIES = ["Saturday BBQ"]
+
+
+# def memoize(obj):
+#     cache = obj.cache = {}
+#
+#     @functools.wraps(obj)
+#     def memoizer(*args, **kwargs):
+#         key = str(args) + str(kwargs)
+#         if key not in cache:
+#             cache[key] = obj(*args, **kwargs)
+#         return cache[key]
+#     return memoizer
 
 
 class Activity:
@@ -111,7 +125,6 @@ class SessionInst:
 #    return [_ for _ in session_insts
 #            if (_ != session_inst and sessions_overlap(
 #                _.session, session_inst.session))]
-
 
 def overlapping_sessions(session, sessions):
     """Return a list of sessions from sessions that overlap
@@ -287,6 +300,8 @@ class Individual:
             count += len(split_families)
 
             if debug:
+                self.summary_file.write(
+                    "\n\n== Families split accross two sessions ==\n")
                 for g in split_families:
                     self.summary_file.write(
                         "{} Found in other session: {}\n".format(
@@ -296,6 +311,9 @@ class Individual:
             # How badly have we exceeded session limits?
             if len(s.campers) - s.session.activity.limit > 0:
                 if debug:
+                    self.summary_file.write(
+                        "\n\n== Sessions exceeding size limit. ==\n")
+
                     self.summary_file.write("{} Exceeded limit: {} > {}\n".format(
                         str(s), len(s.campers), s.session.activity.limit))
                 count += len(s.campers) - s.session.activity.limit
@@ -327,7 +345,7 @@ class Individual:
             duplicates = len(activities) - len(set(activities))
             if duplicates:
                 if debug:
-                    self.summary_file.write("{} duplicated {}".format(str(c), duplicates))
+                    self.summary_file.write("{} duplicated {}\n".format(str(c), duplicates))
             count += duplicates
 
         return count
@@ -442,6 +460,11 @@ def individual_from_list(schedule, campers, activities, sessions):
                                                          if _.group == group])))
 
         c = c[0]
+        log.debug("Looking for session: {}/{} '{}' - '{}'".format(
+            group, camper,
+            activity.strip(),
+            datetime.strptime(start_datetime,
+                              "%Y-%m-%d %H:%M:%S")))
         try:
             s = [_ for _ in sessions if _.label == activity and
                  _.start == datetime.strptime(start_datetime,
@@ -576,10 +599,10 @@ def get_source_data(use_cache=True):
             open(CACHE, 'rb'))
     else:
         gc = google.conn()
-        spread = gc.open("Timetable")
+        spread = gc.open("Timetable2016")
         acts_wks = spread.worksheet("Activities").get_all_values()
         session_wks = spread.worksheet("Sessions").get_all_values()
-        campers_wks = gc.open("Family Camp Bookings").worksheet(
+        campers_wks = gc.open("Family Camp Bookings 2016").worksheet(
             "Activities").get_all_values()
 
         pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
@@ -598,6 +621,12 @@ def get_source_data(use_cache=True):
 
     acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2])
             for _ in raw_acts if _[0] != ''}
+
+    # Deal with the problem of non-empty rows in the worksheet after the
+    # end of the table that we are interested in.
+    # We know that we are only interested in rows that have something in
+    # the first column.
+    session_wks = [_ for _ in session_wks if _[0] != '']
 
     sessions = [Session(acts[_[0]],
                         _[1],
@@ -712,6 +741,9 @@ def mutate(ind1, sessions, campers, toolbox):
                 for target_session in (
                         target_sessions[:start] +
                         target_sessions[start:]):
+
+                    # TBD: check that target session != session we just took them out of.
+
 
                     # Is there room in the session for the family?
                     session_offset = sessions.index(target_session) * len(campers)
@@ -926,6 +958,7 @@ def print_individual(individual, campers):
     previous_a = None
     for a, s in sorted(individual.export_by_activity().items(), key=lambda _: _[0]):
         previous_i = None
+        activity_total = 0
         for i in s:
             previous_c = None
             for c in i.campers:
@@ -938,6 +971,12 @@ def print_individual(individual, campers):
                 previous_a = a
                 previous_i = i
                 previous_c = c
+
+            out.append("{:<20} {}: {}\n".format("","Total in session",len(i.campers)))
+            activity_total += len(i.campers)
+
+        out.append("Total in activity:{}".format(activity_total))
+
         out.append('\n')
 
     return "\n".join(out)

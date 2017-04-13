@@ -599,10 +599,10 @@ def get_source_data(use_cache=True):
             open(CACHE, 'rb'))
     else:
         gc = google.conn()
-        spread = gc.open("Timetable2016")
+        spread = gc.open("Timetable2017")
         acts_wks = spread.worksheet("Activities").get_all_values()
         session_wks = spread.worksheet("Sessions").get_all_values()
-        campers_wks = gc.open("Family Camp Bookings 2016").worksheet(
+        campers_wks = gc.open("Family Camp Bookings 2017").worksheet(
             "Activities").get_all_values()
 
         pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
@@ -938,7 +938,8 @@ def print_individual(individual, campers):
 
     previous_f = None
     previous_i = None
-    for f, s in sorted(individual.export_by_family().items(), key=lambda _: _[0]):
+    for f, s in sorted(individual.export_by_family().items(),
+                       key=lambda _: '' if _[0] == '' else _[0].split('/')[1].lower()):
         for i, campers in sorted(s.items(), key=lambda s: s[0].session.start):
             previous_c = None
             for c in campers:
@@ -978,6 +979,17 @@ def print_individual(individual, campers):
         out.append("Total in activity:{}".format(activity_total))
 
         out.append('\n')
+
+    out.append("##################################################################\n")
+
+    previous_a = None
+    for a, s in sorted(individual.export_by_activity().items(), key=lambda _: _[0]):
+        out.append("\n{}: Session Limit: {}".format(a,s[0].session.activity.limit ))
+        for i in s:
+            out.append("{:>20}, {}".format(
+                i.session.start.strftime(DATEFORMAT), len(i.campers)
+            ))
+        #out.append('\n')
 
     return "\n".join(out)
 

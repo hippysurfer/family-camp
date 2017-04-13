@@ -25,10 +25,10 @@
   <mapcanvas>
     <units>meters</units>
     <extent>
-      <xmin>-224254.87971970340004191</xmin>
-      <ymin>6943879.66292159724980593</ymin>
-      <xmax>-223026.21174428059021011</xmax>
-      <ymax>6945004.72002432402223349</ymax>
+      <xmin>-224248.92073081183480099</xmin>
+      <ymin>6943871.32033714931458235</ymin>
+      <xmax>-223020.25275538902496919</xmax>
+      <ymax>6944996.37743987608700991</ymax>
     </extent>
     <rotation>0</rotation>
     <projections>1</projections>
@@ -232,7 +232,7 @@
             <customproperties/>
           </layer-tree-layer>
         </layer-tree-group>
-        <ComposerItem pagey="21.2072" page="1" id="" lastValidViewScaleFactor="-1" positionMode="0" positionLock="false" x="3.96445" y="21.2072" visibility="1" zValue="1" background="false" transparency="0" frameJoinStyle="miter" blendMode="0" width="94.0953" outlineWidth="0.3" excludeFromExports="0" uuid="{f0d75166-2b16-43cb-8718-e5153acce5d6}" height="156.5" itemRotation="0" frame="false" pagex="3.96445">
+        <ComposerItem pagey="21.2072" page="1" id="" lastValidViewScaleFactor="-1" positionMode="0" positionLock="false" x="3.96445" y="21.2072" visibility="1" zValue="1" background="false" transparency="0" frameJoinStyle="miter" blendMode="0" width="93.1734" outlineWidth="0.3" excludeFromExports="0" uuid="{f0d75166-2b16-43cb-8718-e5153acce5d6}" height="156.5" itemRotation="0" frame="false" pagex="3.96445">
           <FrameColor alpha="255" red="0" blue="0" green="0"/>
           <BackgroundColor alpha="255" red="255" blue="255" green="255"/>
         </ComposerItem>
@@ -1404,7 +1404,7 @@
         </edittype>
       </edittypes>
     </maplayer>
-    <maplayer minimumScale="-4.65661e-10" maximumScale="1e+08" simplifyDrawingHints="0" minLabelScale="0" maxLabelScale="1e+08" simplifyDrawingTol="1" geometry="Point" simplifyMaxScale="1" type="vector" hasScaleBasedVisibilityFlag="0" simplifyLocal="1" scaleBasedLabelVisibilityFlag="0">
+    <maplayer minimumScale="0" maximumScale="1e+08" simplifyDrawingHints="0" minLabelScale="0" maxLabelScale="1e+08" simplifyDrawingTol="1" geometry="Point" simplifyMaxScale="1" type="vector" hasScaleBasedVisibilityFlag="0" simplifyLocal="1" scaleBasedLabelVisibilityFlag="0">
       <id>places20160111175213284</id>
       <datasource>./places.shp</datasource>
       <title></title>
@@ -1454,7 +1454,7 @@
           <category render="true" symbol="12" value="BMX" label="BMX"/>
           <category render="true" symbol="13" value="canoeing" label="Canoeing"/>
           <category render="false" symbol="14" value="caving" label="Caving"/>
-          <category render="true" symbol="15" value="climbing_quarry" label="Climbing Quarry"/>
+          <category render="true" symbol="15" value="climbing_quarry" label="Climbing"/>
           <category render="true" symbol="16" value="compass" label="Compass Trail"/>
           <category render="true" symbol="17" value="crystal_maze" label="Crystal Maze"/>
           <category render="true" symbol="18" value="firelighting" label="Fire Lighting"/>

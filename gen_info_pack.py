@@ -60,8 +60,10 @@ ACTS = {
         'Please meet your instructor at the river bank. (No valuables i.e. '
         'watches, mobile phones, wallets, keys etc. as these may be lost or '
         'damaged as falling in is always a possibility. Wear old clothes).',
-    'Climbing Quarry':
-        'Please meet your instructor in the climbing quarry.',
+    'Climbing':
+        'Please meet your instructor by the entrance to the kitchen. Here the '
+        'instructor will issue your safety equipment before taking you to the '
+        'Climbing Quarry.',
     'Compass Trail':
         'Please meet your instructor at the Compass Trail. '
         'Please wear comfortable walking shoes.',
@@ -342,7 +344,7 @@ def gen_story(doc):
                   'social gathering for everyone, but most especially for '
                   'first timers. If you are new to Family Camp please come '
                   'along to the Marquee to meet others who are in the same '
-                  'possition. Everyone else is also welcome and we will have '
+                  'position. Everyone else is also welcome and we will have '
                   'the Bowling Alley setup for those that wish to have a go. '
                   'This will be a great way to meet others at the start of '
                   'the camp.'))
@@ -404,11 +406,11 @@ def gen_story(doc):
                   "The idea of the game is to track down other families that have "
                   "the Bingo Names that are on your card. When you find them they will "
                   "give you a sticker to complete your card. Hand in your completed card "
-                  "to the Service Team before Flag Break on Sunday morning. If you complete "
+                  "to the Service Team before the final Flag Down on Sunday afternoon. If you complete "
                   "your card early, the Service Team can give you another one for a second chance to win. "
-                  "A winning card will be pulled from the sack at Sunday morning Flag Break. You have "
-                  "to be at the Flag Break to win, we will keep pulling out completed cards "
-                  "until we find a winner that is at Flag Break. "
+                  "A winning card will be pulled from the sack at Sunday afternoon Flag Down. You have "
+                  "to be at the Flag Down to win, we will keep pulling out completed cards "
+                  "until we find a winner that is present. "
                   "The winning family will receive a 7th Lichfield goody bag."))
 
     e.append(subtitle('Other Activities'))

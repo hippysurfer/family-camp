@@ -49,6 +49,7 @@ DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
 from scoop import futures
+from copy import copy
 
 (acts, sessions, campers) = get_source_data(use_cache=True)
 
@@ -57,6 +58,7 @@ toolbox = base.Toolbox()
 creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 
+# toolbox.register("clone", copy)
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
                                      creator=creator.Individual))
@@ -78,14 +80,14 @@ if __name__ == '__main__':
     level = logging.DEBUG if args['--debug'] else logging.INFO
     refresh = args['--refresh']
 
+    logging.basicConfig(level=level)
+    log.debug("Debug On\n")
+
     if refresh:
         log.info('Fetching fresh data.')
         get_source_data(use_cache=False)
         log.info('Done. restart without the --refresh flag.')
         sys.exit(0)
-
-    logging.basicConfig(level=level)
-    log.debug("Debug On\n")
 
     if args['<timetable>']:
         log.info('Reading seed individual from {}.'.format(args['<timetable>']))

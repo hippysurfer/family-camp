@@ -5,18 +5,20 @@ log = logging.getLogger(__name__)
 
 import gspread
 from gspread.httpsession import HTTPSession
-from oauth2client.client import SignedJwtAssertionCredentials
+# from oauth2client.client import SignedJwtAssertionCredentials
+from oauth2client.service_account import ServiceAccountCredentials
 
 
 KEY_FILE = "key.pem"
-ACCOUNT = '111027059515-1iafiu8cv4h8m3i664s578vt7pngcsun@developer' \
-          '.gserviceaccount.com'
+ACCOUNT = '111027059515-1iafiu8cv4h8m3i664s578vt7pngcsun@developer.gserviceaccount.com'
 SCOPE = ['https://spreadsheets.google.com/feeds',
          'https://docs.google.com/feeds']
 
-SIGNED_KEY = open(KEY_FILE, 'rb').read()
+# SIGNED_KEY = open(KEY_FILE, 'rb').read()
 
-CREDS = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, SCOPE)
+# CREDS = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, SCOPE)
+CREDS = ServiceAccountCredentials.from_p12_keyfile(
+    ACCOUNT, KEY_FILE, scopes=SCOPE)
 
 MAX_ATTEMPTS = 10
 BACKOFF_FACTOR = 5
@@ -57,6 +59,9 @@ def retry(func, sheet=None):
                 # log.debug("ret = {!r} ".format(ret))
 
                 break
+            except gspread.exceptions.SpreadsheetNotFound:
+                log.error("Not found")
+                raise
             except:
                 if attempt > MAX_ATTEMPTS/2:
                     log.warn("- retrying - "

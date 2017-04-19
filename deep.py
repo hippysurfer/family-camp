@@ -652,7 +652,7 @@ def evaluate(individual, campers, sessions, debug=False):
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
     return fitness, goodness, bestness
 
-
+# @profile
 def mutate(ind1, sessions, campers, toolbox):
     mutant = toolbox.clone(ind1)
     # Remove fitness values
@@ -685,15 +685,15 @@ def mutate(ind1, sessions, campers, toolbox):
         # If they are already allocated to another session, remove them
         for s in [_ for _ in sessions if _.activity == act]:
             for indx in [campers.index(_) for _ in matching_campers]:
-                log.debug("Removing {} from {}.".format(
-                    str(campers[indx]), str(s)))
+                # log.debug("Removing {} from {}.".format(
+                #     campers[indx], s))
                 old_session_idx = sessions.index(s) * len(campers)
                 mutant[old_session_idx + indx] = False
 
         # Add them to the randomaly allocated session
         for indx in [campers.index(_) for _ in matching_campers]:
-            log.debug("Adding {} to {}.".format(str(campers[indx]),
-                                                str(sessions[session_idx])))
+            # log.debug("Adding {} to {}.".format(str(campers[indx]),
+            #                                     str(sessions[session_idx])))
             mutant[session_idx * len(campers) + indx] = True
 
         # Remove the group from any other sessions that overlap
@@ -715,8 +715,8 @@ def mutate(ind1, sessions, campers, toolbox):
                 # the camper from it.
                 if mutant[overlapping_session_idx * len(campers)
                           + indx]:
-                    log.debug("Removing {} from {}.".format(
-                        str(campers[indx]), str(overlapping_session)))
+                    # log.debug("Removing {} from {}.".format(
+                    #     str(campers[indx]), str(overlapping_session)))
 
                     group_in_session = True
 
@@ -753,9 +753,9 @@ def mutate(ind1, sessions, campers, toolbox):
 
                     if (num_in_session + len(matching_campers)
                         > target_session.activity.limit):
-                        log.debug("tried to put {} into {} but it is "
-                                  "full.".format(matching_campers[0].group,
-                                                 target_session))
+                        # log.debug("tried to put {} into {} but it is "
+                        #           "full.".format(matching_campers[0].group,
+                        #                          target_session))
                         continue
 
                     # Does the session clash with another session that someone
@@ -785,8 +785,8 @@ def mutate(ind1, sessions, campers, toolbox):
                     # Put all of the group members that want the activity in
                     # the newly selected session.
                     for indx in [campers.index(_) for _ in matching_campers]:
-                        log.debug("Adding {} to {}.".format(str(campers[indx]),
-                                                            str(target_session)))
+                        # log.debug("Adding {} to {}.".format(str(campers[indx]),
+                        #                                     str(target_session)))
                         mutant[sessions.index(target_session)
                                * len(campers) + indx] = True
 

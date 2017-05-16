@@ -45,7 +45,7 @@ TITLE_SIZE = 16
 TH_LOGO = "7thlogo.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2016 Family Camp"
+SUBTITLE = "2017 Family Camp"
 
 
 def pageTemplate(family, bingo_name):
@@ -62,10 +62,10 @@ def pageTemplate(family, bingo_name):
         canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
         canvas.drawCentredString(W / 2.0, H - 3 * cm, "Group: " + family)
 
-        canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
-        canvas.setFillColor(colors.purple)
-        canvas.drawRightString(W - 2 * cm, H - 1.3 * cm, "Bingo Name")
-        canvas.drawRightString(W - 2 * cm, H - 2 * cm, bingo_name)
+        #canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
+        #canvas.setFillColor(colors.purple)
+        #canvas.drawRightString(W - 2 * cm, H - 1.3 * cm, "Bingo Name")
+        #canvas.drawRightString(W - 2 * cm, H - 2 * cm, bingo_name)
 
         canvas.restoreState()
 

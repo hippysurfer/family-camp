@@ -43,7 +43,7 @@ TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Family Camp"
-SUBTITLE = "2016 Family Camp"
+SUBTITLE = "2017 Family Camp"
 
 ACTS = {
     'Archery (Outdoor and Indoor)':
@@ -55,7 +55,8 @@ ACTS = {
     'BMX Biking':
         'Please meet your instructor at the BMX track. (You are strongly advised '
         'to ensure all those participating wear long trousers and long sleeves '
-        'as it is a loose gravel track).',
+        'as it is a loose gravel track). Please note that all BMX riders must be '
+        'at least 9 years old.',
     'Canoeing':
         'Please meet your instructor at the river bank. (No valuables i.e. '
         'watches, mobile phones, wallets, keys etc. as these may be lost or '
@@ -64,14 +65,16 @@ ACTS = {
         'Please meet your instructor by the entrance to the kitchen. Here the '
         'instructor will issue your safety equipment before taking you to the '
         'Climbing Quarry.',
-    'Compass Trail':
-        'Please meet your instructor at the Compass Trail. '
-        'Please wear comfortable walking shoes.',
+    'Caving':
+        'Please meet your instructor at the man-made caves. (This activity '
+        'can be a bit wet and muddy. If possible, please wear old '
+        'clothes/waterproof\'s. It is also stony so long trousers are a good '
+        'idea).',
     'The Crystal Maze':
         'Please meet your instructor at the Crystal Maze.',
     'Fire Lighting':
         'Please meet at the entrance to the fire area.',
-    'Orienteering':
+    'Geocaching':
         'Please meet your instructor outside the tuckshop near the gents toilet.',
     'Woodland Craft':
         'Please meet your instructor in the hut near the fire area.'
@@ -85,7 +88,7 @@ programme = [
     ['Saturday', [
         ['9.00am', 'Flag Break'],
         ['9.30am-4.30pm', 'Activities'],
-        ['5.00pm-6.00pm', 'BBQ and Ice Cream Van'],
+        ['5.00pm-6.30pm', 'BBQ and Ice Cream Van'],
         ['6.00pm-7.00pm', 'Tuck shop and 7th Lichfield hoodies shop open'],
         ['7.15pm', 'Flag down'],
         ['7.30pm', 'Campfire (marquee if wet)']
@@ -118,7 +121,8 @@ KIT = [['Tent', 'Mallet'],
        ['Toiletries', 'First aid kit'],
        ['Towels', 'Sunblock'],
        ['Insect repellent', 'Tissues'],
-       ['Games', 'Kids bikes']]
+       ['Games', 'Kids bikes'],
+       ['Fuel for your fire. (There is no firewood on site)']]
 
 styles = {
     'default': ParagraphStyle(
@@ -335,6 +339,13 @@ def gen_story(doc):
 
     e.append(PageBreak())
 
+    e.append(subtitle('Night Owl Zone'))
+    e.append(para('The area at the top of the field (near to the dining area) '
+                  'tends to attract groups who stay up later into the night. '
+                  'So if you would prefer an earlier night and '
+                  'uninterrupted sleep please avoid this area.'))
+
+
     e.append(subtitle('Quiet Zone'))
     e.append(para('If you are camped in the Quiet Zone (marked on the map) '
                   'please keep noise to a minimum after 10:00pm.'))
@@ -368,10 +379,17 @@ def gen_story(doc):
                   'these are not pre-paid.'))
 
     e.append(subtitle('Camp Fire'))
-    e.append(para('Saturday 7.30pm -9.00pm. If the weather is dry there '
+    e.append(para('Saturday 7.30pm - 8.30pm. If the weather is dry there '
                   'will be a campfire at the campfire circle. Please come '
-                  'along and join in the fun and games. At the end of the campfire '
-                  'we will have marshmallows for all that wish to toast them on the '
+                  'along and join in the fun and games. In previous year\'s we have '
+                  'invited Beavers/Cubs and Scouts to perform at the campfire. '
+                  'Unfortunately, the number of performances has meant that the '
+                  'campfire has run on too late for many of the younger children. '
+                  'This year we will be refocusing on more traditional Scout campfire '
+                  'songs and will endeavour to finish earlier so that everyone can take '
+                  'a full part.'))
+    e.append(para('At the end of the campfire we will have marshmallows for all that '
+                  'wish to toast them on the '
                   'embers. So that this activity can be conducted safely we will '
                   'issue the marshmallows to adults only and you will need to '
                   'supervise your own children while they are close to the fire. '
@@ -379,6 +397,8 @@ def gen_story(doc):
                   'the end of the campfire as it will take a little organising to '
                   'ensure that so many children can toast their marshmallows '
                   'in safety.'))
+
+    e.append(PageBreak())
 
     e.append(subtitle('Flag Break & Flag Down'))
     e.append(para("This is when we all congregate round the flag to receive "
@@ -389,29 +409,20 @@ def gen_story(doc):
                   "Scouts and Leaders might like to wear uniform for the Sunday "
                   "morning Flag Break."))
 
-    e.append(PageBreak())
-
     e.append(subtitle('Tuck Shop & 7th Lichfield Shop'))
     e.append(para('There is a tuck shop on site which will open over the '
                   'weekend to purchase souvenirs. There will '
                   'also be an opportunity to purchase or order 7th Lichfield '
-                  'Hoodies, Family Camp Badges and the all new 7th Lichfield '
-                  'Camp Blanket. Please remember cash or cheques only. '
+                  'Hoodies, Family Camp Badges and 7th Lichfield '
+                  'Camp Blankets. Please remember cash or cheques only. '
                   'Opening hours will be Sat 6.00pm-7:00pm.'))
 
-    e.append(subtitle('Family Camp Bingo'))
-    e.append(para("In your Welcome Pack you will find a Bingo card. At the top right "
-                  "hand corner of your Family Timetable you will find your Bingo Name. "
-                  "You will also find a set of stickers that match your Bingo Name. "
-                  "The idea of the game is to track down other families that have "
-                  "the Bingo Names that are on your card. When you find them they will "
-                  "give you a sticker to complete your card. Hand in your completed card "
-                  "to the Service Team before the final Flag Down on Sunday afternoon. If you complete "
-                  "your card early, the Service Team can give you another one for a second chance to win. "
-                  "A winning card will be pulled from the sack at Sunday afternoon Flag Down. You have "
-                  "to be at the Flag Down to win, we will keep pulling out completed cards "
-                  "until we find a winner that is present. "
-                  "The winning family will receive a 7th Lichfield goody bag."))
+    e.append(subtitle('Astronomy'))
+    e.append(para("We are hoping that the Rosliston Astronomy Group will be joining "
+                  "us on Saturday afternoon. They will arrange safe solar viewing "
+                  "during daylight hours and then give us the opportunity to view "
+                  "the wider universe as darkness descends. This is an excellent "
+                  "opportunity to see the universe through first class equipment."))
 
     e.append(subtitle('Other Activities'))
     e.append(para("Other activities such as pond dipping and "
@@ -420,19 +431,20 @@ def gen_story(doc):
                   "the main office should you require nets or further information."))
 
     e.append(subtitle('General Information'))
-    e.append(para('The campsite does not permit pets but does allow barbeques '
-                  'and fires, providing they are up off the ground. There are '
+    e.append(para('The campsite does not permit pets but does allow BBQs '
+                  'and fires, providing they are up off the ground. You will need to bring '
+                  'your own fuel as there is no firewood in site. There are '
                   'recycling and rubbish bins near the canteen building.'))
 
     e.append(para('If you have any queries, please do not hesitate to come '
                   'and ask. The Family Camp Committee members will be wearing yellow '
                   'arm bands to help you know who they are. They may not have all the answers '
-                  'but they will alway be happy to try to help. The Service Team will be '
-                  'wearing hiviz vests. The Service Team are Explorer Scouts that are on '
+                  'but they will always be happy to try to help. The Service Team will be '
+                  'wearing hiviz neckers. The Service Team are Explorer Scouts that are on '
                   'site for the weekend to help with some of the tasks that need to be '
                   'done. If you need something such as toilet rolls for the loos, the '
                   'Service Team should be able to help. If you need us urgently, '
-                  'please call Carl on 07988685378.'))
+                  'please call Dave on 07708950547.'))
 
     e.append(para('We hope you have a great weekend!'))
 

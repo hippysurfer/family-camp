@@ -22,7 +22,7 @@ CACHE = ".cache.pickle"
 
 # List of activities that everyone must be allocated.
 #COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
-COMPULSARY_ACTIVITIES = ["Saturday BBQ"]
+COMPULSARY_ACTIVITIES = []  # "Saturday BBQ"]
 
 
 # def memoize(obj):
@@ -39,14 +39,15 @@ COMPULSARY_ACTIVITIES = ["Saturday BBQ"]
 
 class Activity:
 
-    def __init__(self, name, duration, limit):
+    def __init__(self, name, duration, limit, min_):
         self.name = name
         self.duration = duration
         self.limit = int(limit)
+        self.min = int(min_)
 
     def __str__(self):
         return "Activity: {} {} {}".format(
-            self.name, self.duration, self.limit)
+            self.name, self.duration, self.limit, self.min)
 
     __repr__ = __str__
 
@@ -307,7 +308,6 @@ class Individual:
                         "{} Found in other session: {}\n".format(
                             str(g), str(s)))
 
-
             # How badly have we exceeded session limits?
             if len(s.campers) - s.session.activity.limit > 0:
                 if debug:
@@ -317,6 +317,16 @@ class Individual:
                     self.summary_file.write("{} Exceeded limit: {} > {}\n".format(
                         str(s), len(s.campers), s.session.activity.limit))
                 count += len(s.campers) - s.session.activity.limit
+
+            # How badly are we below the minimum session size?
+            if len(s.campers) < s.session.activity.min:
+                if debug:
+                    self.summary_file.write(
+                        "\n\n== Sessions under session min. ==\n")
+
+                    self.summary_file.write("{} Below min: {} > {}\n".format(
+                        str(s), len(s.campers), s.session.activity.min))
+                count += s.session.activity.min - len(s.campers)
 
         # How many campers are missing their priorities?
         for c in self.campers:
@@ -619,7 +629,7 @@ def get_source_data(use_cache=True):
             break
         raw_acts.append(row)
 
-    acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2])
+    acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2], _[3])
             for _ in raw_acts if _[0] != ''}
 
     # Deal with the problem of non-empty rows in the worksheet after the

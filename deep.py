@@ -39,11 +39,11 @@ COMPULSARY_ACTIVITIES = []  # "Saturday BBQ"]
 
 class Activity:
 
-    def __init__(self, name, duration, limit, min_):
+    def __init__(self, name, duration, min_, limit):
         self.name = name
         self.duration = duration
-        self.limit = int(limit)
         self.min = int(min_)
+        self.limit = int(limit)
 
     def __str__(self):
         return "Activity: {} {} {}".format(

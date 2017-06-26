@@ -106,11 +106,11 @@ def gen_story(doc, family, sat_data, sun_data):
         #     "for lunch. You are, of course, free to take your "
         #     "meals whenever you choose."),
         #Spacer(0*cm, 0.4*cm),
-        gen_info_pack.para_small(
-            "Please try to arrive at the Saturday BBQ close "
-            "to your allotted time. By staggering the arrival "
-            "times, we are trying hard to limit the length of "
-            "time that you need to queue."),
+        # gen_info_pack.para_small(
+        #     "Please try to arrive at the Saturday BBQ close "
+        #     "to your allotted time. By staggering the arrival "
+        #     "times, we are trying hard to limit the length of "
+        #     "time that you need to queue."),
         Spacer(0*cm, 0.4*cm),
         gen_info_pack.para_small(
             "There are a very few occasions where we have "
@@ -146,12 +146,14 @@ def get_schedule(sessions):
         key=lambda x: x[0].session.start)
 
     sat_table = [[session.session.start.strftime("%H:%M"),
-                  session.session.label,
+                  (session.session.label if not session.session.label.endswith((' A', ' B', ' C', ' D'))
+                   else session.session.label[:-2]),
                   "\n".join([c.name for c in campers])]
                  for session, campers in sat_sessions]
 
     sun_table = [[session.session.start.strftime("%H:%M"),
-                  session.session.label,
+                  (session.session.label if not session.session.label.endswith((' A', ' B', ' C', ' D'))
+                   else session.session.label[:-2]),
                   "\n".join([c.name for c in campers])]
                  for session, campers in sun_sessions]
 
@@ -208,11 +210,11 @@ if __name__ == '__main__':
     # if len(name_list) < num_fams:
     #     name_list.extend(random.sample(BINGO_NAMES,num_fams-len(name_list)))
 
-    total = 0
-    for name in set(name_list):
-        print("{} = {}".format(name, name_list.count(name)))
-        total += name_list.count(name)
-    print("total = {}".format(total))
+    # total = 0
+    # for name in set(name_list):
+    #     print("{} = {}".format(name, name_list.count(name)))
+    #     total += name_list.count(name)
+    # print("total = {}".format(total))
 
     for name, (f, s) in zip(name_list, individual.export_by_family().items()):
 

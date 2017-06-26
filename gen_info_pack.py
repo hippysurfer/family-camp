@@ -354,18 +354,16 @@ def gen_story(doc):
     e.append(para('At approximately 8.30pm on Friday evening we will have a '
                   'social gathering for everyone, but most especially for '
                   'first timers. If you are new to Family Camp please come '
-                  'along to the Marquee to meet others who are in the same '
+                  'along to meet others who are in the same '
                   'position. Everyone else is also welcome and we will have '
-                  'the Bowling Alley setup for those that wish to have a go. '
+                  'some activities for those that wish to join in. '
                   'This will be a great way to meet others at the start of '
                   'the camp.'))
 
     e.append(subtitle("BBQ"))
 
     e.append(para('The BBQ will be on Saturday evening '
-                  '(see your timetable for your family\'s allocated time). '
-                  'Please adhere to your allotted time slot to reduce queuing '
-                  'times. Campers that have requested a vegetarian meal will '
+                  'Campers that have requested a vegetarian meal will '
                   'have a raffle ticket in their Welcome Pack. Please take this '
                   'ticket along with you so that the Catering Team know that '
                   'yours is one of the vegetarian meals. If you have other special '
@@ -413,16 +411,16 @@ def gen_story(doc):
     e.append(para('There is a tuck shop on site which will open over the '
                   'weekend to purchase souvenirs. There will '
                   'also be an opportunity to purchase or order 7th Lichfield '
-                  'Hoodies, Family Camp Badges and 7th Lichfield '
+                  'T-Shirts, Hoodies, Family Camp Badges and 7th Lichfield '
                   'Camp Blankets. Please remember cash or cheques only. '
                   'Opening hours will be Sat 6.00pm-7:00pm.'))
 
     e.append(subtitle('Astronomy'))
-    e.append(para("We are hoping that the Rosliston Astronomy Group will be joining "
+    e.append(para("We are delighted that the Rosliston Astronomy Group will be joining "
                   "us on Saturday afternoon. They will arrange safe solar viewing "
-                  "during daylight hours and then give us the opportunity to view "
-                  "the wider universe as darkness descends. This is an excellent "
-                  "opportunity to see the universe through first class equipment."))
+                  "during daylight and then give us the opportunity to view "
+                  "the wider universe as darkness descends. Come along and "
+                  "see the universe through first class equipment."))
 
     e.append(subtitle('Other Activities'))
     e.append(para("Other activities such as pond dipping and "
@@ -430,10 +428,22 @@ def gen_story(doc):
                   "be sourced from the site managers, so please see them in "
                   "the main office should you require nets or further information."))
 
+    e.append(subtitle('Recycling'))
+    e.append(para('Entrust operates a recycling policy at Shugborough, there are '
+                  'separate bins for recyclable and non recyclable waste. Please '
+                  'ensure that you separate your waste and dispose of it in the correct bins. '))
+
+    e.append(para('Recyclable materials are: all glass, all plastic bottles, '
+                  'all cans, all tetrapacks, all foil and all plastic tubs and trays. '
+                  'All other waste, including any cardboard waste must be place in the general waste bins. '
+                  'For the avoidance of doubt polystyrene food containers and cups must go in general waste. '
+                  'Sorting our waste was a major problem for the site last year, lets do the right thing '
+                  'this year and recycle our waste responsibly. Thank you for your cooperation.'))
+
     e.append(subtitle('General Information'))
     e.append(para('The campsite does not permit pets but does allow BBQs '
                   'and fires, providing they are up off the ground. You will need to bring '
-                  'your own fuel as there is no firewood in site. There are '
+                  'your own fuel as there is no firewood on site. There are '
                   'recycling and rubbish bins near the canteen building.'))
 
     e.append(para('If you have any queries, please do not hesitate to come '

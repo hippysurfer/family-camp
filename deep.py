@@ -9,19 +9,22 @@ from datetime import timedelta
 from datetime import datetime
 import logging
 import pickle
-import google
+try:
+    import google
+except FileNotFoundError:
+    print("Failed to load google module.")
+
 from statistics import pvariance
 
 from deap.tools import HallOfFame
 
 log = logging.getLogger(__name__)
 
-
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
 # List of activities that everyone must be allocated.
-#COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
+# COMPULSARY_ACTIVITIES = ["Saturday Lunch", "Sunday Lunch", "Saturday BBQ"]
 COMPULSARY_ACTIVITIES = []  # "Saturday BBQ"]
 
 
@@ -120,7 +123,7 @@ class SessionInst:
     __repr__ = __str__
 
 
-#def overlapping_sessions(session_inst, session_insts):
+# def overlapping_sessions(session_inst, session_insts):
 #    """Return a list of sessions from sessions that overlap
 #    with session."""
 #    return [_ for _ in session_insts
@@ -137,7 +140,6 @@ def overlapping_sessions(session, sessions):
 
 
 class Individual:
-
     # There is a basic assumption that the sessions and campers lists never change.
     # So we can cache the results of some operations for performance.
 
@@ -172,16 +174,15 @@ class Individual:
         #         {session: overlapping_sessions(session,
         #                                        self.sessions)
         #          for session in self.sessions}
-            
+
         self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__ = \
-                {session: overlapping_sessions(session,
-                                               self.sessions)
-                 for session in self.sessions}
+            {session: overlapping_sessions(session,
+                                           self.sessions)
+             for session in self.sessions}
 
         # Create a lookup map from session to its matching instance.
         self.session_inst_map = \
             {inst.session: inst for inst in self.session_inst}
-
 
     def export_map(self):
         """Returns a row for each interval. A column for each activity.
@@ -244,7 +245,7 @@ class Individual:
         for f in set(c.group for c in self.campers):
             ret[f] = {}
             for s in sorted([s for s in self.session_inst if f in
-                             [camper.group for camper in s.campers]],
+                                                             [camper.group for camper in s.campers]],
                             key=lambda s: s.session.start):
                 ret[f][s] = [c for c in s.campers if c.group == f]
 
@@ -278,7 +279,8 @@ class Individual:
 
         return "\n".join(out)
 
-        #@profile
+        # @profile
+
     def fitness(self, debug=False):
         """Measure the number of violations of the validity criteria.
         The higher the number the worse it is.
@@ -289,8 +291,8 @@ class Individual:
         for s in self.session_inst:
             # Count the number of times we have the same camper in two sessions
             # that overlap.
-            count += len([other_s for c in s.campers 
-                          for other_s in self.overlapping_sessions_map[s.session] 
+            count += len([other_s for c in s.campers
+                          for other_s in self.overlapping_sessions_map[s.session]
                           if c in self.session_inst_map[other_s].campers])
 
             # Count the number of times we have a family split accross two
@@ -301,8 +303,9 @@ class Individual:
             count += len(split_families)
 
             if debug:
-                self.summary_file.write(
-                    "\n\n== Families split accross two sessions ==\n")
+                if len(split_families):
+                    self.summary_file.write(
+                        "\n\n== Families split accross two sessions ==\n")
                 for g in split_families:
                     self.summary_file.write(
                         "{} Found in other session: {}\n".format(
@@ -410,7 +413,7 @@ class Individual:
         The smaller the value the better it is."""
 
         count = 0
-        
+
         # Start by using a simple variance to favour a timetable
         # where the sessions have an even spread of campers.
         count += pvariance([len(inst.campers) for inst in self.session_inst])
@@ -433,7 +436,7 @@ def timetable_from_list(schedule, campers, activities, sessions):
                      for s in sessions}
 
     for (group, camper, activity, start_datetime) in schedule:
-        c = [_ for _ in campers if _.group.strip() == group.strip() and 
+        c = [_ for _ in campers if _.group.strip() == group.strip() and
              _.name.strip() == camper.strip()][0]
 
         try:
@@ -460,13 +463,13 @@ def individual_from_list(schedule, campers, activities, sessions):
     """
 
     # create an empty individual
-    ind = [False,] * len(sessions) * len(campers)
+    ind = [False, ] * len(sessions) * len(campers)
 
     for (group, camper, activity, start_datetime) in schedule:
         c = [_ for _ in campers if _.group.strip() == group.strip() and _.name.strip() == camper.strip()]
         if not c:
             log.error("Unknown camper: '{}/{}'".format(group, camper))
-            log.error("All campers {}".format("\n".join(["'{}/{}'".format(_.group,_.name) for _ in campers
+            log.error("All campers {}".format("\n".join(["'{}/{}'".format(_.group, _.name) for _ in campers
                                                          if _.group == group])))
 
         c = c[0]
@@ -502,8 +505,7 @@ def individual_from_list(schedule, campers, activities, sessions):
                                       "%d/%m/%Y %H:%M:%S")))
                 log.error("All sessions: {}".format(
                     "\n".join(["'{}' - '{}'".format(_.label, _.start) for _ in sessions])))
-                
-                
+
         s = s[0]
 
         ind[(sessions.index(s) * len(campers)) + campers.index(c)] = True
@@ -511,6 +513,7 @@ def individual_from_list(schedule, campers, activities, sessions):
     return ind
 
 
+# @functools.lru_cache(maxsize=None)
 def sessions_overlap(first, second):
     "If the start of the first sesssion is between the start "
     "and end of the second or the end of the first session is "
@@ -563,15 +566,16 @@ class MyHallOfFame(HallOfFame):
         for i in range(0, min(num_timetables, len(self))):
             filename = "{} - {}".format(dt, i)
 
-            with open(os.path.join(self.dest, filename+"_summary.txt"), "w") as summary:
+            with open(os.path.join(self.dest, filename + "_summary.txt"), "w") as summary:
                 timetable = Individual(self[i], self.campers, self.sessions,
                                        summary_file=summary)
 
-                with open(os.path.join(self.dest, filename+"_timetable.txt"), 'w') as f:
+                with open(os.path.join(self.dest, filename + "_timetable.txt"), 'w') as f:
                     f.write(print_individual(timetable, self.campers))
 
-                with open(os.path.join(self.dest, filename+".csv"), 'w') as f:
+                with open(os.path.join(self.dest, filename + ".csv"), 'w') as f:
                     f.write(timetable.export_cvs())
+
 
 # import random
 # from datetime import timedelta
@@ -604,15 +608,15 @@ class MyHallOfFame(HallOfFame):
 
 def get_source_data(use_cache=True):
     """Return the activities, sessions and campers."""
-    if use_cache and os.path.exists(CACHE):
+    if use_cache:  # and os.path.exists(CACHE):
         (acts_wks, session_wks, campers_wks) = pickle.load(
             open(CACHE, 'rb'))
     else:
         gc = google.conn()
-        spread = gc.open("Timetable2017")
+        spread = gc.open("Timetable2018")
         acts_wks = spread.worksheet("Activities").get_all_values()
         session_wks = spread.worksheet("Sessions").get_all_values()
-        campers_wks = gc.open("Family Camp Bookings 2017").worksheet(
+        campers_wks = gc.open("Family Camp Bookings 2018").worksheet(
             "Activities").get_all_values()
 
         pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
@@ -621,13 +625,24 @@ def get_source_data(use_cache=True):
         hr, min, sec = map(float, s.split(':'))
         return timedelta(hours=hr, minutes=min, seconds=sec)
 
-    # Deal with the problem of non-empty rows in the worksheet after the
+    # Deal with the problem of non-empty rows in the worksheet before and after the
     # end of the table that we are interested in.
     raw_acts = []
-    for row in acts_wks[1:]:
-        if row[0] == '':
-            break
-        raw_acts.append(row)
+    start = False
+    for act in acts_wks:
+        if not start:
+            if act[0] == '':
+                continue
+            else:
+                start = True
+                raw_acts.append(act)
+        else:
+            if act[0] == '':
+                break
+            else:
+                raw_acts.append(act)
+
+    raw_acts = raw_acts[1:]  # Discard the header row
 
     acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2], _[3])
             for _ in raw_acts if _[0] != ''}
@@ -650,7 +665,46 @@ def get_source_data(use_cache=True):
                       [acts[b.strip()] for b in _[9].split(',')
                        if b.strip() != '']) for _ in campers_wks[1:]]
 
-    return (acts, sessions, campers)
+    class Cache:
+        pass
+    data_cache = Cache()
+    data_cache.activities = set([s.activity for s in sessions])
+    data_cache.campers_per_activity = {}
+
+    # Build a map of the list of campers that wish to do
+    # each activity.
+    data_cache.priority_campers_per_activity = {a: [] for a in data_cache.activities}
+    data_cache.other_campers_per_activity = {a: [] for a in data_cache.activities}
+
+    for c in campers:
+        for activity in data_cache.activities:
+            if activity in c.priorities:
+                data_cache.priority_campers_per_activity[activity].append(c)
+
+    for c in campers:
+        for activity in data_cache.activities:
+            if activity in c.others:
+                data_cache.other_campers_per_activity[activity].append(c)
+
+    data_cache.campers_per_activity = {
+        act: data_cache.priority_campers_per_activity[act]+data_cache.other_campers_per_activity[act]
+        for act in data_cache.activities
+    }
+
+    data_cache.sessions_per_activity = {
+        act: [_ for _ in sessions if _.activity == act] for act in data_cache.activities}
+
+    all_groups = set([_.group for _ in campers])
+    data_cache.campers_per_group = {
+        group: [_ for _ in campers if _.group == group] for group in all_groups}
+
+    data_cache.campers_per_activity_per_group = {
+        act: {
+            group: [_ for _ in data_cache.campers_per_activity[act] if _.group == group]
+            for group in all_groups
+        } for act in data_cache.activities}
+
+    return acts, sessions, campers, data_cache
 
 
 def evaluate(individual, campers, sessions, debug=False):
@@ -662,8 +716,15 @@ def evaluate(individual, campers, sessions, debug=False):
     # print("fitness = {}, goodness = {}".format(fitness, goodness))
     return fitness, goodness, bestness
 
+
 # @profile
-def mutate(ind1, sessions, campers, toolbox):
+def mutate(ind1, sessions, campers, data_cache, toolbox):
+    campers_per_activity = data_cache.campers_per_activity
+    priority_campers_per_activity = data_cache.priority_campers_per_activity
+    other_campers_per_activity = data_cache.other_campers_per_activity
+    sessions_per_activity = data_cache.sessions_per_activity
+    campers_per_group = data_cache.campers_per_group
+
     mutant = toolbox.clone(ind1)
     # Remove fitness values
     del mutant.fitness.values
@@ -682,26 +743,25 @@ def mutate(ind1, sessions, campers, toolbox):
         act = sessions[session_idx].activity
         log.debug("Act: {}".format(str(act)))
 
-        c = random.choice(
-            [_ for _ in campers if (act in _.priorities or act in _.others)])
+        c = random.choice(campers_per_activity[act])
         log.debug("Camper: {}".format((str(c))))
 
         # get all family members that have selected the activity.
-        matching_campers = [_ for _ in campers if (
-            (_.group == c.group) and (act in _.priorities or act in _.others))]
+        matching_campers = data_cache.campers_per_activity_per_group[act][c.group]
         log.debug("Matching campers: {}".format(" ".join(str(_) for _ in
                                                          matching_campers)))
 
+        matching_camper_indexes = [campers.index(_) for _ in matching_campers]
         # If they are already allocated to another session, remove them
-        for s in [_ for _ in sessions if _.activity == act]:
-            for indx in [campers.index(_) for _ in matching_campers]:
+        for s in sessions_per_activity[act]:
+            for indx in matching_camper_indexes:
                 # log.debug("Removing {} from {}.".format(
                 #     campers[indx], s))
                 old_session_idx = sessions.index(s) * len(campers)
                 mutant[old_session_idx + indx] = False
 
         # Add them to the randomaly allocated session
-        for indx in [campers.index(_) for _ in matching_campers]:
+        for indx in matching_camper_indexes:
             # log.debug("Adding {} to {}.".format(str(campers[indx]),
             #                                     str(sessions[session_idx])))
             mutant[session_idx * len(campers) + indx] = True
@@ -709,7 +769,7 @@ def mutate(ind1, sessions, campers, toolbox):
         # Remove the group from any other sessions that overlap
         # with the session we have just added them to.
         # And reallocate them to another session at random.
-        group_campers = [_ for _ in campers if _.group == c.group]
+        group_campers = campers_per_group[c.group]
         camper_idxes = [campers.index(_) for _ in group_campers]
         for overlapping_session in overlapping_sessions(
                 sessions[session_idx],
@@ -738,12 +798,10 @@ def mutate(ind1, sessions, campers, toolbox):
             # session.
             if group_in_session:
                 matching_campers = [_ for _ in group_campers if (
-                    overlapping_session.activity in _.priorities or
-                    overlapping_session.activity in _.others)]
+                        overlapping_session.activity in _.priorities or
+                        overlapping_session.activity in _.others)]
 
-                target_sessions = [
-                    _ for _ in sessions
-                    if _.activity == overlapping_session.activity]
+                target_sessions = sessions_per_activity[overlapping_session.activity]
 
                 # Select a starting point at random
                 start = random.choice(range(0, len(target_sessions)))
@@ -754,15 +812,14 @@ def mutate(ind1, sessions, campers, toolbox):
 
                     # TBD: check that target session != session we just took them out of.
 
-
                     # Is there room in the session for the family?
                     session_offset = sessions.index(target_session) * len(campers)
                     num_in_session = mutant[session_offset:(
-                        session_offset +
-                        len(campers))].count(True)
+                            session_offset +
+                            len(campers))].count(True)
 
                     if (num_in_session + len(matching_campers)
-                        > target_session.activity.limit):
+                            > target_session.activity.limit):
                         # log.debug("tried to put {} into {} but it is "
                         #           "full.".format(matching_campers[0].group,
                         #                          target_session))
@@ -787,9 +844,9 @@ def mutate(ind1, sessions, campers, toolbox):
                     if found:
                         log.debug("tried to put {} into {} but it clashes "
                                   "with {}".format(
-                                      matching_campers[0].group,
-                                      target_session,
-                                      ",".join([str(_) for _ in overlaps])))
+                            matching_campers[0].group,
+                            target_session,
+                            ",".join([str(_) for _ in overlaps])))
                         continue
 
                     # Put all of the group members that want the activity in
@@ -803,27 +860,10 @@ def mutate(ind1, sessions, campers, toolbox):
     return mutant,
 
 
-def gen_seed_individual(campers, sessions, creator):
-    activities = set([s.activity for s in sessions])
-    campers_per_activity = {}
-
-    # Build a map of the list of campers that wish to do
-    # each activity.
-    priority_campers_per_activity = {a: [] for a in activities}
-    other_campers_per_activity = {a: [] for a in activities}
-
-    for c in campers:
-        for activity in activities:
-            if activity in c.priorities:
-                priority_campers_per_activity[activity].append(c)
-
-    for c in campers:
-        for activity in activities:
-            if activity in c.others:
-                other_campers_per_activity[activity].append(c)
-
-    campers_per_activity = dict(list(priority_campers_per_activity.items()) +
-                                list(other_campers_per_activity.items()))
+def gen_seed_individual(campers, sessions, data_cache, creator):
+    campers_per_activity = deepcopy(data_cache.campers_per_activity)
+    priority_campers_per_activity = deepcopy(data_cache.priority_campers_per_activity)
+    other_campers_per_activity = deepcopy(data_cache.other_campers_per_activity)
 
     # Place holder for final timetable. The timetable is represented as
     # a list of True/False values. Each session has a list element for
@@ -840,8 +880,8 @@ def gen_seed_individual(campers, sessions, creator):
         session_timetable = [False] * len(campers)
 
         # Make a random order of the campers.
-        #shuffled_campers = deepcopy(campers)
-        #random.shuffle(shuffled_campers)
+        # shuffled_campers = deepcopy(campers)
+        # random.shuffle(shuffled_campers)
 
         for c in campers:
             # short cut to stop once the session is full.
@@ -856,9 +896,9 @@ def gen_seed_individual(campers, sessions, creator):
             # If the camper has selected the activity, flip the weighted
             # coin to see if they will be allocated.
             if (((c in priority_campers_per_activity[s.activity])
-                and random.choice([True, True, True, False]))
-                or ((c in other_campers_per_activity[s.activity])
-                    and random.choice([True, False, False, False]))):
+                 and random.choice([True, True, True, False]))
+                    or ((c in data_cache.other_campers_per_activity[s.activity])
+                        and random.choice([True, False, False, False]))):
 
                 # Find all members of the family that have selected
                 # the activity
@@ -983,7 +1023,7 @@ def print_individual(individual, campers):
                 previous_i = i
                 previous_c = c
 
-            out.append("{:<20} {}: {}\n".format("","Total in session",len(i.campers)))
+            out.append("{:<20} {}: {}\n".format("", "Total in session", len(i.campers)))
             activity_total += len(i.campers)
 
         out.append("Total in activity:{}".format(activity_total))
@@ -994,13 +1034,11 @@ def print_individual(individual, campers):
 
     previous_a = None
     for a, s in sorted(individual.export_by_activity().items(), key=lambda _: _[0]):
-        out.append("\n{}: Session Limit: {}".format(a,s[0].session.activity.limit ))
+        out.append("\n{}: Session Limit: {}".format(a, s[0].session.activity.limit))
         for i in s:
             out.append("{:>20}, {}".format(
                 i.session.start.strftime(DATEFORMAT), len(i.campers)
             ))
-        #out.append('\n')
+        # out.append('\n')
 
     return "\n".join(out)
-
-

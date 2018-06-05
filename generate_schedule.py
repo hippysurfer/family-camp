@@ -51,23 +51,31 @@ CACHE = ".cache.pickle"
 from scoop import futures
 from copy import copy
 
-(acts, sessions, campers) = get_source_data(use_cache=True)
+(acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
 
 toolbox = base.Toolbox()
 
 creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 
-# toolbox.register("clone", copy)
+
+def mycopy(old):
+    new = old.__class__(old[:])
+    new.fitness = deepcopy(old.fitness)
+    return new
+
+
+toolbox.register("clone", mycopy)
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
-                 gen_seed_individual(campers, sessions,
+                 gen_seed_individual(campers, sessions, data_cache,
                                      creator=creator.Individual))
 toolbox.register(
     "population", tools.initRepeat, list, toolbox.individual, n=2000)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
-                                   sessions=sessions, toolbox=toolbox))
+                                   sessions=sessions,
+                                   data_cache=data_cache, toolbox=toolbox))
 toolbox.register("select", tools.selTournament, tournsize=20)
 toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))

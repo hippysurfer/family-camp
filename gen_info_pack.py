@@ -32,6 +32,7 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from docopt import docopt
 import csv
 import logging
+
 log = logging.getLogger(__name__)
 
 from deep import get_source_data, timetable_from_list
@@ -43,12 +44,14 @@ TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Family Camp"
-SUBTITLE = "2017 Family Camp"
+SUBTITLE = "2018 Family Camp"
 
 ACTS = {
     'Archery (Outdoor and Indoor)':
         'Please meet your instructor by the archery range. (Please wear a top '
-        'with long sleeves to protect your arms).',
+        'with long sleeves to protect your arms and tie back long hair). Take a '
+        'moment to check your timetable to see if you are meant to be indoor or '
+        'outdoor and ensure you join the correct session.',
     'Blindfold Trail':
         'Please meet your instructor at the Blindfold Trail. (You are advised to wear '
         'long trousers, long sleeves and sturdy shoes).',
@@ -74,8 +77,9 @@ ACTS = {
         'Please meet your instructor at the Crystal Maze.',
     'Fire Lighting':
         'Please meet at the entrance to the fire area.',
-    'Geocaching':
-        'Please meet your instructor outside the tuckshop near the gents toilet.',
+    'Pond Dipping':
+        'Please meet your instructor at the pond, which is behind the gents toilet, '
+        'near the Crystal Maze.',
     'Woodland Craft':
         'Please meet your instructor in the hut near the fire area.'
 }
@@ -88,8 +92,10 @@ programme = [
     ['Saturday', [
         ['9.00am', 'Flag Break'],
         ['9.30am-4.30pm', 'Activities'],
+        ['4.00pm-7.00pm', 'Circus skills workshop'],
+        ['2.00pm-11.00pm', 'Astronomy group'],
         ['5.00pm-6.30pm', 'BBQ and Ice Cream Van'],
-        ['6.00pm-7.00pm', 'Tuck shop and 7th Lichfield hoodies shop open'],
+        ['6.00pm-7.00pm', 'Tuck shop open'],
         ['7.15pm', 'Flag down'],
         ['7.30pm', 'Campfire (marquee if wet)']
     ]],
@@ -115,7 +121,7 @@ KIT = [['Tent', 'Mallet'],
        ['Plates/cups/bowls/tumblers', 'Cutlery'],
        ['J-Cloths', 'Tea towels'],
        ['Bin liners', 'Food (Breakfast x2, Lunch x2, accompaniments '
-        'for bbq on Sat eve, snacks, drinks)'],
+                      'for bbq on Sat eve, snacks, drinks)'],
        ['Clothes', 'Beaver/cub/scout uniform'],
        ['Wellies (hopefully not!)', 'Kagools (likewise)'],
        ['Toiletries', 'First aid kit'],
@@ -139,20 +145,20 @@ styles = {
         bulletFontName='Times-Roman',
         bulletFontSize=10,
         bulletIndent=0,
-        textColor= colors.black,
+        textColor=colors.black,
         backColor=None,
         wordWrap=None,
-        borderWidth= 0,
-        borderPadding= 0,
-        borderColor= None,
-        borderRadius= None,
-        allowWidows= 1,
-        allowOrphans= 0,
+        borderWidth=0,
+        borderPadding=0,
+        borderColor=None,
+        borderRadius=None,
+        allowWidows=1,
+        allowOrphans=0,
         textTransform=None,  # 'uppercase' | 'lowercase' | None
-        endDots=None,         
+        endDots=None,
         splitLongWords=1,
     )}
-    
+
 styles['Title'] = ParagraphStyle(
     'Title',
     parent=styles['default'],
@@ -218,7 +224,7 @@ styles['Body'] = ParagraphStyle(
     fontSize=11,
     spaceBefore=2,
     spaceAfter=2,
-    leftIndent= 0.75 * cm,
+    leftIndent=0.75 * cm,
     leading=14,
     alignment=TA_JUSTIFY,
     textColor=colors.black,
@@ -231,7 +237,7 @@ styles['BodySmall'] = ParagraphStyle(
     fontSize=9,
     spaceBefore=2,
     spaceAfter=2,
-    leftIndent= 0.75 * cm,
+    leftIndent=0.75 * cm,
     leading=14,
     alignment=TA_JUSTIFY,
     textColor=colors.black,
@@ -290,6 +296,7 @@ def activity_desc(text):
 def para(text):
     return Paragraph(text, styles['Body'])
 
+
 def para_small(text):
     return Paragraph(text, styles['BodySmall'])
 
@@ -300,7 +307,7 @@ def tbody(text):
 
 def gen_story(doc):
     e = []
-    e.append(Spacer(0*cm, 1*cm))
+    e.append(Spacer(0 * cm, 1 * cm))
     e.append(title2("Welcome to Family Camp."))
     e.append(title2("Let the action begin!!"))
 
@@ -313,8 +320,8 @@ def gen_story(doc):
         table.setStyle(TableStyle([
             ('BOTTOMPADDING', (0, -1), (-1, -1), 1 * cm),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            #('LINEABOVE', (0, 1), (-1, -1), 1, colors.purple),
-            ]))
+            # ('LINEABOVE', (0, 1), (-1, -1), 1, colors.purple),
+        ]))
         e.append(table)
 
     e.append(PageBreak())
@@ -339,16 +346,27 @@ def gen_story(doc):
 
     e.append(PageBreak())
 
+    e.append(subtitle('Camping Arrangements'))
+    e.append(para(
+        'Please note that the camping arrangements have changed from '
+        'previous years due to reorganization of the Shugborough '
+        'site. Please see below:-'))
+
     e.append(subtitle('Night Owl Zone'))
-    e.append(para('The area at the top of the field (near to the dining area) '
-                  'tends to attract groups who stay up later into the night. '
-                  'So if you would prefer an earlier night and '
-                  'uninterrupted sleep please avoid this area.'))
+    e.append(para('The area at the bottom of the field to the left of the main entrance is intended '
+                  'for groups who stay up later into the night. Please camp as far away as '
+                  'possible from the main buildings and the quieter zone if you intend to stay up late.'))
 
+    e.append(para('Please be aware that noise travels a long way on a quiet campsite at night and tent '
+                  'walls provide no sound proofing. We want everyone to enjoy their evening and sitting '
+                  'around the campfire is a big part of family camp for many of us. But please have '
+                  'a thought for those that have gone to bed and for the children that will be listening '
+                  'to your late night chat in their sleeping bags.'))
 
-    e.append(subtitle('Quiet Zone'))
-    e.append(para('If you are camped in the Quiet Zone (marked on the map) '
-                  'please keep noise to a minimum after 10:00pm.'))
+    e.append(subtitle('Quieter Zone'))
+    e.append(para('If you are camped in the Quieter Zone (marked on the map) please keep noise to a '
+                  'minimum after 10:00pm. Please note that the Family Camp team is not responsible '
+                  'or empowered to enforce the quiet policy.'))
 
     e.append(subtitle('Friday Evening Activities'))
     e.append(para('At approximately 8.30pm on Friday evening we will have a '
@@ -377,24 +395,19 @@ def gen_story(doc):
                   'these are not pre-paid.'))
 
     e.append(subtitle('Camp Fire'))
-    e.append(para('Saturday 7.30pm - 8.30pm. If the weather is dry there '
-                  'will be a campfire at the campfire circle. Please come '
-                  'along and join in the fun and games. In previous year\'s we have '
-                  'invited Beavers/Cubs and Scouts to perform at the campfire. '
-                  'Unfortunately, the number of performances has meant that the '
-                  'campfire has run on too late for many of the younger children. '
-                  'This year we will be refocusing on more traditional Scout campfire '
-                  'songs and will endeavour to finish earlier so that everyone can take '
-                  'a full part.'))
-    e.append(para('At the end of the campfire we will have marshmallows for all that '
-                  'wish to toast them on the '
-                  'embers. So that this activity can be conducted safely we will '
-                  'issue the marshmallows to adults only and you will need to '
-                  'supervise your own children while they are close to the fire. '
-                  'Please listen carefully to the instructions that will be given at '
-                  'the end of the campfire as it will take a little organising to '
-                  'ensure that so many children can toast their marshmallows '
-                  'in safety.'))
+    e.append(para(
+        'Saturday 7.30pm - 8.30pm. If the weather is dry there '
+        'will be a campfire at the campfire circle. Please come '
+        'along and join in the fun and games.'))
+
+    e.append(para(
+        'At the end of the campfire we will have marshmallows for all that '
+        'wish to toast them on the embers. So that this activity can be conducted '
+        'safely we will issue the marshmallows to adults only and you will need to '
+        'supervise your own children while they are close to the fire. Please listen '
+        'carefully to the instructions that will be given at the end of the campfire '
+        'as it will take a little organising to ensure that so many children can toast '
+        'their marshmallows in safety.'))
 
     e.append(PageBreak())
 
@@ -407,26 +420,24 @@ def gen_story(doc):
                   "Scouts and Leaders might like to wear uniform for the Sunday "
                   "morning Flag Break."))
 
-    e.append(subtitle('Tuck Shop & 7th Lichfield Shop'))
+    e.append(subtitle('Tuck Shop'))
     e.append(para('There is a tuck shop on site which will open over the '
-                  'weekend to purchase souvenirs. There will '
-                  'also be an opportunity to purchase or order 7th Lichfield '
-                  'T-Shirts, Hoodies, Family Camp Badges and 7th Lichfield '
-                  'Camp Blankets. Please remember cash or cheques only. '
-                  'Opening hours will be Sat 6.00pm-7:00pm.'))
+                  'weekend to purchase souvenirs.'))
 
     e.append(subtitle('Astronomy'))
-    e.append(para("We are delighted that the Rosliston Astronomy Group will be joining "
+    e.append(para("The Rosliston Astronomy Group will be joining "
                   "us on Saturday afternoon. They will arrange safe solar viewing "
                   "during daylight and then give us the opportunity to view "
                   "the wider universe as darkness descends. Come along and "
                   "see the universe through first class equipment."))
 
-    e.append(subtitle('Other Activities'))
-    e.append(para("Other activities such as pond dipping and "
-                  "local walks are available. Information and equipment can "
-                  "be sourced from the site managers, so please see them in "
-                  "the main office should you require nets or further information."))
+    e.append(subtitle('Circus Skills Workshop'))
+    e.append(para(
+        'This year we have teamed up with some professional entertainers so you can try '
+        'your hand at various circus skills, juggling, wire walking, stilts etc. they will '
+        'be onsite for three hours on Saturday afternoon so go along and discover your hidden '
+        'talents. Parents please ensure that your children are supervised and do not remove any '
+        'of the circus equipment from the activity area.'))
 
     e.append(subtitle('Recycling'))
     e.append(para('Entrust operates a recycling policy at Shugborough, there are '
@@ -435,16 +446,15 @@ def gen_story(doc):
 
     e.append(para('Recyclable materials are: all glass, all plastic bottles, '
                   'all cans, all tetrapacks, all foil and all plastic tubs and trays. '
-                  'All other waste, including any cardboard waste must be place in the general waste bins. '
-                  'For the avoidance of doubt polystyrene food containers and cups must go in general waste. '
-                  'Sorting our waste was a major problem for the site last year, lets do the right thing '
-                  'this year and recycle our waste responsibly. Thank you for your cooperation.'))
+                  'All other waste, including any cardboard waste must be placed in the general waste bins. '
+                  'For the avoidance of doubt polystyrene food containers and cups must go in general waste bins.'))
+
+    e.append(para('There are recycling and rubbish bins near the canteen building.'))
 
     e.append(subtitle('General Information'))
     e.append(para('The campsite does not permit pets but does allow BBQs '
                   'and fires, providing they are up off the ground. You will need to bring '
-                  'your own fuel as there is no firewood on site. There are '
-                  'recycling and rubbish bins near the canteen building.'))
+                  'your own fuel as there is no firewood on site.'))
 
     e.append(para('If you have any queries, please do not hesitate to come '
                   'and ask. The Family Camp Committee members will be wearing yellow '
@@ -453,10 +463,7 @@ def gen_story(doc):
                   'wearing hiviz neckers. The Service Team are Explorer Scouts that are on '
                   'site for the weekend to help with some of the tasks that need to be '
                   'done. If you need something such as toilet rolls for the loos, the '
-                  'Service Team should be able to help. If you need us urgently, '
-                  'please call Dave on 07708950547.'))
-
-    e.append(para('We hope you have a great weekend!'))
+                  'Service Team should be able to help.'))
 
     # Kit list.
 
@@ -471,14 +478,14 @@ def gen_story(doc):
         ('TOPPADDING', (0, 0), (-1, 0), 0.5 * cm),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LINEABOVE', (0, 1), (-1, -1), 1, colors.purple),
-        ]))
+    ]))
     e.append(kit_table)
 
     # Map
     e.append(PageBreak())
 
     e.append(title2('Site Map'))
-    
+
     map = Image(MAP_FILE, 17.5 * cm, 24.5 * cm)
     e.append(map)
 
@@ -497,7 +504,6 @@ def gen_pdf(filename):
 
 
 if __name__ == '__main__':
-
     args = docopt(__doc__, version='1.0')
 
     level = logging.DEBUG if args['--debug'] else logging.INFO

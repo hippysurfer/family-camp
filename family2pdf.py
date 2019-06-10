@@ -45,7 +45,7 @@ TITLE_SIZE = 16
 TH_LOGO = "7thlogo.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2017 Family Camp"
+SUBTITLE = "2019 Family Camp"
 
 
 def pageTemplate(family, bingo_name):

@@ -1,26 +1,20 @@
 import logging
 import time
+import json
 
 log = logging.getLogger(__name__)
 
 import gspread
-from gspread.httpsession import HTTPSession
+# from gspread.httpsession import HTTPSession
 # from oauth2client.client import SignedJwtAssertionCredentials
 from oauth2client.service_account import ServiceAccountCredentials
 
+scope = ['https://spreadsheets.google.com/feeds',
+         'https://www.googleapis.com/auth/drive']
 
-KEY_FILE = "key.pem"
-ACCOUNT = '111027059515-1iafiu8cv4h8m3i664s578vt7pngcsun@developer.gserviceaccount.com'
-SCOPE = ['https://spreadsheets.google.com/feeds',
-         'https://docs.google.com/feeds']
+CREDS = ServiceAccountCredentials.from_json_keyfile_name('FamilyCampScripts.json', scope)
 
-# SIGNED_KEY = open(KEY_FILE, 'rb').read()
-
-# CREDS = SignedJwtAssertionCredentials(ACCOUNT, SIGNED_KEY, SCOPE)
-CREDS = ServiceAccountCredentials.from_p12_keyfile(
-    ACCOUNT, KEY_FILE, scopes=SCOPE)
-
-MAX_ATTEMPTS = 10
+MAX_ATTEMPTS = 1
 BACKOFF_FACTOR = 5
 CREDS_THRESHOLD = 3
 
@@ -62,29 +56,29 @@ def retry(func, sheet=None):
             except gspread.exceptions.SpreadsheetNotFound:
                 log.error("Not found")
                 raise
-            except:
-                if attempt > MAX_ATTEMPTS/2:
-                    log.warn("- retrying - "
-                             "attempt: {} - delay: {}s".format(
-                            attempt, sleep_time))
-
-                    log.warn(
-                        "Caught exception in {} {!r} {!r}: ".format(func.__name__,
-                                                                    args, kwargs),
-                        exc_info=True)
-
-                if attempt == MAX_ATTEMPTS:
-                    log.warn("Retries exausted, giving up")
-                    raise
-
-
-                attempt += 1
-                time.sleep(sleep_time)
-                sleep_time *= BACKOFF_FACTOR
-
-                if attempt > CREDS_THRESHOLD and sheet:
-                    log.warn("Attempting to refresh creds.")
-                    sheet.gc.gc.login()
+            # except:
+            #     if attempt > MAX_ATTEMPTS/2:
+            #         log.warning("- retrying - "
+            #                  "attempt: {} - delay: {}s".format(
+            #                 attempt, sleep_time))
+            #
+            #         log.warning(
+            #             "Caught exception in {} {!r} {!r}: ".format(func.__name__,
+            #                                                         args, kwargs),
+            #             exc_info=True)
+            #
+            #     if attempt == MAX_ATTEMPTS:
+            #         log.warning("Retries exausted, giving up")
+            #         raise
+            #
+            #
+            #     attempt += 1
+            #     time.sleep(sleep_time)
+            #     sleep_time *= BACKOFF_FACTOR
+            #
+            #     if attempt > CREDS_THRESHOLD and sheet:
+            #         log.warning("Attempting to refresh creds.")
+            #         sheet.gc.gc.login()
         return ret
 
     return _wrapper
@@ -123,6 +117,9 @@ class Google:
 
     def open(self, name):
         return Sheet(self, retry(self.gc.open)(name))
+
+    def open_by_key(self, key):
+        return Sheet(self, self.gc.open_by_key(key))
 
     def open_by_ref(self, ref):
         return Sheet(self, retry(self.gc.open)(ref))

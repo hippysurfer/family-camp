@@ -30,7 +30,7 @@ pytz==2014.10
 #qrcode==5.1
 #qrplatba==0.3.4
 #reportlab==3.1.44
-requests==2.5.1
+requests==2.20.0
 #rsa==3.1.4
 scoop==0.7.1.release
 #six==1.9.0

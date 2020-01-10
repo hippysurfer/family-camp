@@ -1,18 +1,13 @@
 import logging
-import time
-import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 log = logging.getLogger(__name__)
-
-import gspread
-# from gspread.httpsession import HTTPSession
-# from oauth2client.client import SignedJwtAssertionCredentials
-from oauth2client.service_account import ServiceAccountCredentials
 
 scope = ['https://spreadsheets.google.com/feeds',
          'https://www.googleapis.com/auth/drive']
 
-CREDS = ServiceAccountCredentials.from_json_keyfile_name('FamilyCampScripts.json', scope)
+CREDS = ServiceAccountCredentials.from_json_keyfile_name('creds/FamilyCampScripts.json', scope)
 
 MAX_ATTEMPTS = 1
 BACKOFF_FACTOR = 5

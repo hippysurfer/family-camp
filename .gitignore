@@ -58,12 +58,7 @@ target/
 .cache.pickle
 .idea/
 .ipynb_checkpoints/
-.scoop_hosts
-2015_archive/
-7th Lichfield Scouts-5a0fa5165ceb.p12
-Pyevolve-0.6rc1.tar.gz
-Pyevolve-0.6rc1/
-creds.py
-key.pem
-py/
+.scoop_hosts/
+Archive/
+creds/
 

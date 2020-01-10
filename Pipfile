@@ -1,0 +1,25 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+deap = "*"
+docopt = "*"
+python-dateutil = "*"
+pytz = "*"
+requests = "*"
+scoop = "*"
+gspread = "*"
+oauth2client = "*"
+reportlab = "*"
+
+[dev-packages]
+flake8 = "*"
+ipdb = "*"
+ipython = "*"
+pep8 = "*"
+pyflakes = "*"
+
+[requires]
+python_version = "3.7"

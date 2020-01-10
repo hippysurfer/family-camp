@@ -23,8 +23,8 @@ ${root}/check_schedule.py "${csv}" 2> "${outdir}/errors.txt" | sed '1,/\*\*\*/d'
       csplit ../activities.txt "/^Total in activity/" '{*}'
       for i in *
       do
-           enscript ${i} -N n --output=- | ps2pdf - | pdfcrop --margins '0 10 -25 10' - ${i}.pdf
-           pdfnup --nup 3x1 ${i}.pdf
+           enscript "${i}" -N n --output=- | ps2pdf - | pdfcrop --margins '0 10 -25 10' - "${i}".pdf
+           pdfnup --nup 3x1 "${i}".pdf
       done
       pdfjoin *nup*.pdf
       cp xx15-nup-joined.pdf ../activities-nup.pdf
@@ -39,5 +39,5 @@ ${root}/check_schedule.py "${csv}" 2> "${outdir}/errors.txt" | sed '1,/\*\*\*/d'
 
 python ${root}/family2pdf.py "${csv}" "${outdir}"
 
-python ${root}/pad_pdf.py ${outdir}/*_timetable.pdf > "${outdir}/all_timetables.pdf"
+python ${root}/pad_pdf.py "${outdir}"/*_timetable.pdf > "${outdir}/all_timetables.pdf"
 

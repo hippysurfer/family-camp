@@ -1,55 +1,24 @@
 # coding: utf-8
-"""Generate Family Camp Timetable.
 
-Example:
-  stdbuf -oL -eL python -m scoop -n 8 generate_schedule.py outdir
-
-Usage:
-  generate_schedule.py [-d|--debug] -r|--refresh
-  generate_schedule.py [-d|--debug] <outdir>
-  generate_schedule.py [-d|--debug] <timetable> <outdir>
-  generate_schedule.py (-h | --help)
-  generate_schedule.py --version
-
-Arguments:
-
-  outdir         Directory to hold results.
-  timetable      A csv of an existing timetable.
-
-Options:
-
-  -r,--refresh   Refresh cache from Google Docs
-  -d,--debug     Turn on debug output.
-  -h,--help      Show this screen.
-  --version      Show version.
-
-"""
-
-import sys
 import os
 import os.path
 import csv
 import threading
 from functools import partial
-import logging
-from docopt import docopt
-from deap import base
-from deap import creator
-from deap import tools
-import numpy
-from deap import algorithms
-from deap.tools import Statistics
 
-from deep import *
+from deap import base, creator, tools, algorithms
+import numpy
+from deap.tools import Statistics
+from scoop import futures
+
+from .deep import *
+
+import logging
 
 log = logging.getLogger(__name__)
 
-
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
-
-from scoop import futures
-from copy import copy
 
 (acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
 
@@ -81,20 +50,12 @@ toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))
 toolbox.register("map", futures.map)
 
-if __name__ == '__main__':
 
-    args = docopt(__doc__, version='1.0')
-
-    level = logging.DEBUG if args['--debug'] else logging.INFO
-    refresh = args['--refresh']
-
-    logging.basicConfig(level=level)
-    log.debug("Debug On\n")
-
+def run(refresh, args):
     if refresh:
         log.info('Fetching fresh data.')
         get_source_data(use_cache=False)
-        log.info('Done. restart without the --refresh flag.')
+        log.info('Done. Now run "generate".')
         sys.exit(0)
 
     if args['<timetable>']:
@@ -109,7 +70,6 @@ if __name__ == '__main__':
                          Individual(individual, campers, sessions))
 
     outdir = args['<outdir>']
-
 
     hof = MyHallOfFame(campers, sessions, outdir, 100)
     stats = Statistics(key=lambda ind: ind.fitness.values)
@@ -130,7 +90,7 @@ if __name__ == '__main__':
     t.daemon = True
     t.start()
 
-    (timetables, log) = algorithms.eaSimple(
+    (timetables, log_) = algorithms.eaSimple(
         toolbox.population(),
         toolbox, cxpb=0.2, mutpb=0.5, ngen=30000,
         stats=stats,

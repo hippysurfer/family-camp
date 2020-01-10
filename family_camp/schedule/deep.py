@@ -2,15 +2,14 @@
 import os.path
 import sys
 import random
-import functools
 import itertools as it
 from copy import deepcopy
-from datetime import timedelta
-from datetime import datetime
+from datetime import timedelta, datetime
 import logging
 import pickle
+
 try:
-    import google
+    from . import google
 except FileNotFoundError:
     print("Failed to load google module.")
 

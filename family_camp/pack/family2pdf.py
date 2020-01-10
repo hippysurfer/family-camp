@@ -21,7 +21,6 @@ import csv
 import logging
 
 from docopt import docopt
-import random
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -33,11 +32,10 @@ from reportlab.platypus import (
     KeepTogether,
     Spacer)
 
+from ..schedule.deep import get_source_data, timetable_from_list
+from . import gen_info_pack
+
 log = logging.getLogger(__name__)
-
-from deep import get_source_data, timetable_from_list
-
-import gen_info_pack
 
 W, H = A4
 TITLE_FONT = "Helvetica-Bold"
@@ -62,10 +60,10 @@ def pageTemplate(family, bingo_name):
         canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
         canvas.drawCentredString(W / 2.0, H - 3 * cm, "Group: " + family)
 
-        #canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
-        #canvas.setFillColor(colors.purple)
-        #canvas.drawRightString(W - 2 * cm, H - 1.3 * cm, "Bingo Name")
-        #canvas.drawRightString(W - 2 * cm, H - 2 * cm, bingo_name)
+        # canvas.setFont(TITLE_FONT, TITLE_SIZE - 2)
+        # canvas.setFillColor(colors.purple)
+        # canvas.drawRightString(W - 2 * cm, H - 1.3 * cm, "Bingo Name")
+        # canvas.drawRightString(W - 2 * cm, H - 2 * cm, bingo_name)
 
         canvas.restoreState()
 
@@ -73,7 +71,6 @@ def pageTemplate(family, bingo_name):
 
 
 def gen_story(doc, family, sat_data, sun_data):
-
     # container for the 'Flowable' objects
     ts = TableStyle([
         ('TOPPADDING', (0, 0), (-1, 0), 1 * cm),
@@ -95,23 +92,23 @@ def gen_story(doc, family, sat_data, sun_data):
     sun = Table([["Sunday", None, None]] +
                 [["", ] + s[:] for s in sun_data])
     sun.setStyle(ts)
-    
+
     elements.append(KeepTogether([
         sun,
-        Spacer(0*cm, 1*cm),
+        Spacer(0 * cm, 1 * cm),
         # gen_info_pack.para_small(
         #     "Please note that Saturday Lunch and Sunday Lunch "
         #     "have been included on your timetable to ensure "
         #     "that families with a packed schedule get a slot "
         #     "for lunch. You are, of course, free to take your "
         #     "meals whenever you choose."),
-        #Spacer(0*cm, 0.4*cm),
+        # Spacer(0*cm, 0.4*cm),
         # gen_info_pack.para_small(
         #     "Please try to arrive at the Saturday BBQ close "
         #     "to your allotted time. By staggering the arrival "
         #     "times, we are trying hard to limit the length of "
         #     "time that you need to queue."),
-        Spacer(0*cm, 0.4*cm),
+        Spacer(0 * cm, 0.4 * cm),
         gen_info_pack.para_small(
             "There are a very few occasions where we have "
             "had to split a group so that members of the  "
@@ -132,7 +129,7 @@ def gen_pdf(filename, family, sat_data, sun_data, bingo_name):
     e = gen_story(doc, family, sat_data, sun_data)
 
     # write the document to disk
-    doc.build(info_pack+e, onFirstPage=pageTemplate(family, bingo_name),
+    doc.build(info_pack + e, onFirstPage=pageTemplate(family, bingo_name),
               onLaterPages=pageTemplate(family, bingo_name))
 
 
@@ -158,6 +155,7 @@ def get_schedule(sessions):
                  for session, campers in sun_sessions]
 
     return (sat_table, sun_table)
+
 
 if __name__ == '__main__':
 
@@ -202,7 +200,7 @@ if __name__ == '__main__':
     num_fams = len(individual.export_by_family())
     name_list = []
     for name, repeat in BINGO_NAMES:
-        name_list.extend([name,] * repeat)
+        name_list.extend([name, ] * repeat)
 
     # for name in BINGO_NAMES:
     #     name_list.extend([name,] * (num_fams//len(BINGO_NAMES)))
@@ -217,8 +215,6 @@ if __name__ == '__main__':
     # print("total = {}".format(total))
 
     for name, (f, s) in zip(name_list, individual.export_by_family().items()):
-
         sat_sessions, sun_sessions = get_schedule(s)
         gen_pdf("{}/{}_timetable.pdf".format(out_dir, f.replace('/', '_')),
                 f, sat_sessions, sun_sessions, name)
-

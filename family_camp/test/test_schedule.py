@@ -22,30 +22,19 @@ Options:
 """
 
 from functools import partial
-import logging
-import threading
-from docopt import docopt
 
-from deap import base
-from deap import creator
-from deap import tools
+from docopt import docopt
+from deap import base, creator, tools, algorithms
 from scoop import futures
 import numpy
-from deap import algorithms
 from deap.tools import Statistics
-from deep import *
+
+from family_camp.deep import *
 
 log = logging.getLogger(__name__)
 
-
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
-
-
-import random
-from datetime import timedelta
-from datetime import datetime
-
 
 acts = [Activity('Archery', timedelta(minutes=30), 1, 2),
         Activity('BMX', timedelta(minutes=30), 2, 3),
@@ -57,7 +46,6 @@ Archery, BMX, Caving, Maze = acts
 campers = [Camper('camper1', 'group1', [BMX, Archery], [Caving]),
            Camper('camper2', 'group1', [BMX, Archery], [Maze, Caving]),
            Camper('camper3', 'group2', [Caving, Archery], [BMX]), ]
-
 
 s = [(Archery, "Archery Indoor", datetime(2014, 7, 5, 9, 0)),
      (Archery, "Archery Outdoor", datetime(2014, 7, 5, 9, 0)),
@@ -114,8 +102,7 @@ data_cache.campers_per_activity_per_group = {
     } for act in data_cache.activities}
 
 timetable = [random.choice([True, False])
-             for _ in range(0, len(campers)*len(sessions))]
-
+             for _ in range(0, len(campers) * len(sessions))]
 
 toolbox = base.Toolbox()
 
@@ -166,14 +153,16 @@ if __name__ == '__main__':
     if not os.path.exists(outdir):
         os.mkdir(outdir)
 
+
     def responder():
         while sys.stdin.readline():
             print("Dumping current Hall of Fame to {}".format(outdir))
             hof.dump_to_dir()
 
-    #t = threading.Thread(target=responder)
-    #t.daemon = True
-    #t.start()
+
+    # t = threading.Thread(target=responder)
+    # t.daemon = True
+    # t.start()
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),

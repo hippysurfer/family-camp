@@ -47,10 +47,10 @@ from datetime import timedelta
 from datetime import datetime
 
 
-acts = [Activity('Archery', timedelta(minutes=30), 2),
-        Activity('BMX', timedelta(minutes=30), 3),
-        Activity('Caving', timedelta(minutes=30), 10),
-        Activity('Maze', timedelta(minutes=30), 10)]
+acts = [Activity('Archery', timedelta(minutes=30), 1, 2),
+        Activity('BMX', timedelta(minutes=30), 2, 3),
+        Activity('Caving', timedelta(minutes=30), 5, 10),
+        Activity('Maze', timedelta(minutes=30), 5, 10)]
 
 Archery, BMX, Caving, Maze = acts
 
@@ -71,8 +71,51 @@ s = [(Archery, "Archery Indoor", datetime(2014, 7, 5, 9, 0)),
 
 sessions = [Session(_[0], _[1], _[2]) for _ in s]
 
+
+class Cache:
+    pass
+
+
+data_cache = Cache()
+data_cache.activities = set([s.activity for s in sessions])
+data_cache.campers_per_activity = {}
+
+# Build a map of the list of campers that wish to do
+# each activity.
+data_cache.priority_campers_per_activity = {a: [] for a in data_cache.activities}
+data_cache.other_campers_per_activity = {a: [] for a in data_cache.activities}
+
+for c in campers:
+    for activity in data_cache.activities:
+        if activity in c.priorities:
+            data_cache.priority_campers_per_activity[activity].append(c)
+
+for c in campers:
+    for activity in data_cache.activities:
+        if activity in c.others:
+            data_cache.other_campers_per_activity[activity].append(c)
+
+data_cache.campers_per_activity = {
+    act: data_cache.priority_campers_per_activity[act] + data_cache.other_campers_per_activity[act]
+    for act in data_cache.activities
+}
+
+data_cache.sessions_per_activity = {
+    act: [_ for _ in sessions if _.activity == act] for act in data_cache.activities}
+
+all_groups = set([_.group for _ in campers])
+data_cache.campers_per_group = {
+    group: [_ for _ in campers if _.group == group] for group in all_groups}
+
+data_cache.campers_per_activity_per_group = {
+    act: {
+        group: [_ for _ in data_cache.campers_per_activity[act] if _.group == group]
+        for group in all_groups
+    } for act in data_cache.activities}
+
 timetable = [random.choice([True, False])
              for _ in range(0, len(campers)*len(sessions))]
+
 
 toolbox = base.Toolbox()
 
@@ -80,13 +123,16 @@ creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, 1.0))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
                  gen_seed_individual(campers, sessions,
+                                     data_cache=data_cache,
                                      creator=creator.Individual))
 toolbox.register(
     "population", tools.initRepeat, list, toolbox.individual, n=1000)
 toolbox.register("mate", partial(mate, campers=campers,
                                  sessions=sessions))
 toolbox.register("mutate", partial(mutate, campers=campers,
-                                   sessions=sessions, toolbox=toolbox))
+                                   sessions=sessions,
+                                   data_cache=data_cache,
+                                   toolbox=toolbox))
 toolbox.register("select", tools.selTournament, tournsize=20)
 toolbox.register("evaluate", partial(evaluate, campers=campers,
                                      sessions=sessions))

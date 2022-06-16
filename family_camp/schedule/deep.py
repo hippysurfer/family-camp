@@ -7,11 +7,12 @@ from copy import deepcopy
 from datetime import timedelta, datetime
 import logging
 import pickle
+#import numpy
 
-try:
-    from . import google
-except FileNotFoundError:
-    print("Failed to load google module.")
+#try:
+#    from . import google
+#except FileNotFoundError:
+#    print("Failed to load google module.")
 
 from statistics import pvariance
 
@@ -122,14 +123,7 @@ class SessionInst:
     __repr__ = __str__
 
 
-# def overlapping_sessions(session_inst, session_insts):
-#    """Return a list of sessions from sessions that overlap
-#    with session."""
-#    return [_ for _ in session_insts
-#            if (_ != session_inst and sessions_overlap(
-#                _.session, session_inst.session))]
-
-def overlapping_sessions(session, sessions):
+def get_overlapping_sessions(session, sessions):
     """Return a list of sessions from sessions that overlap
     with session."""
     return [_ for _ in sessions
@@ -159,24 +153,10 @@ class Individual:
                 zip(sessions,
                     range(0, len(campers) * len(sessions), len(campers)))
             ]
-        # self.session_inst = []
-        # for (session_name, session_idx) in zip(
-        #         range(0, len(sessions)),
-        #         range(0, len(campers) * len(sessions), len(campers))):
-        #     self.session_inst.append(
-        #         SessionInst(sessions[session_name],
-        #                     campers,
-        #                     timetable[session_idx:session_idx + len(campers)]))
-
-        # if self.__class__.__overlapping_sessions_map__ is None:
-        #     self.__class__.__overlapping_sessions_map__ = \
-        #         {session: overlapping_sessions(session,
-        #                                        self.sessions)
-        #          for session in self.sessions}
 
         self.overlapping_sessions_map = self.__class__.__overlapping_sessions_map__ = \
-            {session: overlapping_sessions(session,
-                                           self.sessions)
+            {session: get_overlapping_sessions(session,
+                                               self.sessions)
              for session in self.sessions}
 
         # Create a lookup map from session to its matching instance.
@@ -665,6 +645,7 @@ def get_source_data(use_cache=True):
 
     class Cache:
         pass
+
     data_cache = Cache()
     data_cache.activities = set([s.activity for s in sessions])
     data_cache.campers_per_activity = {}
@@ -685,7 +666,7 @@ def get_source_data(use_cache=True):
                 data_cache.other_campers_per_activity[activity].append(c)
 
     data_cache.campers_per_activity = {
-        act: data_cache.priority_campers_per_activity[act]+data_cache.other_campers_per_activity[act]
+        act: data_cache.priority_campers_per_activity[act] + data_cache.other_campers_per_activity[act]
         for act in data_cache.activities
     }
 
@@ -722,32 +703,38 @@ def mutate(ind1, sessions, campers, data_cache, toolbox):
     other_campers_per_activity = data_cache.other_campers_per_activity
     sessions_per_activity = data_cache.sessions_per_activity
     campers_per_group = data_cache.campers_per_group
+    overlapping_sessions = data_cache.overlapping_sessions
+
+    #randint = numpy.random.randint
+    #choice = numpy.random.choice
+    randint = random.randrange
+    choice = random.choice
 
     mutant = toolbox.clone(ind1)
     # Remove fitness values
     del mutant.fitness.values
 
-    log.debug("Mutating")
+    # log.debug("Mutating")
 
-    for _ in range(0, random.randrange(0, 100)):
+    for _ in range(0, randint(0, 100)):
 
         # import ipdb
         # ipdb.set_trace()
 
         # Select a session at random
-        session_idx = random.randrange(0, len(sessions))
+        session_idx = randint(0, len(sessions))
 
         # Select a camper that has selected that activity
         act = sessions[session_idx].activity
-        log.debug("Act: {}".format(str(act)))
+        # log.debug("Act: {}".format(str(act)))
 
-        c = random.choice(campers_per_activity[act])
-        log.debug("Camper: {}".format((str(c))))
+        c = choice(campers_per_activity[act])
+        # log.debug("Camper: {}".format((str(c))))
 
         # get all family members that have selected the activity.
         matching_campers = data_cache.campers_per_activity_per_group[act][c.group]
-        log.debug("Matching campers: {}".format(" ".join(str(_) for _ in
-                                                         matching_campers)))
+        # log.debug("Matching campers: {}".format(" ".join(str(_) for _ in
+        #                                                 matching_campers)))
 
         matching_camper_indexes = [campers.index(_) for _ in matching_campers]
         # If they are already allocated to another session, remove them
@@ -769,9 +756,7 @@ def mutate(ind1, sessions, campers, data_cache, toolbox):
         # And reallocate them to another session at random.
         group_campers = campers_per_group[c.group]
         camper_idxes = [campers.index(_) for _ in group_campers]
-        for overlapping_session in overlapping_sessions(
-                sessions[session_idx],
-                sessions):
+        for overlapping_session in overlapping_sessions[sessions[session_idx]]:
 
             # Keep track of whether the group is already in the session.
             group_in_session = False
@@ -802,7 +787,7 @@ def mutate(ind1, sessions, campers, data_cache, toolbox):
                 target_sessions = sessions_per_activity[overlapping_session.activity]
 
                 # Select a starting point at random
-                start = random.choice(range(0, len(target_sessions)))
+                start = choice(range(0, len(target_sessions)))
 
                 for target_session in (
                         target_sessions[:start] +
@@ -825,8 +810,7 @@ def mutate(ind1, sessions, campers, data_cache, toolbox):
 
                     # Does the session clash with another session that someone
                     # in the family is doing?
-                    overlaps = overlapping_sessions(target_session,
-                                                    sessions)
+                    overlaps = overlapping_sessions[target_session]
 
                     found = False
                     for overlap in overlaps:
@@ -840,11 +824,10 @@ def mutate(ind1, sessions, campers, data_cache, toolbox):
                                 break
 
                     if found:
-                        log.debug("tried to put {} into {} but it clashes "
-                                  "with {}".format(
-                            matching_campers[0].group,
-                            target_session,
-                            ",".join([str(_) for _ in overlaps])))
+                        # log.debug("tried to put {} into {} but it clashes "
+                        #          "with {}".format(matching_campers[0].group,
+                        #                           target_session,
+                        #                           ",".join([str(_) for _ in overlaps])))
                         continue
 
                     # Put all of the group members that want the activity in

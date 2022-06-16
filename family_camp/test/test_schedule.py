@@ -29,7 +29,7 @@ from scoop import futures
 import numpy
 from deap.tools import Statistics
 
-from family_camp.deep import *
+from family_camp.schedule.deep import *
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +101,11 @@ data_cache.campers_per_activity_per_group = {
         for group in all_groups
     } for act in data_cache.activities}
 
-timetable = [random.choice([True, False])
+data_cache.overlapping_sessions = {
+    session: get_overlapping_sessions(session, sessions) for session in sessions
+}
+
+timetable = [numpy.random.choice([True, False])
              for _ in range(0, len(campers) * len(sessions))]
 
 toolbox = base.Toolbox()
@@ -166,9 +170,10 @@ if __name__ == '__main__':
 
     (timetables, log) = algorithms.eaSimple(
         toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=100,
+        toolbox, cxpb=0.2, mutpb=0.5, ngen=10,
         stats=stats,
         halloffame=hof,
         verbose=True)
 
+    print(hof)
     hof.dump_to_dir()

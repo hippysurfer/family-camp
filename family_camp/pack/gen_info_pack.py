@@ -32,10 +32,12 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from docopt import docopt
 import csv
 import logging
+import family_camp.schedule.deep as deep
 
 log = logging.getLogger(__name__)
 
-from deep import get_source_data, timetable_from_list
+get_source_data = deep.get_source_data
+timetable_from_list = deep.timetable_from_list
 
 W, H = A4
 TITLE_FONT = "Helvetica-Bold"
@@ -44,60 +46,53 @@ TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2019 Family Camp"
+SUBTITLE = "2022 Family Camp"
 
 ACTS = {
-    'Archery (Outdoor and Indoor)':
-        'Please meet your instructor by the archery range. (Please wear a top '
-        'with long sleeves to protect your arms and tie back long hair). Take a '
-        'moment to check your timetable to see if you are meant to be indoor or '
-        'outdoor and ensure you join the correct session.',
-    'Blindfold Trail':
-        'Please meet your instructor at the Blindfold Trail. (You are advised to wear '
-        'long trousers, long sleeves and sturdy shoes).',
-    'BMX Biking':
-        'Please meet your instructor at the BMX track. (You are strongly advised '
-        'to ensure all those participating wear long trousers and long sleeves '
-        'as it is a loose gravel track). PLEASE NOTE THAT ALL BMX RIDERS MUST BE '
-        'AT LEAST 9 YEARS OLD.',
-    'Canoeing':
-        'Please meet your instructor at the river bank. (No valuables i.e. '
-        'watches, mobile phones, wallets, keys etc. as these may be lost or '
-        'damaged as falling in is always a possibility. Wear old clothes). '
-        'Please note that if smaller children do not fit securely into a buoyancy '
-        'aid they will not be allowed to take part.',
-    'Climbing':
-        'Please meet your instructor by the entrance to the kitchen. Here the '
-        'instructor will issue your safety equipment before taking you to the '
-        'Climbing Quarry.',
-    'Caving':
-        'Please meet your instructor at the man-made caves. (This activity '
-        'can be a bit wet and muddy. If possible, please wear old '
-        'clothes/waterproof\'s. It is also stony so long trousers are a good '
-        'idea).',
-    'The Crystal Maze':
-        'Please meet your instructor at the Crystal Maze.',
-    'Fire Lighting':
-        'Please meet at the entrance to the fire area.',
-    'Pond Dipping':
-        'Please meet your instructor at the pond, which is behind the gents toilet, '
-        'near the Crystal Maze.',
-    'Woodland Craft':
-        'Please meet your instructor in the hut near the fire area.'
+    'Archery (Map Ref 1)':
+        'Please meet your instructor by the archery range. (Please wear a top with long '
+        'sleeves to protect your arms and tie back long hair) '
+        'Please bear in mind the bows used are compound bows which may be a little heavy for some.',
+    'Potholing/caving (Map Ref 2)':
+        'Please meet your instructor at the man-made caves in the courtyard (This activity can be a bit '
+        'wet and muddy. If possible, please wear old clothes/waterproof\'s. It is also stony '
+        'so long trousers are a good idea).',
+    'Climbing/Abseiling (Map Ref 3)':
+        'Please meet your instructors at the climbing wall just to the north of the main courtyard',
+    'Air rifle (Map Ref 4)':
+        'Please meet your instructor at the rifle range in the courtyard. ' 
+        'To participate in the shooting activity you must have completed a "Shooting permission form" and bring it along to ' 
+        'the activity with you, this includes adults and children. No form, no shooting! (the form will be included in '
+        'the information pack that will be handed to you on arrival at camp)'
+        'Please bear in mind also that the rifles are quite heavy and may not be suitable for some.',
+    'Zip Wire (Map Ref 5)':
+        'Please meet your instructor at the Zip Wire tower to the South of the main courtyard. '
+        'all are welcome on the low zip line. To ride the high zip line you must be at least 1.2 metres tall ' 
+        'and be at least ten years old.',
+    'Spiders Web/Bouldering (Map Ref 6)':
+        'Please meet your instructor at the Spiders web/bouldering behind the nothern most building '
+        'of the courtyard.',
+    'Karts (Map Ref 7)':
+        'Please meet your instructor at the carting area to the South West of the courtyard.',
+    'Rubber Band Alley (Map Ref 8)':
+        'Please meet your instructor in the courtyard adjacent to the air rifle range.',
+    'Laser Clay Pigeon':
+        'The venue for this activity is subject to weather and will therefore be announced at flag break each day',
+    'Escape Boxes - (Map Ref 10)':
+        'Meet for this activity in the northernmost building in the courtyard'
 }
 
 programme = [
     ['Friday', [
+        ['5.00pm', 'Arrival at campsite'],
         ['8.00pm', 'Flag Break (camp opening ceremony)'],
     ]],
     ['Saturday', [
         ['8.45am', 'Flag Break (announcement of badge competition winner)'],
-        ['9.00am-1.00pm and 1.30pm-4.30pm', 'Escape Boxes'],
         ['9.30am-4.30pm', 'Activities'],
-        ['11.00am-7.00pm', 'Face Painting and Glitter Tattoos'],
-        ['2.00pm-11.00pm', 'Astronomy group'],
-        ['2.30pm-6.30pm', 'Crazy Golf'],
-        ['5.00pm-6.30pm', 'BBQ and Ice Cream Van'],
+        ['4.00pm-7.00pm', 'Circus Skills'],
+        ['5.00pm-6.30pm', 'Hog Roast'],
+        ['6.00pm', 'Ice Cream Van'],
         ['7.15pm', 'Flag down'],
         ['7.30pm', 'Campfire (marquee if wet)']
     ]],
@@ -328,14 +323,28 @@ def gen_story(doc):
 
     e.append(PageBreak())
 
-    e.append(title2("Activities"))
-    e.append(para("Please find enclosed details of when your chosen "
-                  "activities will be taking place and information "
-                  "about other events that are available, should you "
-                  "require them, during the weekend. "))
+    e.append(title2("Welcome to Family Camp"))
 
-    e.append(para("Please wear suitable footwear for all activities "
-                  "and remember that all children must be supervised. "
+    e.append(para("We hope that you and your family have a lovely weekend. "))
+
+    e.append(para("This welcome pack should provide you with all of the information that you need "
+                  "about the camp. If you have questions or concerns please speak to any of the team or "
+                  "your fellow campers."))
+
+    e.append(para("On arrival at camp we will give you a printed copy of this welcome pack "
+                  "with a personalised family activity schedule attached. "))
+
+    e.append(para("Please note that your children remain your responsibility throughout the weekend. "))
+
+    e.append(title2("Activities"))
+    e.append(para("Below you will find details of all of the activities. Your personalised family schedule "
+                  "(which will be handed to you as you arrive on Friday) will tell you which activities you "
+                  "are doing and the session times."))
+
+    e.append(para("Please note: an adult member of your family group MUST accompany your child to every activity. "
+                  "We do not have supervision arrangements in place to safely supervise unaccompanied children."))
+
+    e.append(para("Please wear suitable footwear for all activities. "
                   "All activities should take approximately 1 hour unless "
                   "stated otherwise. Please note that the times given are "
                   "the activity START time so please be 5 minutes early! "
@@ -343,7 +352,11 @@ def gen_story(doc):
                   "activities."))
 
     e.append(para("Participation in activities allocated to Under 5’s will always be "
-                  "at the discretion of the Entrust instructor."))
+                  "at the discretion of the site instructor."))
+
+    e.append(para("Please remember that all of the instructors manning the activities "
+                  "and everyone else on site over the weekend are volunteers please treat them with "
+                  "respect and follow their instructions."))
 
     for name, desc in sorted(ACTS.items(), key=lambda x: x[0]):
         e.append(activity_name(name))
@@ -351,42 +364,70 @@ def gen_story(doc):
 
     e.append(PageBreak())
 
+    e.append(subtitle('Where To Go'))
+
+    e.append(para('Willesley Scout Campsite, Willesley, Ashby-De-La-Zouch, Leicestershire, LE65 2UP.'))
+
+    e.append(para('What three words: https://w3w.co/rebounded.helpfully.payer'))
+    e.append(para('Approximate distance/time from Lichfield: 24 miles, 30 - 40 minutes.'))
+    e.append(para('From Junction 12 of the A42, follow the B5006 (Measham Road) towards Ashby-de-la-Zouch. As you '
+                  'enter Ashby, take a left onto Willesley Road. Follow Willesley Road for 1.5 miles until you reach '
+                  'a crossroad. At the cross road, turn left towards Willesley Woodside. '
+                  'Follow the lane towards Willesley Woodside and continue until you reach a set of metal bollards and '
+                  'a house. Turn left up the narrow track (to the right of the house). Follow this track and do not '
+                  'turn off – at the top of the track you will see the entrance to the car park.'))
+    e.append(para('Using a Satnav: If you use the postcode, you will be taken to Hicks Lodge Visitor Centre. To get '
+                  'from there to the campsite, exit their car park, turn right and follow the road (south) to a '
+                  'crossroads. At the crossroad, go straight on until you reach a house on the left. Turn left up '
+                  'the narrow track immediately after the house. Follow this track past the scout signs on the trees '
+                  'and go through the black gate on the left next to the large campsite sign.'))
+
     e.append(subtitle('Camping Arrangements'))
+
+    e.append(para('When you arrive at the site you will be instructed as to where you can camp. '
+                  'There is a cinder track which leads to the main camping area, if weather conditions are good this is '
+                  'ok for vehicles and should be used as the main access to the site. The main campsite is to the left '
+                  'and directly ahead of this track. (See Map)'))
     e.append(para(
-        'Please note that the camping arrangements have changed from '
-        'previous years due to reorganization of the Shugborough '
-        'site. Please see below:-'))
-
-    e.append(subtitle('Night Owl Zone'))
-    e.append(para('The area at the bottom of the field to the left of the main entrance is intended '
-                  'for groups who stay up later into the night. Please camp as far away as '
-                  'possible from the main buildings and the quieter zone if you intend to stay up late.'))
-
-    e.append(para('Please be aware that noise travels a long way on a quiet campsite at night and tent '
-                  'walls provide no sound proofing. We want everyone to enjoy their evening and sitting '
-                  'around the campfire is a big part of family camp for many of us. But please have '
-                  'a thought for those that have gone to bed and for the children that will be listening '
-                  'to your late night chat in their sleeping bags.'))
+        'The Quiet Zone camping is further up the main playing field to the right of the track. This will be clearly '
+        'marked. Please set up your equipment and then remove your vehicles to the parking area shown on the map '
+        'following the route shown.'))
+    e.append(para(
+        'No Vehicles are allowed to remain on the Campsite as we do not have space for them and they could '
+        'potentially get stuck if we have bad weather. Be warned we do not have any towing vehicles if you get '
+        'stranded!!'))
+    e.append(para(
+        'Caravans and  motorhomes: if the weather is good they should camp just at the end of the track and slightly to '
+        'the right if the weather makes access difficult then these vehicles should camp on the hard standing ground '
+        'to the right of the main entrance. '
+        'As with tents, any vehicles accompanying caravans should be parked in the main parking area.'))
+    e.append(para(
+        'Please at all times obey the instructions of the marshals who will be organising the camping layout on '
+        'Friday evening.'))
 
     e.append(subtitle('Quieter Zone'))
     e.append(para('If you are camped in the Quieter Zone (marked on the map) please keep noise to a '
                   'minimum after 10:00pm. Please note that the Family Camp team is not responsible '
                   'or empowered to enforce the quiet policy.'))
 
-    e.append(subtitle("BBQ"))
+    e.append(subtitle('Site Safety'))
+    e.append(para(
+        'The site is a safe site for children to play in and there is no restriction on where they can '
+        'roam when activities are not running.  However there is water nearby at Willesley fisheries, albeit '
+        'seperated by a fence from the site. Please remember that as parents or carers, you are responsible '
+        'for your children this weekend, so it might be sensible upon your arrival to walk the '
+        'site with them and agree with them what is acceptable and what areas are "no go" zones.'))
 
-    e.append(para('The BBQ will be on Saturday evening '
-                  'Campers that have requested a vegetarian or gluten free meal will '
-                  'have a raffle ticket in their Welcome Pack. Please take this '
-                  'ticket along with you so that the Catering Team know that '
-                  'yours is one of the vegetarian or gluten free meals. If you have other special '
-                  'dietary requirements (but do not have a raffle ticket) please '
-                  'speak to the Catering Team as soon as possible (well before '
-                  'the BBQ) and they will do their best to provide for you. '
-                  'The BBQ is an opportunity to gather together for a meal, so '
-                  'please bring your tables and chairs, drinks & extra snacks '
-                  'up to the BBQ area. We are hoping that an ice-cream van will pay '
-                  'us a visit, so have some change ready as '
+    e.append(subtitle("Hog Roast"))
+
+    e.append(para('The Hog Roast will be on Saturday evening. The cost of the Hog Roast is included in your camp fee. '
+                  'Campers that have requested a vegetarian '
+                  'or gluten free meal will have a raffle ticket in their Welcome Pack.  This ticket is redeemable at '
+                  'the normal food stall and not the Hog Roast stall. Please bring '
+                  'this ticket along with you to claim your dietary option. '
+                  'The Hog Roast event is an opportunity to gather together for a meal, so please '
+                  'bring your tables and chairs, drinks & extra snacks up to the courtyard area. We are '
+                  'hoping that an ice-cream van will pay us a visit, so have some money ready as '
                   'these are not pre-paid.'))
 
     e.append(subtitle('Camp Fire'))
@@ -395,13 +436,13 @@ def gen_story(doc):
         'campfire circle. Please come along, with your chairs, to join in with the singing.'))
 
     e.append(para(
-        'At the end of the campfire we will have marshmallows for all that wish to toast them. '
-        'So that this activity can be conducted safely it will take place outside the campfire '
-        'circle using our backwoods cooking equipment. This will involve the movement of '
-        'the hot embers so we ask that you please be patient and listen carefully to any '
-        'safety instructions given at the close of the campfire whilst this is organised. '
-        'Please note that for additional safety you will need to supervise your own children '
-        'so marshmallows will only be issued to adults.'))
+        'At the end of the campfire we will have marshmallows for all that wish to toast '
+        'them. So that this activity can be conducted safely it will take place outside the '
+        'campfire circle using our backwoods cooking equipment. This will involve the '
+        'movement of the hot embers so we ask that you please be patient and listen '
+        'carefully to any safety instructions given at the close of the campfire whilst this '
+        'is organised. Please note that for additional safety you will need to supervise '
+        'your own children so marshmallows will only be issued to adults.'))
 
     e.append(PageBreak())
 
@@ -418,75 +459,52 @@ def gen_story(doc):
     e.append(para('Each family group will have a voucher in their pack to obtain a '
                   'Family Camp Badge free of charge. We will be happy to exchange these directly '
                   'after flag breaks on Saturday and Sunday. Additional badges will be available '
-                  'to purchase for £1.50 at the same time.'))
+                  'to purchase for £1.50 at the same time. We can only accept card payments for this.'))
 
     e.append(subtitle('Tuck Shop'))
-    e.append(para('There will be a tuck shop in the dining area next to the caterers where '
+    e.append(para('There will be a tuck shop in the courtyard area where '
                   'you will be able to purchase sweets, cakes and soft drinks. This will be '
                   'manned over the weekend by our Scouts who are raising money for overseas adventures.'))
+    e.append(para('There is also a site shop that will be open at times over the weekend '
+                  'that sells camp site badges, woggles and some toys etc. NOTE: the site shop does not sell food.'))
 
-    e.append(subtitle('Astronomy'))
-    e.append(para("The Rosliston Astronomy Group will be joining us on Saturday afternoon. "
-                  "They will arrange safe solar viewing during daylight along with the opportunity to make "
-                  "and launch paper rockets. As darkness descends you will be given the chance to view "
-                  "the wider universe through first class equipment."))
+    e.append(subtitle('Circus Skills'))
+    e.append(para('Between 4pm and 7pm on Saturday we will have the opportunity to partake in a Circus Skills '
+                  'workshop provided by Shooting Stars Circus Skills. Get ready to channel your inner juggler! Please '
+                  'do not remove any of the equipment from the performance area. The venue for this activity will be '
+                  'weather dependant and will be announced at flag break.'
+                  ))
 
-    e.append(subtitle('Escape Boxes'))
-    e.append(para(
-        'If you want to exercise your brain then this could be the activity for you. Solve a '
-        'series of problems to find the codes you need to unlock the box. Will you be the first '
-        'to get inside to stop the timer? Groups of up to 7 can work on each box allowing '
-        'families to work together. This activity will be available on Saturday in the small green '
-        'yurt and is suitable for ages 7 and above. If you would like to have a go at this brand '
-        'new activity then add your name to the sign-up sheet (location to be advised at flag '
-        'break).'))
+    e.append(subtitle('Bikes'))
 
-    e.append(para(
-        'Thank you to The Problem Solving Company for loaning us their Escape Boxes.'))
-
-    e.append(subtitle('Face painting and Glitter Tattoos'))
-    e.append(para(
-        'On site from late Saturday morning will be a Face Painting and Glitter Tattoo Artiste. '
-        'Everyone aged 3 and above can go along to get their face painted and/or get a glitter '
-        'tattoo of their choice, including one of our very own 7th logo. Children aged 2-3 will be '
-        'able to have a design painted on their arm. You will find her at the top of the field '
-        'near the large tree with the picnic benches. As this activity marks the skin there are a '
-        'number of terms and conditions that we must adhere to. We recommend that you '
-        'read them (copy in the pack) before participating. Ultimately the artiste’s decision is '
-        'final and we ask that you respect that.'))
+    e.append(para('The Vehicle-free site is an excellent area for your children to play and ride bikes, so '
+                  'if you have room don\'t forget to bring your bikes with you'))
 
     e.append(PageBreak())
 
-    e.append(subtitle('Crazy Golf'))
-    e.append(para(
-        'To add to the fun there will be a 9 hole Crazy Golf course on site on Saturday '
-        'afternoon situated near to the catering block. Challenge your putting skills over holes '
-        'that include bunkers, ramps, tunnels and rebound bars to name but a few. This '
-        'activity is suitable for all ages. Just turn up to have a go. Parents, please ensure '
-        'younger children are supervised.'))
-
     e.append(subtitle('Recycling'))
-    e.append(para('Entrust operates a recycling policy at Shugborough, there are '
-                  'separate bins for recyclable and non recyclable waste. Please '
-                  'ensure that you separate your waste and dispose of it in the correct bins. '))
-
-    e.append(para('Recyclable materials are: all glass, all plastic bottles, '
-                  'all cans, all tetrapacks, all foil and all plastic tubs and trays. '
-                  'All other waste, including any cardboard waste must be placed in the general waste bins. '
-                  'For the avoidance of doubt polystyrene food containers and cups must go in general waste bins.'))
-
-    e.append(para('There are recycling and rubbish bins near the canteen building.'))
+    e.append(para('The site does not have separate bins for recycling. There is a single skip at the top end of '
+                  'the car park. We understand that the site pay for a sorting service that will sort the skip after '
+                  'collection.'))
 
     e.append(subtitle('General Information'))
     e.append(para('The campsite does not permit pets but does allow BBQs '
-                  'and fires, providing they are up off the ground. You will need to bring '
-                  'your own fuel as there is no firewood on site.'))
+                  'and fires, providing they are up off the ground and standing on the slabs provided. '
+                  'You will need to bring your own fuel as there is no firewood on site.'))
+    e.append(para('Any fire pits must be placed on four paving slabs, which will be laid out by the site in '
+                  'different areas prior to our arrival. This is something the site is very clear about so please '
+                  'comply with their request. We hope that families will gather together in the evening around '
+                  'shared fires.'))
+    e.append(para('Please ensure that you have a small first aid kit with you to deal with minor cuts, '
+                  'grazes or stings which may happen over the course of the weekend. There will be first '
+                  'aiders on site, but they are also on camp with their families. Please only ask for assistance if '
+                  'the matter is more serious than above.'))
 
     e.append(para('If you have any queries, please do not hesitate to come '
                   'and ask the Family Camp organising team. They may not have all the answers '
                   'but they will always be happy to try to help. '))
     e.append(para('The Service Team will be '
-                  'wearing hiviz neckers. The Service Team are Explorer Scouts that are on '
+                  'wearing hiviz neckers. The Service Team are older Scouts that are on '
                   'site for the weekend to help with some of the tasks that need to be '
                   'done. If you need something such as toilet rolls for the loos, the '
                   'Service Team should be able to help.'))

@@ -9,10 +9,13 @@ import logging
 import pickle
 #import numpy
 
-#try:
-#    from . import google
-#except FileNotFoundError:
-#    print("Failed to load google module.")
+try:
+    from . import google
+except FileNotFoundError:
+    print("Failed to load google module.")
+except ImportError:
+    import google
+
 
 from statistics import pvariance
 
@@ -544,6 +547,7 @@ class MyHallOfFame(HallOfFame):
 
         for i in range(0, min(num_timetables, len(self))):
             filename = "{} - {}".format(dt, i)
+            print(f"Writing to: {os.path.join(self.dest, filename)}-XXXXXXXXX")
 
             with open(os.path.join(self.dest, filename + "_summary.txt"), "w") as summary:
                 timetable = Individual(self[i], self.campers, self.sessions,
@@ -592,7 +596,7 @@ def get_source_data(use_cache=True):
             open(CACHE, 'rb'))
     else:
         gc = google.conn()
-        spread = gc.open_by_key("1eR0V5YTX-U3ZWFlbe4tGCyZOQM-7-do15v0vttDBiks")
+        spread = gc.open_by_key("1RHqzyfLj50nL3UYr88K5mC8euTHfuOeT2rU7T0SdmYg")
         acts_wks = spread.worksheet("Activities for schedule").get_all_values()
         session_wks = spread.worksheet("Sessions for schedule").get_all_values()
         campers_wks = spread.worksheet("Activities").get_all_values()
@@ -682,6 +686,10 @@ def get_source_data(use_cache=True):
             group: [_ for _ in data_cache.campers_per_activity[act] if _.group == group]
             for group in all_groups
         } for act in data_cache.activities}
+
+    data_cache.overlapping_sessions = {
+        session: get_overlapping_sessions(session, sessions) for session in sessions
+    }
 
     return acts, sessions, campers, data_cache
 
@@ -969,21 +977,24 @@ def print_individual(individual, campers):
 
     previous_f = None
     previous_i = None
-    for f, s in sorted(individual.export_by_family().items(),
-                       key=lambda _: '' if _[0] == '' else _[0].split('/')[1].lower()):
-        for i, campers in sorted(s.items(), key=lambda s: s[0].session.start):
-            previous_c = None
-            for c in campers:
-                out.append("{:<20} {:<20} {:<20} {:<20}".format(
-                    f if f != previous_f else '',
-                    i.session.start.strftime(DATEFORMAT) if i != previous_i else '',
-                    i.session.label if i != previous_i else '',
-                    c.name if c != previous_c else ''
-                ))
-                previous_f = f
-                previous_i = i
-                previous_c = c
-            out.append('\n')
+    try:
+        for f, s in sorted(individual.export_by_family().items(),
+                           key=lambda _: '' if _[0] == '' else _[0].split('/')[1].lower()):
+            for i, campers in sorted(s.items(), key=lambda s: s[0].session.start):
+                previous_c = None
+                for c in campers:
+                    out.append("{:<20} {:<20} {:<20} {:<20}".format(
+                        f if f != previous_f else '',
+                        i.session.start.strftime(DATEFORMAT) if i != previous_i else '',
+                        i.session.label if i != previous_i else '',
+                        c.name if c != previous_c else ''
+                    ))
+                    previous_f = f
+                    previous_i = i
+                    previous_c = c
+                out.append('\n')
+    except Exception:
+        pass
 
     out.append("**********************************************************\n")
 

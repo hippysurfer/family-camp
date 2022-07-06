@@ -21,6 +21,19 @@ Options:
 
 """
 
+
+# Work around a Python3.10 depreciation issue. Scoop has not caught up yet.
+try:
+    from scoop import futures
+except ImportError:
+    import collections.abc
+    #hyper needs the four following aliases to be done manually.
+    collections.Iterable = collections.abc.Iterable
+    collections.Mapping = collections.abc.Mapping
+    collections.MutableSet = collections.abc.MutableSet
+    collections.MutableMapping = collections.abc.MutableMapping
+    from scoop import futures
+
 from functools import partial
 
 from docopt import docopt
@@ -43,9 +56,9 @@ acts = [Activity('Archery', timedelta(minutes=30), 1, 2),
 
 Archery, BMX, Caving, Maze = acts
 
-campers = [Camper('camper1', 'group1', [BMX, Archery], [Caving]),
-           Camper('camper2', 'group1', [BMX, Archery], [Maze, Caving]),
-           Camper('camper3', 'group2', [Caving, Archery], [BMX]), ]
+campers = [Camper('camper1', '001/group1', [BMX, Archery], [Caving]),
+           Camper('camper2', '001/group1', [BMX, Archery], [Maze, Caving]),
+           Camper('camper3', '002/group2', [Caving, Archery], [BMX]), ]
 
 s = [(Archery, "Archery Indoor", datetime(2014, 7, 5, 9, 0)),
      (Archery, "Archery Outdoor", datetime(2014, 7, 5, 9, 0)),

@@ -32,7 +32,7 @@ from reportlab.platypus import (
     KeepTogether,
     Spacer)
 
-from ..schedule.deep import get_source_data, timetable_from_list
+from family_camp.schedule.deep import get_source_data, timetable_from_list
 from . import gen_info_pack
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ TITLE_SIZE = 16
 TH_LOGO = "7thlogo.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2019 Family Camp"
+SUBTITLE = "2022 Family Camp"
 
 
 def pageTemplate(family, bingo_name):

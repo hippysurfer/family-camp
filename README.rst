@@ -1,9 +1,11 @@
 
-Setup OATH2
-===========
+Setup Python
+============
 
-pip install oauth2client
-sudo apt-get install python3-dev
-sudo apt-get install python3-openssl
-pip install PyCrypto
+sudo apt-get install python3-dev python3-openssl
+python3 -m venv venv
+source venv/bin/activate
+
+pip install -r requirements.txt
+
 

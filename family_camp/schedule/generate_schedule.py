@@ -9,7 +9,19 @@ from functools import partial
 from deap import base, creator, tools, algorithms
 import numpy
 from deap.tools import Statistics
-from scoop import futures
+
+# Work around a Python3.10 depreciation issue. Scoop has not caught up yet.
+try:
+    from scoop import futures
+except ImportError:
+    import collections.abc
+    #hyper needs the four following aliases to be done manually.
+    collections.Iterable = collections.abc.Iterable
+    collections.Mapping = collections.abc.Mapping
+    collections.MutableSet = collections.abc.MutableSet
+    collections.MutableMapping = collections.abc.MutableMapping
+    from scoop import futures
+
 
 from .deep import *
 
@@ -20,7 +32,10 @@ log = logging.getLogger(__name__)
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
-(acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
+try:
+    (acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
+except FileNotFoundError:
+    (acts, sessions, campers, data_cache) = get_source_data(use_cache=False)
 
 toolbox = base.Toolbox()
 

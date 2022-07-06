@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 def main(args=None):
     """The main routine."""
+    print(args)
     if args is None:
         args = sys.argv[1:]
 
@@ -53,4 +54,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

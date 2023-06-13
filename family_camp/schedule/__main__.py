@@ -7,13 +7,13 @@ Usage:
   schedule.py [-d|--debug] refresh
   schedule.py [-d|--debug] generate <outdir>
   schedule.py [-d|--debug] generate <timetable> <outdir>
-  schedule.py [-d|--debug] check <timetable>
+  schedule.py [-d|--debug] check <timetable> <outdir>
   schedule.py (-h | --help)
   schedule.py --version
 
 Arguments:
 
-  outdir         Directory to hold results.
+  outdir         Directory to hold results ("-" for stdout).
   timetable      A csv of an existing timetable.
 
 Options:
@@ -27,6 +27,7 @@ Options:
 import logging
 import sys
 import docopt
+from pathlib import Path
 
 from family_camp.schedule import generate_schedule, check_schedule
 
@@ -50,7 +51,9 @@ def main(args=None):
     if refresh or args['generate']:
         generate_schedule.run(refresh, args)
     elif args['check']:
-        check_schedule.run(args['<timetable>'])
+        check_schedule.run(
+            args['<timetable>'],
+            Path(args['<outdir>']) if args['<outdir>'] != "-" else None)
 
 
 if __name__ == "__main__":

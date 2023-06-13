@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import timedelta, datetime
 import logging
 import pickle
+from dataclasses import dataclass
 #import numpy
 
 try:
@@ -553,8 +554,20 @@ class MyHallOfFame(HallOfFame):
                 timetable = Individual(self[i], self.campers, self.sessions,
                                        summary_file=summary)
 
-                with open(os.path.join(self.dest, filename + "_timetable.txt"), 'w') as f:
-                    f.write(print_individual(timetable, self.campers))
+                status_out, inactive_out, campers_out, activites_out = print_individual(timetable, self.campers)
+
+                with open(os.path.join(self.dest, filename + "_status.txt"), 'w') as f:
+                    f.write(status_out)
+
+                with open(os.path.join(self.dest, filename + "_inactive.txt"), 'w') as f:
+                    f.write(inactive_out)
+
+                with open(os.path.join(self.dest, filename + "_campers.txt"), 'w') as f:
+                    f.write(campers_out)
+
+                with open(os.path.join(self.dest, filename + "_activites.txt"), 'w') as f:
+                    f.write(activites_out)
+
 
                 with open(os.path.join(self.dest, filename + ".csv"), 'w') as f:
                     f.write(timetable.export_cvs())
@@ -972,9 +985,69 @@ def gen_individual(seed_individual, toolbox):
 
 
 def print_individual(individual, campers):
-    out = ["Fitness = {}".format(individual.fitness(debug=True)),
-           "Goodness = {}\n\n".format(individual.goodness(campers, debug=True))]
+    status_out = ["Fitness = {}".format(individual.fitness(debug=True)),
+                  "Goodness = {}\n\n".format(individual.goodness(campers, debug=True))]
 
+
+    # Holder for output
+    inactive_out = []
+
+    # For each 1 hour slot, find the sessions that are running, then find any camper that is not doing any of them.
+    # find the days that the programme is running
+    start_days = sorted(set([_.start.date() for _ in individual.sessions]))
+    assert len(start_days) == 2, f"Wierd, the programme is not two days long: number of days == {len(start_days)}"
+
+    # A fake session class so that we can use the get_overlapping_sessions function.
+    @dataclass
+    class _Session:
+        start: datetime
+        end: datetime
+
+    # For each day on the programme
+    for day in start_days:
+
+        # Find the start and end of the activity sessions
+        earliest_start = min([_.start for _ in individual.sessions if _.start.date() == day])
+        latest_end = max([_.end for _ in individual.sessions if _.end.date() == day])
+
+        # Now create a list of hour segments that covers the time the activities are running.
+        hours = []
+        hour = earliest_start
+        while hour < latest_end:
+
+            # Look for any sessions that are active. We want to remove any hour slots that have no activites (e.g. lunchtime)
+            over_lapping_sessions = get_overlapping_sessions(
+                _Session(hour, hour + timedelta(minutes=59)),
+                individual.sessions)
+            if len(over_lapping_sessions):
+                hours.append(hour)
+            hour += timedelta(hours=1)
+
+        # We now have a list of hour slots for this day. Now we need for find anyone that is doing nothing at that time
+        for hour in hours:
+            active_sessions = get_overlapping_sessions(
+                _Session(hour, hour + timedelta(minutes=59)),
+                individual.sessions)
+            active_campers = []
+            for active_session in active_sessions:
+                active_campers += individual.session_inst_map[active_session].campers
+
+            active_groups = sorted(set([_.group for _ in active_campers]))
+            inactive_campers = [_ for _ in campers if _ not in active_campers]
+            inactive_groups = sorted(set([_.group for _ in campers if _.group not in active_groups]))
+
+            # Sometimes there are rouge groups with no name!
+            inactive_groups = [_ for _ in inactive_groups if _ is not ""]
+
+            inactive_out.append("{:<20}".format(hour.strftime(DATEFORMAT)))
+            for indx in range(0, len(inactive_groups), 2):
+                inactive_out.append("          {:<20} {:<20}".format(
+                    inactive_groups[indx],
+                    inactive_groups[indx+1] if len(inactive_groups) > indx+1 else ""))
+            inactive_out.append("\n")
+
+
+    out = []
     previous_f = None
     previous_i = None
     try:
@@ -996,7 +1069,9 @@ def print_individual(individual, campers):
     except Exception:
         pass
 
-    out.append("**********************************************************\n")
+    campers_out = out
+
+    out = []
 
     previous_a = None
     for a, s in sorted(individual.export_by_activity().items(), key=lambda _: _[0]):
@@ -1033,4 +1108,6 @@ def print_individual(individual, campers):
             ))
         # out.append('\n')
 
-    return "\n".join(out)
+    activites_out = out
+
+    return ["\n".join(_) for _ in [status_out, inactive_out, campers_out, activites_out]]

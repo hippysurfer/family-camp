@@ -46,7 +46,7 @@ TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2022 Family Camp"
+SUBTITLE = "2023 Family Camp"
 
 ACTS = {
     'Archery (Map Ref 1)':
@@ -90,7 +90,8 @@ programme = [
     ['Saturday', [
         ['8.45am', 'Flag Break (announcement of badge competition winner)'],
         ['9.30am-4.30pm', 'Activities'],
-        ['4.00pm-7.00pm', 'Circus Skills'],
+        ['4.00pm-7.00pm', 'Dinosaur and Prehistoric Show'],
+        ['4.00pm-7.00pm', 'Silent Disco'],
         ['5.00pm-6.30pm', 'Hog Roast'],
         ['6.00pm', 'Ice Cream Van'],
         ['7.15pm', 'Flag down'],
@@ -468,12 +469,21 @@ def gen_story(doc):
     e.append(para('There is also a site shop that will be open at times over the weekend '
                   'that sells camp site badges, woggles and some toys etc. NOTE: the site shop does not sell food.'))
 
-    e.append(subtitle('Circus Skills'))
-    e.append(para('Between 4pm and 7pm on Saturday we will have the opportunity to partake in a Circus Skills '
-                  'workshop provided by Shooting Stars Circus Skills. Get ready to channel your inner juggler! Please '
-                  'do not remove any of the equipment from the performance area. The venue for this activity will be '
-                  'weather dependant and will be announced at flag break.'
+    e.append(subtitle('Dinosaur and Prehistoric Show'))
+    e.append(para('Enjoy a fun filled presentation of live animals and discover their prehistoric relatives '
+                  'Live animals will be available to interactive with in this exciting and fascinating show. '
+                  'Beware, there may be spiders! The venue for this event will be weather dependant and will '
+                  'be announced at flag break.'
                   ))
+
+    e.append(subtitle('Silent Disco'))
+    e.append(para('New for 2023! Come along and bop till you drop at our Silent Disco. Three channels of music '
+                  'will cator for all tastes from kiddies tunes through Pop to Dance Music. So it your musical '
+                  'taste is Baby Shark, Rock Lobster or Big Fish, Little Fish you will find the groove '
+                  "you need in the 7th's dance palace. P.S. Dad Dancing is encouraged."
+                  ))
+    e.append(para('The silent disco will be in the courtyard buildings.'))
+    e.append(para('Please do not remove the headphones from the disco.'))
 
     e.append(subtitle('Bikes'))
 

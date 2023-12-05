@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 def run(timetable, out_dir: Union[Path, None]):
 
-    (acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
+    (acts, sessions, campers, data_cache) = get_source_data()
 
     with open(timetable) as timetable:
         individual = individual_from_list(

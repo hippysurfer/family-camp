@@ -165,7 +165,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=level)
     log.debug("Debug On\n")
 
-    (acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
+    (acts, sessions, campers, data_cache) = get_source_data()
 
     csv_file = args['FILE']
     out_dir = args['DIR']

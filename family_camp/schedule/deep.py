@@ -606,19 +606,13 @@ class MyHallOfFame(HallOfFame):
 # print(individual)
 
 
-def get_source_data(use_cache=True):
+def get_source_data():
     """Return the activities, sessions and campers."""
-    if use_cache:  # and os.path.exists(CACHE):
-        (acts_wks, session_wks, campers_wks) = pickle.load(
-            open(CACHE, 'rb'))
-    else:
-        gc = google.conn()
-        spread = gc.open_by_key("1ubsK3QGPEzIIlwPtBsSVi8f9fHn3NpLKmdF5PSEf6VU")
-        acts_wks = spread.worksheet("Activities for schedule").get_all_values()
-        session_wks = spread.worksheet("Sessions for schedule").get_all_values()
-        campers_wks = spread.worksheet("Activities").get_all_values()
+    if not os.path.exists(CACHE):
+        log.error("Cache file ({CACHE}) does not exist. Run schedule refresh first.")
+        raise Exception("Cache file ({CACHE}) does not exist. Run schedule refresh first.")
 
-        pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
+    (acts_wks, session_wks, campers_wks) = pickle.load(open(CACHE, 'rb'))
 
     def strpdelta(s):
         hr, min, sec = map(float, s.split(':'))

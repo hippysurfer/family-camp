@@ -32,22 +32,18 @@ log = logging.getLogger(__name__)
 DATEFORMAT = "%a %H:%M"
 CACHE = ".cache.pickle"
 
-try:
-    (acts, sessions, campers, data_cache) = get_source_data(use_cache=True)
-except FileNotFoundError:
-    (acts, sessions, campers, data_cache) = get_source_data(use_cache=False)
-
-toolbox = base.Toolbox()
-
-creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
-creator.create("Individual", list, fitness=creator.FitnessMin)
-
-
 def mycopy(old):
     new = old.__class__(old[:])
     new.fitness = deepcopy(old.fitness)
     return new
 
+
+toolbox = base.Toolbox()
+
+(acts, sessions, campers, data_cache) = get_source_data()
+
+creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
+creator.create("Individual", list, fitness=creator.FitnessMin)
 
 toolbox.register("clone", mycopy)
 toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
@@ -66,12 +62,7 @@ toolbox.register("evaluate", partial(evaluate, campers=campers,
 toolbox.register("map", futures.map)
 
 
-def run(refresh, args):
-    if refresh:
-        log.info('Fetching fresh data.')
-        get_source_data(use_cache=False)
-        log.info('Done. Now run "generate".')
-        sys.exit(0)
+def run(args):
 
     if args['<timetable>']:
         log.info('Reading seed individual from {}.'.format(args['<timetable>']))

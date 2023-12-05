@@ -290,7 +290,7 @@ class Individual:
             if debug:
                 if len(split_families):
                     self.summary_file.write(
-                        "\n\n== Families split accross two sessions ==\n")
+                        "\n\n== Families split across two sessions ==\n")
                 for g in split_families:
                     self.summary_file.write(
                         "{} Found in other session: {}\n".format(
@@ -549,7 +549,7 @@ class MyHallOfFame(HallOfFame):
         dt = datetime.strftime(datetime.now(), "%Y_%m_%d_%H_%M")
 
         for i in range(0, min(num_timetables, len(self))):
-            filename = "{} - {}".format(dt, i)
+            filename = "{}-{}".format(dt, i)
             print(f"Writing to: {os.path.join(self.dest, filename)}-XXXXXXXXX")
 
             with open(os.path.join(self.dest, filename + "_summary.txt"), "w") as summary:
@@ -575,35 +575,6 @@ class MyHallOfFame(HallOfFame):
 
                 with open(os.path.join(self.dest, filename + ".csv"), 'w') as f:
                     f.write(timetable.export_cvs())
-
-
-# import random
-# from datetime import timedelta
-# from datetime import datetime
-
-
-# BMX = Activity('BMX',timedelta(minutes=30),2)
-# Caving = Activity('Caving',timedelta(minutes=30),10)
-# Maze = Activity('Maze',timedelta(minutes=30),10)
-
-# campers = [Camper('camper1','group1',[BMX, Caving], []),
-#            Camper('camper2','group1',[BMX,], [Maze, Caving]),
-#            Camper('camper3','group2',[Caving,], [BMX]),]
-
-
-# s = [(BMX, datetime(2014,7,5,9,0)),
-#      (BMX, datetime(2014,7,5,10,0)),
-#      (BMX, datetime(2014,7,5,11,0)),
-#      (Caving, datetime(2014,7,5,9,0)),
-#      (Caving, datetime(2014,7,5,10,0)),
-#      (Maze, datetime(2014,7,5,9,0)),
-#      (Maze, datetime(2014,7,5,10,0))]
-
-# sessions = [Session(_[0],_[1]) for _ in s]
-
-# timetable = [random.choice([True,False]) for _ in range(0,len(campers)*len(sessions))]
-# individual = Individual(timetable, campers, sessions)
-# print(individual)
 
 
 def get_source_data():

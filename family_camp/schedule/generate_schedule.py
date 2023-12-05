@@ -40,26 +40,31 @@ def mycopy(old):
 
 toolbox = base.Toolbox()
 
-(acts, sessions, campers, data_cache) = get_source_data()
+def setup_toolbox(acts, sessions, campers, data_cache, toolbox_, creator_):
 
-creator.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
-creator.create("Individual", list, fitness=creator.FitnessMin)
+    creator_.create("FitnessMin", base.Fitness, weights=(5.0, -2.0, -1.0))
+    creator_.create("Individual", list, fitness=creator_.FitnessMin)
 
-toolbox.register("clone", mycopy)
-toolbox.register("individual", partial(gen_individual, toolbox=toolbox),
-                 gen_seed_individual(campers, sessions, data_cache,
-                                     creator=creator.Individual))
-toolbox.register(
-    "population", tools.initRepeat, list, toolbox.individual, n=2000)
-toolbox.register("mate", partial(mate, campers=campers,
-                                 sessions=sessions))
-toolbox.register("mutate", partial(mutate, campers=campers,
-                                   sessions=sessions,
-                                   data_cache=data_cache, toolbox=toolbox))
-toolbox.register("select", tools.selTournament, tournsize=20)
-toolbox.register("evaluate", partial(evaluate, campers=campers,
+    toolbox_.register("clone", mycopy)
+    toolbox_.register("individual", partial(gen_individual, toolbox=toolbox),
+                     gen_seed_individual(campers, sessions, data_cache,
+                                         creator=creator_.Individual))
+    toolbox_.register(
+        "population", tools.initRepeat, list, toolbox.individual, n=2000)
+    toolbox_.register("mate", partial(mate, campers=campers,
                                      sessions=sessions))
-toolbox.register("map", futures.map)
+    toolbox_.register("mutate", partial(mutate, campers=campers,
+                                       sessions=sessions,
+                                       data_cache=data_cache, toolbox=toolbox))
+    toolbox_.register("select", tools.selTournament, tournsize=20)
+    toolbox_.register("evaluate", partial(evaluate, campers=campers,
+                                         sessions=sessions))
+    toolbox_.register("map", futures.map)
+
+    return acts, sessions, campers, data_cache
+
+(acts, sessions, campers, data_cache) = get_source_data()
+setup_toolbox(acts, sessions, campers, data_cache, toolbox, creator)
 
 
 def run(args):

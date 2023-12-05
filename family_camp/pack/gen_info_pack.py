@@ -41,12 +41,13 @@ timetable_from_list = deep.timetable_from_list
 
 W, H = A4
 TITLE_FONT = "Helvetica-Bold"
-TITLE_SIZE = 16
+BASE_FONT_SIZE = 10
+TITLE_SIZE = BASE_FONT_SIZE + 6
 TH_LOGO = "7thlogo.png"
 MAP_FILE = "map.png"
 
 TITLE = "7th Lichfield Scout Group"
-SUBTITLE = "2023 Family Camp"
+SUBTITLE = "2024 Family Camp"
 
 ACTS = {
     'Archery (Map Ref 1)':
@@ -90,9 +91,9 @@ programme = [
     ['Saturday', [
         ['8.45am', 'Flag Break (announcement of badge competition winner)'],
         ['9.30am-4.30pm', 'Activities'],
-        ['4.30pm-7.00pm', 'Dinosaur and Prehistoric Show'],
+        ['4.30pm-7.00pm', '???????????????????????????????????'],
         ['4.30pm-7.00pm', 'Silent Disco'],
-        ['5.00pm-6.30pm', 'Hog Roast'],
+        ['5.00pm-6.30pm', 'BBQ'],
         ['6.00pm', 'Ice Cream Van'],
         ['7.15pm', 'Flag down'],
         ['7.30pm', 'Campfire (marquee if wet)'],
@@ -133,7 +134,7 @@ styles = {
     'default': ParagraphStyle(
         'default',
         fontName='Times-Roman',
-        fontSize=10,
+        fontSize=BASE_FONT_SIZE,
         leading=12,
         leftIndent=0,
         rightIndent=0,
@@ -162,7 +163,7 @@ styles['Title'] = ParagraphStyle(
     'Title',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=22,
+    fontSize=BASE_FONT_SIZE+10,
     spaceBefore=0,
     spaceAfter=6,
     leading=30,
@@ -173,10 +174,10 @@ styles['Title2'] = ParagraphStyle(
     'Title2',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=18,
-    spaceBefore=0,
-    spaceAfter=6,
-    leading=30,
+    fontSize=BASE_FONT_SIZE+6,
+    spaceBefore=BASE_FONT_SIZE,
+    spaceAfter=BASE_FONT_SIZE*2,
+    leading=BASE_FONT_SIZE,
     alignment=TA_CENTER,
     textColor=colors.purple,
 )
@@ -184,9 +185,9 @@ styles['Subtitle'] = ParagraphStyle(
     'SubTitle',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=14,
-    spaceBefore=4,
-    spaceAfter=1,
+    fontSize=BASE_FONT_SIZE+2,
+    spaceBefore=BASE_FONT_SIZE+2,
+    spaceAfter=0,
     leading=24,
     alignment=TA_LEFT,
     textColor=colors.purple,
@@ -195,7 +196,7 @@ styles['ActName'] = ParagraphStyle(
     'ActName',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=12,
+    fontSize=BASE_FONT_SIZE+2,
     spaceBefore=3,
     spaceAfter=1,
     leftIndent=1 * cm,
@@ -207,7 +208,7 @@ styles['ActDesc'] = ParagraphStyle(
     'ActDesc',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=10,
+    fontSize=BASE_FONT_SIZE-2,
     spaceBefore=0,
     spaceAfter=1,
     leftIndent=2 * cm,
@@ -220,11 +221,11 @@ styles['Body'] = ParagraphStyle(
     'Body',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=11,
+    fontSize=BASE_FONT_SIZE,
     spaceBefore=2,
-    spaceAfter=2,
+    spaceAfter=4,
     leftIndent=0.75 * cm,
-    leading=14,
+    leading=BASE_FONT_SIZE+1,
     alignment=TA_JUSTIFY,
     textColor=colors.black,
 )
@@ -233,9 +234,9 @@ styles['BodySmall'] = ParagraphStyle(
     'BodySmall',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=9,
+    fontSize=BASE_FONT_SIZE-3,
     spaceBefore=2,
-    spaceAfter=2,
+    spaceAfter=3,
     leftIndent=0.75 * cm,
     leading=14,
     alignment=TA_JUSTIFY,
@@ -246,7 +247,7 @@ styles['TBody'] = ParagraphStyle(
     'TBody',
     parent=styles['default'],
     fontName='Helvetica-Bold',
-    fontSize=12,
+    fontSize=BASE_FONT_SIZE,
     spaceBefore=2,
     spaceAfter=2,
     leftIndent=0,
@@ -478,7 +479,7 @@ def gen_story(doc):
                   ))
 
     e.append(subtitle('Silent Disco'))
-    e.append(para('New for 2023! Come along and bop till you drop at our Silent Disco. Three channels of music '
+    e.append(para('Come along and bop till you drop at our Silent Disco. Three channels of music '
                   'will cater for all tastes from kiddies tunes through Pop to Dance Music. So it your musical '
                   'taste is Baby Shark, Rock Lobster or Big Fish, Little Fish you will find the groove '
                   "you need in the 7th's dance palace. P.S. Dad Dancing is encouraged."

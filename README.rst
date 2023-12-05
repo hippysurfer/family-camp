@@ -32,3 +32,4 @@ and then recheck it against the downloaded data.
 
 <outdir> must already exist. The updated schedule results will be
 created in <outdir>.
+

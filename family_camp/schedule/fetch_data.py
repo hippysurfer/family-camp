@@ -18,6 +18,8 @@ Options:
 """
 import logging
 import docopt
+from itertools import takewhile, dropwhile
+
 
 
 log = logging.getLogger(__name__)
@@ -37,6 +39,22 @@ log = logging.getLogger(__name__)
 
 CACHE = ".cache.pickle"
 
+def remove_title_rows(table, marker):
+    for row in dropwhile(lambda x: x[0] == marker,
+                       dropwhile(lambda x: x[0] != marker,
+                                 table)):
+        yield row
+
+def remove_bad_rows(table):
+    """We know that valid rows will always have something in the first column.
+    This removes any leading or tailing rows that have empty first columns."""
+
+    for row in takewhile(lambda x: x[0] != "",
+                       dropwhile(lambda x: x[0] == "",
+                                 table)):
+        yield row
+
+
 def fetch(google_doc_id):
     log.info('Fetching fresh data.')
 
@@ -47,7 +65,13 @@ def fetch(google_doc_id):
     session_wks = spread.worksheet("Sessions for schedule").get_all_values()
     campers_wks = spread.worksheet("Activities").get_all_values()
 
+    # Do a bit of tidying up - remove blank rows and headers
+    acts_wks = list(remove_bad_rows(remove_title_rows((_ for _ in acts_wks), "Activity")))
+    session_wks = list(remove_bad_rows(remove_title_rows((_ for _ in session_wks), "Activity")))
+    campers_wks = list(remove_bad_rows(remove_title_rows((_ for _ in campers_wks), "Group Ref")))
+
     log.info(f'Activities: {len(acts_wks)}, Sessions: {len(session_wks)}, Campers: {len(campers_wks)}')
+
 
     log.info(f'Saving to cache: "{CACHE}"')
     pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))

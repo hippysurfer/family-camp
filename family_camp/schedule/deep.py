@@ -589,33 +589,14 @@ def get_source_data():
         hr, min, sec = map(float, s.split(':'))
         return timedelta(hours=hr, minutes=min, seconds=sec)
 
-    # Deal with the problem of non-empty rows in the worksheet before and after the
-    # end of the table that we are interested in.
-    raw_acts = []
-    start = False
-    for act in acts_wks:
-        if not start:
-            if act[0] == '':
-                continue
-            else:
-                start = True
-                raw_acts.append(act)
-        else:
-            if act[0] == '':
-                break
-            else:
-                raw_acts.append(act)
-
-    raw_acts = raw_acts[1:]  # Discard the header row
-
     acts = {_[0]: Activity(_[0], strpdelta(_[1]), _[2], _[3])
-            for _ in raw_acts if _[0] != ''}
+            for _ in acts_wks if _[0] != ''}
 
     # Deal with the problem of non-empty rows in the worksheet after the
     # end of the table that we are interested in.
     # We know that we are only interested in rows that have something in
     # the first column.
-    session_wks = [_ for _ in session_wks if _[0] != '']
+    #ession_wks = [_ for _ in session_wks if _[0] != '']
 
     sessions = [Session(acts[_[0]],
                         _[1],
@@ -1021,7 +1002,7 @@ def print_individual(individual, campers):
             inactive_groups = sorted(set([_.group for _ in campers if _.group not in active_groups]))
 
             # Sometimes there are rouge groups with no name!
-            inactive_groups = [_ for _ in inactive_groups if _ is not ""]
+            inactive_groups = [_ for _ in inactive_groups if _ != ""]
 
             inactive_groups_out.append("{:<20}".format(hour.strftime(DATEFORMAT)))
             for indx in range(0, len(inactive_groups), 2):

@@ -105,11 +105,15 @@ def run(refresh, args):
     t.daemon = True
     t.start()
 
-    (timetables, log_) = algorithms.eaSimple(
-        toolbox.population(),
-        toolbox, cxpb=0.2, mutpb=0.5, ngen=30000,
-        stats=stats,
-        halloffame=hof,
-        verbose=True)
-
-    hof.dump_to_dir()
+    try:
+        (timetables, log_) = algorithms.eaSimple(
+            toolbox.population(),
+            toolbox, cxpb=0.2, mutpb=0.5, ngen=30000,
+            stats=stats,
+            halloffame=hof,
+            verbose=True)
+    except Exception as E:
+        raise E
+    finally:
+        # Try to dump the current timetable what ever happens.
+        hof.dump_to_dir()

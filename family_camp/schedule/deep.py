@@ -61,11 +61,13 @@ class Activity:
 
 class Camper:
 
-    def __init__(self, name, group, priorities, others):
+    def __init__(self, name, group, priorities, others, age, age_group):
         self.name = name
         self.group = group
         self.priorities = priorities
         self.others = others
+        self.age = age
+        self.age_group = age_group
 
     def __str__(self):
         return "{}/{}".format(self.group, self.name)
@@ -554,12 +556,12 @@ class MyHallOfFame(HallOfFame):
                 timetable = Individual(self[i], self.campers, self.sessions,
                                        summary_file=summary)
 
-                status_out, inactive_out, campers_out, activites_out = print_individual(timetable, self.campers)
+                status_out, inactive_out, campers_out, activites_out, inactive_adult_campers_out = print_individual(timetable, self.campers)
 
                 with open(os.path.join(self.dest, filename + "_status.txt"), 'w') as f:
                     f.write(status_out)
 
-                with open(os.path.join(self.dest, filename + "_inactive.txt"), 'w') as f:
+                with open(os.path.join(self.dest, filename + "_inactive_groups.txt"), 'w') as f:
                     f.write(inactive_out)
 
                 with open(os.path.join(self.dest, filename + "_campers.txt"), 'w') as f:
@@ -568,6 +570,8 @@ class MyHallOfFame(HallOfFame):
                 with open(os.path.join(self.dest, filename + "_activites.txt"), 'w') as f:
                     f.write(activites_out)
 
+                with open(os.path.join(self.dest, filename + "_inactive_campers.txt"), 'w') as f:
+                    f.write(inactive_adult_campers_out)
 
                 with open(os.path.join(self.dest, filename + ".csv"), 'w') as f:
                     f.write(timetable.export_cvs())
@@ -609,7 +613,7 @@ def get_source_data(use_cache=True):
             open(CACHE, 'rb'))
     else:
         gc = google.conn()
-        spread = gc.open_by_key("1RHqzyfLj50nL3UYr88K5mC8euTHfuOeT2rU7T0SdmYg")
+        spread = gc.open_by_key("1ubsK3QGPEzIIlwPtBsSVi8f9fHn3NpLKmdF5PSEf6VU")
         acts_wks = spread.worksheet("Activities for schedule").get_all_values()
         session_wks = spread.worksheet("Sessions for schedule").get_all_values()
         campers_wks = spread.worksheet("Activities").get_all_values()
@@ -658,7 +662,8 @@ def get_source_data(use_cache=True):
                        for a in _[8].split(',') if a.strip() != ''] +
                       [acts[c] for c in COMPULSARY_ACTIVITIES],
                       [acts[b.strip()] for b in _[9].split(',')
-                       if b.strip() != '']) for _ in campers_wks[1:]]
+                       if b.strip() != ''],
+                      _[4], _[5]) for _ in campers_wks[1:]]
 
     class Cache:
         pass
@@ -990,7 +995,8 @@ def print_individual(individual, campers):
 
 
     # Holder for output
-    inactive_out = []
+    inactive_groups_out = []
+    inactive_adult_campers_out = []
 
     # For each 1 hour slot, find the sessions that are running, then find any camper that is not doing any of them.
     # find the days that the programme is running
@@ -1034,17 +1040,30 @@ def print_individual(individual, campers):
 
             active_groups = sorted(set([_.group for _ in active_campers]))
             inactive_campers = [_ for _ in campers if _ not in active_campers]
+            inactive_adult_campers = sorted([_.name for _ in inactive_campers if _.age_group == "Adult (over 18 years)"])
+
+            inactive_adult_campers_out.append("{:<20}".format(hour.strftime(DATEFORMAT)))
+
+            for indx in range(0, len(inactive_adult_campers), 4):
+                inactive_adult_campers_out.append("          {:<20} {:<20} {:<20} {:<20}".format(
+                    inactive_adult_campers[indx],
+                    inactive_adult_campers[indx+1] if len(inactive_adult_campers) > indx+1 else "",
+                    inactive_adult_campers[indx + 2] if len(inactive_adult_campers) > indx + 2 else "",
+                    inactive_adult_campers[indx + 3] if len(inactive_adult_campers) > indx + 3 else "")
+                )
+            inactive_adult_campers_out.append("\n")
+
             inactive_groups = sorted(set([_.group for _ in campers if _.group not in active_groups]))
 
             # Sometimes there are rouge groups with no name!
             inactive_groups = [_ for _ in inactive_groups if _ is not ""]
 
-            inactive_out.append("{:<20}".format(hour.strftime(DATEFORMAT)))
+            inactive_groups_out.append("{:<20}".format(hour.strftime(DATEFORMAT)))
             for indx in range(0, len(inactive_groups), 2):
-                inactive_out.append("          {:<20} {:<20}".format(
+                inactive_groups_out.append("          {:<20} {:<20}".format(
                     inactive_groups[indx],
                     inactive_groups[indx+1] if len(inactive_groups) > indx+1 else ""))
-            inactive_out.append("\n")
+            inactive_groups_out.append("\n")
 
 
     out = []
@@ -1110,4 +1129,4 @@ def print_individual(individual, campers):
 
     activites_out = out
 
-    return ["\n".join(_) for _ in [status_out, inactive_out, campers_out, activites_out]]
+    return ["\n".join(_) for _ in [status_out, inactive_groups_out, campers_out, activites_out, inactive_adult_campers_out]]

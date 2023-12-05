@@ -90,12 +90,13 @@ programme = [
     ['Saturday', [
         ['8.45am', 'Flag Break (announcement of badge competition winner)'],
         ['9.30am-4.30pm', 'Activities'],
-        ['4.00pm-7.00pm', 'Dinosaur and Prehistoric Show'],
-        ['4.00pm-7.00pm', 'Silent Disco'],
+        ['4.30pm-7.00pm', 'Dinosaur and Prehistoric Show'],
+        ['4.30pm-7.00pm', 'Silent Disco'],
         ['5.00pm-6.30pm', 'Hog Roast'],
         ['6.00pm', 'Ice Cream Van'],
         ['7.15pm', 'Flag down'],
-        ['7.30pm', 'Campfire (marquee if wet)']
+        ['7.30pm', 'Campfire (marquee if wet)'],
+        ['9.30pm-10:30pm', 'Silent Disco (after campfire)']
     ]],
     ['Sunday', [
         ['9.00am', 'Flag Break'],
@@ -478,7 +479,7 @@ def gen_story(doc):
 
     e.append(subtitle('Silent Disco'))
     e.append(para('New for 2023! Come along and bop till you drop at our Silent Disco. Three channels of music '
-                  'will cator for all tastes from kiddies tunes through Pop to Dance Music. So it your musical '
+                  'will cater for all tastes from kiddies tunes through Pop to Dance Music. So it your musical '
                   'taste is Baby Shark, Rock Lobster or Big Fish, Little Fish you will find the groove '
                   "you need in the 7th's dance palace. P.S. Dad Dancing is encouraged."
                   ))

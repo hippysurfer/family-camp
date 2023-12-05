@@ -40,7 +40,7 @@ def run(timetable, out_dir: Union[Path, None]):
             list(csv.reader(timetable, delimiter=',')),
             campers, acts, sessions)
 
-    status_out, inactive_out, campers_out, activites_out = print_individual(
+    status_out, inactive_out, campers_out, activites_out, inactive_adult_campers_out = print_individual(
         Individual(individual, campers, sessions), campers)
 
     if out_dir is None:
@@ -51,7 +51,8 @@ def run(timetable, out_dir: Union[Path, None]):
     else:
         out_dir.mkdir(exist_ok=True)
         out_dir.joinpath("status.txt").write_text(status_out)
-        out_dir.joinpath("inactive.txt").write_text(inactive_out)
+        out_dir.joinpath("inactive_groups.txt").write_text(inactive_out)
+        out_dir.joinpath("inactive_campers.txt").write_text(inactive_adult_campers_out)
         out_dir.joinpath("campers.txt").write_text(campers_out)
         out_dir.joinpath("activites.txt").write_text(activites_out)
 

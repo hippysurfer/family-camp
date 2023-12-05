@@ -62,3 +62,7 @@ target/
 Archive/
 creds/
 
+venv/
+tmp/
+
+.cache*

@@ -20,7 +20,7 @@ First download the data
 Run the schedule
 ----------------
 
-```python -m scoop -n 8 ./schedule.py generate <outdir>```
+```python ./schedule.py generate <outdir>```
 
 Check a schedule
 ----------------
@@ -33,3 +33,9 @@ and then recheck it against the downloaded data.
 <outdir> must already exist. The updated schedule results will be
 created in <outdir>.
 
+
+PDF creation
+============
+
+
+for i in *.txt; do filename=$(basename $i); enscript "$i" --output=- | ps2pdf - > "${filename}.pdf"; pdfjam --nup 2x2 "${filename}.pdf" --outfile "${filename}_2x2.pdf"; done

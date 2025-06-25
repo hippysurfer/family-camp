@@ -71,7 +71,7 @@ def fetch(google_doc_id):
     campers_wks = list(remove_bad_rows(remove_title_rows((_ for _ in campers_wks), "Group Ref")))
 
     log.info(f'Activities: {len(acts_wks)}, Sessions: {len(session_wks)}, Campers: {len(campers_wks)}')
-
+    print(session_wks)
 
     log.info(f'Saving to cache: "{CACHE}"')
     pickle.dump((acts_wks, session_wks, campers_wks), open(CACHE, 'wb'))
@@ -79,7 +79,7 @@ def fetch(google_doc_id):
 
     log.info('Done. Now run "generate".')
 
-def main():
+def fetch_main():
     """The main routine."""
 
     args = docopt.docopt(__doc__, version='1.0')

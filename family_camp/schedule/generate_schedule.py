@@ -11,17 +11,18 @@ import numpy
 from deap.tools import Statistics
 
 # Work around a Python3.10 depreciation issue. Scoop has not caught up yet.
-try:
-    from scoop import futures
-except ImportError:
-    import collections.abc
-    #hyper needs the four following aliases to be done manually.
-    collections.Iterable = collections.abc.Iterable
-    collections.Mapping = collections.abc.Mapping
-    collections.MutableSet = collections.abc.MutableSet
-    collections.MutableMapping = collections.abc.MutableMapping
-    from scoop import futures
+# try:
+#     from scoop import futures
+# except ImportError:
+#     import collections.abc
+#     #hyper needs the four following aliases to be done manually.
+#     collections.Iterable = collections.abc.Iterable
+#     collections.Mapping = collections.abc.Mapping
+#     collections.MutableSet = collections.abc.MutableSet
+#     collections.MutableMapping = collections.abc.MutableMapping
+#     from scoop import futures
 
+import multiprocessing
 
 from .deep import *
 
@@ -59,12 +60,17 @@ def setup_toolbox(acts, sessions, campers, data_cache, toolbox_, creator_):
     toolbox_.register("select", tools.selTournament, tournsize=20)
     toolbox_.register("evaluate", partial(evaluate, campers=campers,
                                          sessions=sessions))
-    toolbox_.register("map", futures.map)
+    #toolbox_.register("map", futures.map)
 
+    pool = multiprocessing.Pool()
+    toolbox.register("map", pool.map)
     return acts, sessions, campers, data_cache
 
-(acts, sessions, campers, data_cache) = get_source_data()
-setup_toolbox(acts, sessions, campers, data_cache, toolbox, creator)
+try:
+    (acts, sessions, campers, data_cache) = get_source_data()
+    setup_toolbox(acts, sessions, campers, data_cache, toolbox, creator)
+except EOFError:
+    print("Can't load data. Probably fetching fresh.")
 
 
 def run(args):

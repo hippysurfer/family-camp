@@ -601,7 +601,7 @@ def get_source_data():
     sessions = [Session(acts[_[0]],
                         _[1],
                         datetime.strptime(_[2], "%d/%m/%Y %H:%M:%S"))
-                for _ in session_wks[1:]]
+                for _ in session_wks]
 
     campers = [Camper("{} {}".format(_[1], _[2]), _[0],
                       [acts[a.strip()]

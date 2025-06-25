@@ -1,6 +1,6 @@
 
-from family_camp.schedule.fetch_data import main
+from family_camp.schedule.fetch_data import fetch_main
 
 
 if __name__ == "__main__":
-    main()
+    fetch_main()

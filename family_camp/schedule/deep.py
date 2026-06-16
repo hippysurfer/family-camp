@@ -580,8 +580,8 @@ class MyHallOfFame(HallOfFame):
 def get_source_data():
     """Return the activities, sessions and campers."""
     if not os.path.exists(CACHE):
-        log.error("Cache file ({CACHE}) does not exist. Run schedule refresh first.")
-        raise Exception("Cache file ({CACHE}) does not exist. Run schedule refresh first.")
+        log.warning("Cache file ({CACHE}) does not exist. Run schedule refresh first.")
+        raise Exception("Cache file ({CACHE}) does not exist. Run schedule refresh first.")        
 
     (acts_wks, session_wks, campers_wks) = pickle.load(open(CACHE, 'rb'))
 

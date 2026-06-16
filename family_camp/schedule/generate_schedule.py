@@ -69,7 +69,7 @@ def setup_toolbox(acts, sessions, campers, data_cache, toolbox_, creator_):
 try:
     (acts, sessions, campers, data_cache) = get_source_data()
     setup_toolbox(acts, sessions, campers, data_cache, toolbox, creator)
-except EOFError:
+except Exception as exp:
     print("Can't load data. Probably fetching fresh.")
 
 

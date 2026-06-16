@@ -12,6 +12,15 @@ pip install -r requirements.txt
 Generating the Schedule
 =======================
 
+Setup the Spreadsheet
+---------------------
+
+The spreadsheet must have the following tabs:
+
+* "Activities for schedule"
+* "Sessions for schedule"
+* "Activities"
+
 First download the data
 -----------------------
 
@@ -37,5 +46,11 @@ created in <outdir>.
 PDF creation
 ============
 
+sudo dnf install enscript pdfjam
 
-for i in *.txt; do filename=$(basename $i); enscript "$i" --output=- | ps2pdf - > "${filename}.pdf"; pdfjam --nup 2x2 "${filename}.pdf" --outfile "${filename}_2x2.pdf"; done
+for i in *.txt
+do 
+    filename=$(basename $i)
+    enscript "$i" --output=- | ps2pdf - > "${filename}.pdf"
+    pdfjam --nup 2x2 "${filename}.pdf" --outfile "${filename}_2x2.pdf"
+done

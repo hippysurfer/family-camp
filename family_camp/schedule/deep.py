@@ -9,14 +9,7 @@ import logging
 import pickle
 from dataclasses import dataclass
 #import numpy
-
-try:
-    from . import google
-except FileNotFoundError:
-    print("Failed to load google module.")
-except ImportError:
-    import google
-
+#import family_camp.schedule.google_ as google
 
 from statistics import pvariance
 

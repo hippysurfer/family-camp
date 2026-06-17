@@ -18,24 +18,13 @@ Options:
 """
 import logging
 import docopt
-from itertools import takewhile, dropwhile
-
-
-
-log = logging.getLogger(__name__)
-
 import pickle
-
-try:
-    from . import google
-except FileNotFoundError:
-    print("Failed to load google module.")
-except ImportError:
-    import google
-
-import logging
+from itertools import takewhile, dropwhile
+import family_camp.schedule.google_ as google
 
 log = logging.getLogger(__name__)
+
+
 
 CACHE = ".cache.pickle"
 
@@ -94,4 +83,4 @@ def fetch_main():
 
 
 if __name__ == "__main__":
-    main()
+    fetch_main()

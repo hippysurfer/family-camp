@@ -198,11 +198,12 @@ class NumberedCanvas(canvas.Canvas):
         self.drawRightString(576, 24, page_text)
         self.restoreState()
 
+
 import os
 import re
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, A3, landscape
 from reportlab.platypus import (
     BaseDocTemplate, Paragraph, Spacer, Frame, 
     PageTemplate, Table, TableStyle, PageBreak
@@ -213,9 +214,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 DATEFORMAT = "%a %H:%M"
 
-# --- PART 1: A RADICALLY SIMPLIFIED CANVAS ---
+# --- PART 1: COMPACT VISUAL ANCHOR CANVAS ---
+
 class NumberedCanvas(canvas.Canvas):
-    """Simple canvas that only handles page counts and structural line decoration."""
+    """Two-pass canvas that handles page counts and draws clean structural lines."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._saved_page_states = []
@@ -229,50 +231,82 @@ class NumberedCanvas(canvas.Canvas):
         for state in self._saved_page_states:
             self.__dict__.update(state)
             
-            # Draw standard top line divider
+            doc = getattr(self, '_doctemplate', None)
+            page_w = doc.pagesize[0] if doc else 612
+            page_h = doc.pagesize[1] if doc else 792
+            cols_count = getattr(doc, 'cols_count', 2)
+            
+            # 1. Top Decorative Boundary Bar
             self.setStrokeColor(colors.HexColor("#CBD5E0"))
             self.setLineWidth(0.5)
-            self.line(36, 755, 576, 755) 
+            self.line(36, page_h - 37, page_w - 36, page_h - 37) 
             
-            # Draw standard center vertical line divider
+            # 2. Dynamic Columns Dividing Lines Placement
             self.setStrokeColor(colors.HexColor("#E2E8F0"))
-            self.line(306, 36, 306, 738) 
+            available_width = page_w - 72  
+            gap = 18
             
-            # Dynamic dynamic page numbering footer
+            col_width = (available_width - (gap * (cols_count - 1))) / cols_count
+            for i in range(1, cols_count):
+                divider_x = 36 + (i * col_width) + ((i - 1) * gap) + (gap / 2.0)
+                self.line(divider_x, 36, divider_x, page_h - 54)
+            
+            # 3. Dynamic Footer Running Page Number
             self.setFont("Helvetica", 8)
             self.setFillColor(colors.HexColor("#718096"))
-            self.drawRightString(576, 24, f"Page {self._pageNumber} of {num_pages}")
+            self.drawRightString(page_w - 36, 24, f"Page {self._pageNumber} of {num_pages}")
             
             super().showPage()
         super().save()
 
 
-# --- PART 2: COMPACT GRAPHICS DOCUMENT GENERATOR ---
-def render_to_pdf(data, output_filename):
-    """Generates the 2-column layout by natively flowing header styles."""
+# --- PART 2: THE COMPILER ENGINE LAYOUT CONTROLLER ---
+
+def render_to_pdf(data, output_filename, paper_size="a3", orientation="landscape"):
+    """Generates an optimized multi-column running layout configuration profile."""
     margin = 36 
     
+    if paper_size.lower() == "a3":
+        base_size = A3
+    else:
+        base_size = letter
+        
+    if orientation.lower() == "landscape":
+        pagesize = landscape(base_size)
+    else:
+        pagesize = base_size
+        
     doc = BaseDocTemplate(
         output_filename, 
-        pagesize=letter, 
+        pagesize=pagesize, 
         leftMargin=margin, rightMargin=margin, 
         topMargin=54, bottomMargin=margin
     )
     
-    col_width = (doc.width - 18) / 2
+    if paper_size.lower() == "a3" and orientation.lower() == "landscape":
+        cols_count = 4
+    else:
+        cols_count = 2
+        
+    doc.cols_count = cols_count  
     
-    frame1 = Frame(doc.leftMargin, doc.bottomMargin, col_width, doc.height, id='col1', leftPadding=0, rightPadding=0)
-    frame2 = Frame(doc.leftMargin + col_width + 18, doc.bottomMargin, col_width, doc.height, id='col2', leftPadding=0, rightPadding=0)
+    gap = 18
+    available_width = doc.width  
+    col_width = (available_width - (gap * (cols_count - 1))) / cols_count
     
-    # Simple layout setup. No custom logic arguments or hooks needed.
-    two_col_template = PageTemplate(id='two_columns', frames=[frame1, frame2])
+    frames = []
+    for i in range(cols_count):
+        frame_x = doc.leftMargin + (i * (col_width + gap))
+        frames.append(
+            Frame(frame_x, doc.bottomMargin, col_width, doc.height, id=f'col{i}', leftPadding=0, rightPadding=0)
+        )
+    
+    two_col_template = PageTemplate(id='multi_columns', frames=frames)
     doc.addPageTemplates([two_col_template])
     
     styles = getSampleStyleSheet()
     
-    # NEW: Simple header style positioned to sit right above the decoration line
     running_header_style = ParagraphStyle('RunHead', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=colors.HexColor("#718096"), spaceBefore=-20, spaceAfter=15, keepWithNext=True)
-    
     title_style = ParagraphStyle('ActTitle', fontName='Helvetica-Bold', fontSize=11, leading=14, textColor=colors.HexColor("#1A365D"), spaceBefore=10, spaceAfter=2, keepWithNext=True)
     time_style = ParagraphStyle('SessTime', fontName='Helvetica-BoldOblique', fontSize=9, leading=11, textColor=colors.HexColor("#4A5568"), spaceAfter=3, keepWithNext=True)
     name_style = ParagraphStyle('CamperName', fontName='Helvetica', fontSize=8.5, leading=10, textColor=colors.HexColor("#2D3748"), leftIndent=10)
@@ -293,7 +327,6 @@ def render_to_pdf(data, output_filename):
         else:
             is_first_activity = False
             
-        # The running header simply starts the new page flow
         story.append(Paragraph(f"ACTIVITY: {act.upper()}", running_header_style))
         story.append(Paragraph(act.upper(), title_style))
         for sess in sessions:
@@ -302,7 +335,7 @@ def render_to_pdf(data, output_filename):
                 story.append(Paragraph(camper, name_style))
             story.append(Paragraph(f"Total in Session: {len(sess['campers'])}", meta_style))
 
-        # SECTION 2: Individual Camper / Family Schedules
+    # SECTION 2: Individual Camper / Family Schedules
     if data.get("by_family"):
         story.append(PageBreak())  
         story.append(Paragraph("SCHEDULES: INDIVIDUAL CAMPERS", running_header_style))
@@ -315,19 +348,14 @@ def render_to_pdf(data, output_filename):
             Paragraph("<b>Camper</b>", table_header_style)
         ]]
         
-        # Track active row indices that contain data for clean zebra shading
         data_row_indices = []
-        # Track the index of the first spacer row to draw the separator line on
         line_row_indices = []
         
         prev_f, prev_t, prev_l, prev_c = None, None, None, None
         for entry in data["by_family"]:
-            # If the family group changes, inject two blank spacer rows
             if prev_f is not None and entry['family'] != prev_f:
                 table_data.append([Paragraph("", table_cell_style)] * 4)
-                # Save this index—we will draw a light line under this first blank row
-                line_row_indices.append(len(table_data) - 1)
-                
+                line_row_indices.append(len(table_data) - 1) 
                 table_data.append([Paragraph("", table_cell_style)] * 4)
                 
             f_val = entry['family'] if entry['family'] != prev_f else ''
@@ -356,11 +384,9 @@ def render_to_pdf(data, output_filename):
             ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor("#CBD5E0")),
         ]
         
-        # Inject the light horizontal line right in the middle of the family gap
         for line_row in line_row_indices:
             t_styles.append(('LINEBELOW', (0, line_row), (-1, line_row), 0.5, colors.HexColor("#E2E8F0")))
         
-        # Zebra stripe alternate rows, ignoring the blank spacing rows completely
         for step, row_idx in enumerate(data_row_indices):
             if step % 2 == 1:
                 t_styles.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor("#F7FAFC")))
@@ -370,7 +396,6 @@ def render_to_pdf(data, output_filename):
         family_table.setStyle(TableStyle(t_styles))
         story.append(family_table)
         story.append(Spacer(1, 10))
-
 
     # SECTION 3: Inactive Adults
     if data.get("inactive_adults"):
@@ -395,6 +420,8 @@ def render_to_pdf(data, output_filename):
             story.append(Spacer(1, 4))
 
     doc.build(story, canvasmaker=NumberedCanvas)
+
+
 
 
 # --- PART 3: REFACTORED WRAPPER SYSTEM ---

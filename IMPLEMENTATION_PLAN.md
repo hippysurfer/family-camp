@@ -38,7 +38,7 @@ order, with a git commit after every step whose tests pass.
   `cd family_camp2 && python -m venv .venv && source .venv/bin/activate &&
   pip install -e ".[dev]"`. Every step after Step 1 assumes this
   environment is active and tests are run with `pytest` from inside
-  `family_camp2/`.
+  `family_camp2/`. Use /usr/local/opt/python3/bin/python3 to make the virtual env.
 - **No solver-specific dependency until it's needed.** `ortools` is only
   added to `pyproject.toml` in Step 12; nothing before that needs it.
   Everything else uses only the standard library plus `pytest` (and
@@ -92,7 +92,7 @@ family_camp2/
 
 ## 2. Step list
 
-### - [ ] Step 1: Project scaffold
+### - [x] Step 1: Project scaffold
 
 **Goal**: A pip-installable, empty-but-real package with a working test
 runner and a CLI stub that already exposes the `--solver` argument shape

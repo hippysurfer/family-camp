@@ -1,0 +1,306 @@
+# Family Camp Scheduling Engine — Requirements
+
+## 0. Purpose of this document
+
+This document specifies requirements for a ground-up rewrite of the **core
+scheduling engine** for Family Camp: the component that takes camper
+registration/preference data and produces a timetable assigning campers to
+activity sessions.
+
+It is intentionally **solver-agnostic** — it describes *what* a correct and
+good schedule is, and what the system must do, without assuming a
+genetic algorithm, constraint solver, MILP, heuristic, or any other
+technique. It is meant to be used as the basis for generating and comparing
+several candidate design/solver approaches.
+
+Requirements are numbered (`FR-n` functional, `NFR-n` non-functional) so
+later design documents can reference them directly.
+
+## 1. Scope
+
+### 1.1 In scope
+
+- Consuming camper, family, activity, and session data (see §3) and
+  producing a timetable: an assignment of campers to specific activity
+  sessions.
+- Determining whether the input data (or any candidate timetable, however
+  produced) satisfies the rules that define a correct schedule (§4.1), and
+  scoring how *good* it is against the softer goals (§4.2).
+- Reporting, clearly and specifically, where a schedule falls short — both
+  during generation and when evaluating an arbitrary candidate timetable.
+- Producing a structured, unambiguous output that other tools (printing,
+  per-family exports, manual review) can consume.
+
+### 1.2 Explicitly out of scope (for this document)
+
+- **Fetching/authenticating against Google Sheets.** The existence of
+  camper/activity/session data conforming to the contract in §3 is treated
+  as a **prerequisite** — a solved problem supplied by an existing or future
+  upstream process. This document does not specify how that data arrives.
+- **Printing/rendering** (PDF/text output, pagination, page layout, per-family
+  info packs).
+- **Manual editing workflow** (hand-tweaking a generated schedule in a
+  spreadsheet/CSV and re-importing it, diffing against a previous run, etc.).
+- Camp registration, payment, or booking-form automation.
+
+These exclusions are about this rewrite's scope, not a judgement that they
+are unimportant — they are separate concerns with their own requirements to
+be defined later, and coupling them to the scheduling engine's design would
+narrow the solver options unnecessarily.
+
+## 2. Glossary
+
+| Term | Meaning |
+|---|---|
+| **Camper** | An individual attending camp (child or adult) who may be assigned to sessions. |
+| **Family / Group** | A set of campers (typically a household) who registered together. Membership is given in the input data, not inferred. |
+| **Activity** | A named thing campers can do (e.g. "Archery"), with a duration and an occupancy range. An activity may run multiple times across the weekend. |
+| **Session** | A single scheduled occurrence of an activity: one activity, one start time, one (derived) end time. Distinct sessions of the same activity are independent — filling one does not fill another. |
+| **Priority activity** | An activity a camper has stated they must/most want to do. |
+| **Optional activity** | An activity a camper has stated they'd like to do if possible, but is not essential. |
+| **Compulsory activity** | An activity that, if designated as such, every camper must attend one session of (e.g. a camp-wide meal). Distinct from a camper's own priority list. |
+| **Assignment** | A single (camper, session) pairing. |
+| **Timetable / Schedule** | The complete set of assignments for all campers across the weekend. |
+| **Clash / overlap** | Two sessions whose time ranges intersect. |
+| **Feasible schedule** | A timetable satisfying every hard constraint in §4.1. |
+
+## 3. Input data contract (prerequisite)
+
+The engine consumes three collections, already extracted from whatever
+upstream source (currently Google Sheets) into this shape. This document
+takes their availability as given; the exact serialisation (files, API,
+in-memory objects) is a design decision, not a requirement.
+
+### 3.1 Activity
+
+| Field | Meaning |
+|---|---|
+| Identifier/name | Unique name of the activity. |
+| Duration | Length of one session of this activity. |
+| Minimum occupancy | Fewest campers required for a session of this activity to be considered valid, if it runs at all. |
+| Maximum occupancy (capacity) | Most campers a single session of this activity can hold. |
+
+### 3.2 Session
+
+| Field | Meaning |
+|---|---|
+| Activity reference | Which activity this session is an occurrence of. |
+| Label | A human-readable identifier for this occurrence (e.g. distinguishing two parallel Saturday-morning slots). |
+| Start time | When this session begins. |
+| End time | Derived from start time + the activity's duration. |
+
+### 3.3 Camper
+
+| Field | Meaning |
+|---|---|
+| Identifier/name | Camper's name (or other unique identifier). |
+| Family/group identifier | Links this camper to others in the same family/group. |
+| Age / age group | Camper's age and/or an age-band classification. |
+| Priority activities | List of activities this camper must be scheduled into. |
+| Optional activities | List of activities this camper would like, but does not require. |
+
+### 3.4 Data-integrity requirements on input
+
+- **FR-1**: The engine MUST validate, before scheduling, that every activity
+  referenced by a camper's priority or optional list exists in the Activity
+  collection, and that every session references a valid activity. Invalid
+  references MUST be reported (which camper, which activity/session) rather
+  than causing a silent skip or an unhandled crash.
+- **FR-2**: The engine MUST treat family/group membership as given —
+  it does not need to infer or validate family relationships beyond
+  confirming the identifier is present and consistent.
+- **FR-3**: The engine MUST NOT assume a fixed number of days, sessions, or
+  activities in the input (no requirement that a camp is exactly two days
+  long, has exactly N activities, etc.).
+
+## 4. Functional requirements
+
+### 4.1 Hard constraints — a valid schedule MUST satisfy all of these
+
+- **FR-10 (No double-booking)**: No camper is assigned to two sessions
+  whose time ranges overlap.
+- **FR-11 (No family time-conflict)**: No two members of the same
+  family/group are assigned to two *different* sessions whose time ranges
+  overlap. (Family members may be assigned to the exact same session
+  together, or to different sessions that do not overlap in time — the
+  rule only forbids the family being pulled in two directions at once.)
+- **FR-12 (Occupancy limits)**: Any session that is used (has one or more
+  campers assigned) has a camper count between the activity's minimum and
+  maximum occupancy, inclusive. A session with zero campers assigned is not
+  subject to the minimum (it is simply not running).
+- **FR-13 (Priorities honoured)**: Every camper is assigned to a session of
+  each activity on their priority list.
+- **FR-14 (No unrequested activities)**: No camper is assigned to an
+  activity that appears on neither their priority nor their optional list.
+- **FR-15 (No duplicate activity)**: No camper is assigned to more than one
+  session of the same activity, unless the activity is explicitly marked as
+  repeatable (see open question OQ-6 — not currently supported).
+- **FR-16 (Compulsory activities)**: If any activities are designated
+  compulsory, every camper is assigned to exactly one session of each.
+  (Currently no activities are so designated, but the engine must support
+  the concept.)
+
+### 4.2 Soft objectives — a good schedule SHOULD optimise for these
+
+Exact relative weighting between these is a design/tuning decision, not
+fixed by this document, but the engine must have *some* way to express and
+adjust the trade-off (see NFR-4).
+
+- **FR-20 (Optional-request satisfaction)**: Maximise the number/fraction
+  of each camper's optional-activity requests that are met.
+- **FR-21 (Fairness across campers)**: Avoid a solution that systematically
+  favours or disadvantages campers based on how many optional activities
+  they requested (e.g. a camper who asked for one thing should not be
+  treated as "fully satisfied" any more easily than one who asked for five,
+  purely as an artefact of the scoring method).
+- **FR-22 (Even use of parallel sessions)**: Where an activity runs as
+  several parallel sessions, prefer spreading campers evenly across them
+  rather than filling one and leaving others near-empty, to the extent
+  this doesn't conflict with other objectives.
+- **FR-23 (Engagement / idle time — optional, see OQ-3)**: Prefer schedules
+  that minimise stretches where a camper (or family) has no assigned
+  activity, where this doesn't conflict with higher-priority objectives.
+
+### 4.3 Feasibility and best-effort behaviour
+
+- **FR-30**: Real inputs may be infeasible (e.g. total demand for an
+  activity's priority slots exceeds its total capacity across all
+  sessions). The engine MUST detect this and MUST NOT report a schedule as
+  fully valid if it isn't.
+- **FR-31**: When no fully feasible schedule exists, the engine MUST still
+  produce a best-effort schedule, and MUST report exactly which hard
+  constraints remain violated and for whom (e.g. "camper X did not get
+  priority activity Y — no session had capacity"), so an organiser can act
+  on it. Which violations to prefer leaving unresolved (if trade-offs are
+  required) is a design decision, but the trade-off actually made must be
+  visible in the report, not hidden inside an aggregate score.
+
+### 4.4 Validation / explainability
+
+- **FR-40**: The engine MUST be able to evaluate an arbitrary candidate
+  timetable — not just one it generated itself — against every hard
+  constraint in §4.1 and every objective in §4.2, and produce a structured
+  report (not just a single pass/fail flag). This is what lets any future
+  tool (manual review, regression tests, a different generator entirely)
+  check a schedule's validity without re-implementing the rules.
+- **FR-41**: Violation reports MUST identify the specific camper(s),
+  family/group, activity, and session(s) involved — enough detail to act
+  on without cross-referencing the raw input data by hand.
+
+### 4.5 Output contract
+
+- **FR-50**: The engine MUST produce a structured result describing, for
+  every session, which campers are assigned to it (equivalently, for every
+  camper, which sessions they're assigned to). This is the sole interface
+  downstream consumers (printing, exports, future manual-editing tools) rely
+  on — they must not need to know how the assignment was computed.
+- **FR-51**: The output MUST unambiguously identify *which* session
+  (specific activity occurrence/time) each assignment refers to — no
+  ambiguity between two sessions of the same activity.
+
+## 5. Non-functional requirements
+
+- **NFR-1 (Scale)**: The engine must handle input sizes consistent with an
+  actual Family Camp weekend (see OQ-1 for the need to confirm concrete
+  numbers from historical data — order of magnitude is hundreds of
+  campers, dozens of activities, on the order of a hundred sessions).
+- **NFR-2 (Turnaround time)**: The engine must produce a usable schedule
+  within a time budget compatible with iterative use during camp planning
+  — an organiser should be able to adjust input data and re-run without it
+  becoming a blocker (see OQ-2 for the specific budget to target).
+- **NFR-3 (Reproducibility)**: Given the same input and configuration, the
+  engine should produce comparable-quality results on repeated runs. If the
+  chosen approach involves randomness, there must be a way to reproduce a
+  specific run exactly (e.g. a seed) for debugging and regression testing.
+- **NFR-4 (Configurable trade-offs)**: The relative importance of the soft
+  objectives in §4.2 must be adjustable without code changes, since
+  organisers may want to retune priorities from year to year (e.g. "even
+  spread" mattering more some years than others).
+- **NFR-5 (No hardcoded shape assumptions)**: The engine must not assume a
+  fixed camp length, fixed activity count, or fixed session count (per
+  FR-3) — these vary year to year.
+- **NFR-6 (Isolation from I/O and presentation)**: The scheduling and
+  validation logic must be usable and testable independently of the
+  Google Sheets data-fetch step and of any printing/rendering code, so it
+  can be exercised with small synthetic fixtures in automated tests.
+- **NFR-7 (Testability)**: Core rules (§4.1–§4.2) must be expressible as
+  unit tests against small hand-built scenarios (a handful of campers,
+  activities, and sessions) so regressions are caught without needing a
+  full-scale run against real data.
+- **NFR-8 (Transparency over black-box scoring)**: Wherever the engine
+  reduces schedule quality to a score for internal use (e.g. to drive
+  search), it must still be able to expand that score back into the
+  human-readable violation/objective report required by FR-40 — a single
+  opaque number is not sufficient as the *only* output.
+
+## 6. Success criteria
+
+The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
+
+1. It produces a schedule satisfying every hard constraint in §4.1, or — if
+   that's not possible — a best-effort schedule with a precise account of
+   what couldn't be satisfied (FR-30/FR-31).
+2. The schedule performs well against the soft objectives in §4.2, in a way
+   whose trade-offs are visible and tunable, not hidden.
+3. Any generated or hand-supplied timetable can be independently validated
+   and explained via the same rules (FR-40/FR-41).
+4. The scheduling engine has no dependency on Google Sheets access or
+   printing code to run or to be tested.
+
+## 7. Open questions to confirm before/while designing
+
+- **OQ-1 (Scale)**: What are realistic upper bounds for number of campers,
+  activities, and sessions, based on historical camps? This materially
+  affects which solver approaches are viable.
+
+  [Answer:  number of campers - upper bound: 500
+            activities - upper bound: 30
+            sessions - upper bound: 50 ]
+- **OQ-2 (Turnaround budget)**: What's an acceptable wall-clock time for a
+  single generation run — seconds, minutes, or is an overnight batch run
+  acceptable?
+
+  [Answer:  24 hours]
+
+- **OQ-3 (Idle-time objective)**: Should minimising camper/family idle time
+  (FR-23) be a real optimisation objective, or is it sufficient (as today)
+  to just report idle slots for staffing awareness after the fact?
+
+  [Answer: it is sufficient to just report idle slots]
+
+- **OQ-4 (Objective priority)**: Is there an intended ranking between the
+  soft objectives (FR-20–FR-23) — e.g. is even spread (FR-22) more or less
+  important than optional-request satisfaction (FR-20) — or should this
+  simply be an adjustable weight with no fixed default preference?
+
+  [Answer: this need to be a ranking between the soft objectives]
+
+- **OQ-5 (Compulsory activities)**: Should this rewrite activate the
+  compulsory-activity concept (FR-16) from day one (e.g. shared meals), or
+  keep it supported-but-unused as it is currently?
+
+  [Answer: supported-but-unused]
+
+- **OQ-6 (Repeatable activities)**: Is there a real need for a camper to be
+  validly scheduled into the *same* activity more than once (e.g. an
+  open-session craft table), or does FR-15's "no duplicates" rule hold
+  universally?
+
+  [Answer: the "no duplicates" rule holds universally]
+
+- **OQ-7 (Partial-family scheduling)**: When a family can't all get the
+  same priority activity due to capacity, is splitting them across
+  non-overlapping sessions of it (rather than an overlapping clash)
+  acceptable, or should some activities require the whole family together
+  in the same session? Today's rules only forbid *overlapping* conflicts,
+  not different-but-non-overlapping sessions — confirm this matches intent.
+
+  [Answer: it is acceptable to split a family across non-overlapping sessions of the same priority activity, only if all sessions have at least one adult (over 18) from the family included.]
+
+- **OQ-8 (Age-based constraints)**: Camper age/age-group is captured in the
+  input (§3.3) but no age-based eligibility rule exists in the current
+  system. Should the rewrite support restricting an activity to an age
+  range/group, or is this out of scope?
+
+  [Answer: yes, there should be a way to express a lower bound age for an activity]
+  

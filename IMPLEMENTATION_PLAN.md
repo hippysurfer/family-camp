@@ -220,7 +220,7 @@ compared against the function's output.
 
 ---
 
-### - [ ] Step 5: Tier 1 & Tier 2 scoring, idle-time report
+### - [x] Step 5: Tier 1 & Tier 2 scoring, idle-time report
 
 **Goal**: The remaining objective tiers (FR-20/21/22) and the FR-23
 reporting-only idle-time feature (per OQ-3: report, don't optimise).

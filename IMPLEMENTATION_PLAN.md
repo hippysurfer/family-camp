@@ -187,7 +187,7 @@ returns all-empty.
 
 ---
 
-### - [ ] Step 4: Class 2 violation detection + Tier 0 scoring
+### - [x] Step 4: Class 2 violation detection + Tier 0 scoring
 
 **Goal**: The demand-driven rules that *can* conflict, plus the weighted
 Tier 0 score used for best-effort ranking (FR-30/31).

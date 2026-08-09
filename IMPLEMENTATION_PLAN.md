@@ -397,7 +397,7 @@ bad activity reference raises per FR-1.
 
 ---
 
-### - [ ] Step 11: CLI end-to-end wiring (with the fake solver)
+### - [x] Step 11: CLI end-to-end wiring (with the fake solver)
 
 **Goal**: Prove the full pipeline — load → solve → validate → report —
 works end to end, before either real solver exists.

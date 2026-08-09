@@ -369,7 +369,7 @@ raises similarly.
 
 ---
 
-### - [ ] Step 10: Legacy `.cache.pickle` loader
+### - [x] Step 10: Legacy `.cache.pickle` loader
 
 **Goal**: A path to run against **real** historical camp data without
 waiting on any new data-fetch work — reads the file format the existing,

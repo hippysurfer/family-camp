@@ -306,7 +306,7 @@ name raises.
 
 ---
 
-### - [ ] Step 8: Solver interface
+### - [x] Step 8: Solver interface
 
 **Goal**: A common shape both real solvers will implement, proven with a
 fake solver before either real one exists — de-risks the CLI wiring in

@@ -425,7 +425,7 @@ a clear message; `--out` writes a JSON file that round-trips.
 
 ---
 
-### - [ ] Step 12: CP-SAT — model builder with Class 1 structural constraints
+### - [x] Step 12: CP-SAT — model builder with Class 1 structural constraints
 
 **Goal**: The start of Design A. Add the `ortools` dependency; build (but
 don't yet solve) a CP-SAT model whose *shape* already guarantees Class 1.
@@ -442,9 +442,13 @@ don't yet solve) a CP-SAT model whose *shape* already guarantees Class 1.
 - No-overlap constraint per camper (using `NewOptionalIntervalVar` /
   `AddNoOverlap` over each camper's candidate sessions) — FR-10.
 - Capacity constraint per session (`sum(...) <= activity.max_occupancy`) — FR-12 max side.
-- (Duplicate-activity and unrequested-activity are already excluded by
-  construction via `VarIndex`'s restricted domain — no separate constraint
-  needed for FR-14/FR-15.)
+- (Unrequested-activity (FR-14) is excluded by construction via
+  `VarIndex`'s restricted domain. **Correction found during
+  implementation**: duplicate-activity (FR-15) is *not* excluded by
+  construction — a camper can be eligible for two different session
+  instances of the *same* activity (e.g. a morning and an afternoon slot),
+  so an explicit `sum(...) <= 1` constraint per camper per activity is
+  required. Added in Step 12 alongside the other structural constraints.)
 
 **Tests** (`tests/test_cp_sat_model.py`): building a model for
 `small_camp.json` succeeds; assert no `VarIndex` entry exists for a

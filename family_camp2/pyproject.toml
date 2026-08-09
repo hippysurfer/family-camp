@@ -7,7 +7,7 @@ name = "family_camp2"
 version = "0.1.0"
 description = "Family Camp scheduling engine (CP-SAT and simulated-annealing solvers)"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["ortools"]
 
 [project.optional-dependencies]
 dev = ["pytest"]

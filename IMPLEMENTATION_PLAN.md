@@ -160,7 +160,7 @@ runner and a CLI stub that already exposes the `--solver` argument shape
 
 ---
 
-### - [ ] Step 3: Class 1 structural validators
+### - [x] Step 3: Class 1 structural validators
 
 **Goal**: Pure functions that detect the constraints DESIGN_OPTIONS.md §2.2
 classifies as "Class 1" — never supposed to occur in *any* output, from

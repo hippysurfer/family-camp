@@ -121,7 +121,7 @@ runner and a CLI stub that already exposes the `--solver` argument shape
 
 ---
 
-### - [ ] Step 2: Domain model
+### - [x] Step 2: Domain model
 
 **Goal**: The core data types every later step builds on.
 

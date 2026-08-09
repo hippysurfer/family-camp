@@ -462,7 +462,7 @@ Step 3's `check_class1` confirms zero violations.
 
 ---
 
-### - [ ] Step 13: CP-SAT — Class 2 indicators, Tier 0 objective, Phase 1 solve
+### - [x] Step 13: CP-SAT — Class 2 indicators, Tier 0 objective, Phase 1 solve
 
 **Goal**: The best-effort core of Design A.
 

@@ -280,7 +280,7 @@ involved in the violation (not just a count).
 
 ---
 
-### - [ ] Step 7: Configuration schema
+### - [x] Step 7: Configuration schema
 
 **Goal**: NFR-4's "adjustable without code changes" — objective tier order,
 Tier 0 severity weights, and (later) solver parameters, all in one loaded

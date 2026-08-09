@@ -338,7 +338,7 @@ real `ValidationReport`.
 
 ---
 
-### - [ ] Step 9: JSON input loader
+### - [x] Step 9: JSON input loader
 
 **Goal**: A documented, minimal file format for describing a camp instance
 — used by every test fixture from here on, and usable standalone for

@@ -1,0 +1,20 @@
+{
+  "activities": [
+    {"name": "Archery", "duration_minutes": 60, "min_occupancy": 1, "max_occupancy": 4, "min_age": null},
+    {"name": "Craft", "duration_minutes": 45, "min_occupancy": 1, "max_occupancy": 2, "min_age": null},
+    {"name": "Canoeing", "duration_minutes": 90, "min_occupancy": 2, "max_occupancy": 6, "min_age": 8}
+  ],
+  "sessions": [
+    {"activity": "Archery", "label": "Morning", "start": "2026-08-01T09:00:00"},
+    {"activity": "Archery", "label": "Afternoon", "start": "2026-08-01T14:00:00"},
+    {"activity": "Craft", "label": "Morning", "start": "2026-08-01T10:00:00"},
+    {"activity": "Canoeing", "label": "Morning", "start": "2026-08-02T09:00:00"}
+  ],
+  "campers": [
+    {"name": "Parent1", "family_id": "F1", "age": 42, "age_group": "Adult (over 18 years)", "priorities": ["Archery"], "optional": ["Craft"]},
+    {"name": "Kid1", "family_id": "F1", "age": 10, "age_group": "Cub", "priorities": ["Canoeing"], "optional": ["Craft"]},
+    {"name": "Parent2", "family_id": "F2", "age": 38, "age_group": "Adult (over 18 years)", "priorities": ["Craft"], "optional": ["Archery"]},
+    {"name": "Kid2", "family_id": "F2", "age": 9, "age_group": "Cub", "priorities": ["Archery"], "optional": ["Canoeing"]},
+    {"name": "Kid3", "family_id": "F2", "age": 7, "age_group": "Cub", "priorities": ["Craft"], "optional": []}
+  ]
+}

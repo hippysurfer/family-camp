@@ -1,8 +1,18 @@
 """Shared test-only fixtures and helpers (not part of the installed package)."""
 
+from pathlib import Path
+
 from family_camp2.domain import Activity, Camper, Session, Timetable
+from family_camp2.io.json_loader import load_json
 from family_camp2.solvers.base import SolveResult
 from family_camp2.validation.validator import validate
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+SMALL_CAMP_JSON = FIXTURES_DIR / "small_camp.json"
+
+
+def load_small_camp() -> tuple[list[Activity], list[Session], list[Camper]]:
+    return load_json(SMALL_CAMP_JSON)
 
 
 class FakeSolver:

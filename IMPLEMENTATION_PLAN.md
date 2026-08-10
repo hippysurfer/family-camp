@@ -753,7 +753,7 @@ move preconditions beyond example-based tests, per DESIGN_OPTIONS.md
 
 ---
 
-### - [ ] Step 22: Documentation and polish
+### - [x] Step 22: Documentation and polish
 
 **Goal**: Make the package approachable to the next person (or agent) who
 opens it cold.

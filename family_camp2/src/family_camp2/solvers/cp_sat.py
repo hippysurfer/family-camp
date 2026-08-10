@@ -12,11 +12,15 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
+from math import gcd
 
 from ortools.sat.python import cp_model
 
+from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable, sessions_overlap
+from family_camp2.solvers.base import SolveResult
 from family_camp2.validation.class2 import Tier0Weights
+from family_camp2.validation.validator import validate
 
 __all__ = [
     "VarIndex",
@@ -25,7 +29,13 @@ __all__ = [
     "Class2Vars",
     "add_class2_indicators",
     "tier0_expr",
+    "tier1_expr",
+    "tier2_expr",
     "solve_phase1",
+    "solve_phase2",
+    "solve_phase3",
+    "CpSatParams",
+    "CpSatSolver",
 ]
 
 # An arbitrary fixed reference point used to convert datetimes to the small
@@ -352,6 +362,194 @@ def solve_phase1(
     if random_seed is not None:
         solver.parameters.random_seed = random_seed
     status = solver.Solve(model)
+    solver._resolved_status = status  # StatusName() with no args is broken on some ortools/Python builds
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError(f"CP-SAT Phase 1 solve failed with status {solver.StatusName(status)}")
     return solver, round(solver.ObjectiveValue())
+
+
+# --- Tier 1 (FR-20/FR-21) and Tier 2 (FR-22) objectives ---
+
+
+def _lcm(nums: list[int]) -> int:
+    result = 1
+    for n in nums:
+        result = result * n // gcd(result, n)
+    return result
+
+
+def tier1_expr(var_index: VarIndex, campers: list[Camper]):
+    """Integer-exact CP-SAT encoding of validation.tiers.score_tier1: sum,
+    over campers, of the fraction of optional requests met.
+
+    To keep this exact in integer arithmetic (CP-SAT has no native
+    fractions), every camper's contribution is scaled by a common multiple
+    of all distinct optional-request counts present, so each camper's
+    per-activity weight (``scale // len(camper.optional)``) is an exact
+    integer with no remainder. FR-15 (no duplicate activity, enforced
+    structurally in build_model) guarantees a camper has at most one
+    session of any given activity, so simply summing that camper's
+    optional-activity assignment variables already counts distinct
+    activities met - no separate de-duplication is needed here.
+    """
+    k_values = sorted({len(c.optional) for c in campers if c.optional})
+    if not k_values:
+        return 0
+
+    scale = _lcm(k_values)
+    terms = []
+    for c in campers:
+        if not c.optional:
+            terms.append(scale)  # matches tiers.score_tier1's convention
+            continue
+        per_activity_weight = scale // len(c.optional)
+        met_expr = sum(
+            var_index.by_pair[(c, s)] for s in var_index.by_camper.get(c, []) if s.activity in c.optional
+        )
+        terms.append(per_activity_weight * met_expr)
+    return sum(terms)
+
+
+def tier2_expr(model: cp_model.CpModel, var_index: VarIndex, sessions: list[Session]):
+    """A CP-SAT-friendly integer proxy for Tier 2 ("even use of parallel
+    sessions"): the sum, over activities with more than one session, of
+    (max occupancy - min occupancy) across that activity's sessions.
+
+    This is deliberately simpler than exact population variance, which
+    would require quadratic terms and per-activity-group rational scaling
+    to normalise across differently-sized groups. Minimising the max-min
+    range is a standard, exact-integer proxy that still drives the search
+    towards evenly spread occupancy. The authoritative Tier 2 score
+    reported to users always comes from the independent shared validator's
+    true population-variance calculation (validation.tiers.score_tier2),
+    not from this internal proxy.
+    """
+    by_activity: dict[Activity, list[Session]] = defaultdict(list)
+    for s in sessions:
+        by_activity[s.activity].append(s)
+
+    range_terms = []
+    for activity, activity_sessions in by_activity.items():
+        if len(activity_sessions) <= 1:
+            continue
+        occ_vars = []
+        for s in activity_sessions:
+            candidates = var_index.by_session.get(s, [])
+            occ_expr = sum(var_index.by_pair[(c, s)] for c in candidates)
+            occ_var = model.NewIntVar(0, activity.max_occupancy, f"occ[{activity.name}|{s.label}]")
+            model.Add(occ_var == occ_expr)
+            occ_vars.append(occ_var)
+
+        max_var = model.NewIntVar(0, activity.max_occupancy, f"occ_max[{activity.name}]")
+        min_var = model.NewIntVar(0, activity.max_occupancy, f"occ_min[{activity.name}]")
+        model.AddMaxEquality(max_var, occ_vars)
+        model.AddMinEquality(min_var, occ_vars)
+        range_terms.append(max_var - min_var)
+
+    if not range_terms:
+        return 0
+    return sum(range_terms)
+
+
+# --- The three-phase lexicographic solve (DESIGN_OPTIONS.md §3.1) ---
+
+
+def _new_solver(time_limit_seconds: float | None, random_seed: int | None) -> cp_model.CpSolver:
+    solver = cp_model.CpSolver()
+    if time_limit_seconds is not None:
+        solver.parameters.max_time_in_seconds = time_limit_seconds
+    if random_seed is not None:
+        solver.parameters.random_seed = random_seed
+    return solver
+
+
+def solve_phase2(
+    model: cp_model.CpModel,
+    tier0_objective,
+    v0: int,
+    tier1_objective,
+    time_limit_seconds: float | None = None,
+    random_seed: int | None = None,
+) -> tuple[cp_model.CpSolver, int]:
+    """Fix Tier 0 at its Phase 1 optimum, then maximise Tier 1."""
+    model.Add(tier0_objective == v0)
+    model.Maximize(tier1_objective)
+    solver = _new_solver(time_limit_seconds, random_seed)
+    status = solver.Solve(model)
+    solver._resolved_status = status
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        raise RuntimeError(f"CP-SAT Phase 2 solve failed with status {solver.StatusName(status)}")
+    return solver, round(solver.ObjectiveValue())
+
+
+def solve_phase3(
+    model: cp_model.CpModel,
+    tier0_objective,
+    v0: int,
+    tier1_objective,
+    o1: int,
+    tier2_objective,
+    time_limit_seconds: float | None = None,
+    random_seed: int | None = None,
+) -> cp_model.CpSolver:
+    """Fix Tier 0 and Tier 1 at their achieved optima, then minimise Tier 2."""
+    model.Add(tier0_objective == v0)
+    model.Add(tier1_objective == o1)
+    model.Minimize(tier2_objective)
+    solver = _new_solver(time_limit_seconds, random_seed)
+    status = solver.Solve(model)
+    solver._resolved_status = status
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        raise RuntimeError(f"CP-SAT Phase 3 solve failed with status {solver.StatusName(status)}")
+    return solver
+
+
+@dataclass(frozen=True)
+class CpSatParams:
+    time_limit_seconds: float | None = None
+    random_seed: int | None = None
+
+
+class CpSatSolver:
+    """Design A (DESIGN_OPTIONS.md §3): the full three-phase lexicographic solve."""
+
+    def __init__(self, params: CpSatParams | None = None):
+        self.params = params or CpSatParams()
+
+    def solve(
+        self,
+        activities: list[Activity],
+        sessions: list[Session],
+        campers: list[Camper],
+        config: EngineConfig,
+    ) -> SolveResult:
+        model, var_index = build_model(activities, sessions, campers)
+        compulsory = frozenset(a for a in activities if a.name in config.compulsory_activities)
+        class2_vars = add_class2_indicators(model, var_index, campers, sessions, compulsory)
+
+        t0 = tier0_expr(class2_vars, config.tier0_weights)
+        t1 = tier1_expr(var_index, campers)
+        t2 = tier2_expr(model, var_index, sessions)
+
+        kwargs = {
+            "time_limit_seconds": self.params.time_limit_seconds,
+            "random_seed": self.params.random_seed,
+        }
+
+        solver1, v0 = solve_phase1(model, t0, **kwargs)
+        solver2, o1 = solve_phase2(model, t0, v0, t1, **kwargs)
+        solver3 = solve_phase3(model, t0, v0, t1, o1, t2, **kwargs)
+
+        timetable = extract_timetable(solver3, var_index)
+        report = validate(timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory)
+
+        diagnostics = {
+            "solver": "cp_sat",
+            "phase1_status": solver1.StatusName(solver1._resolved_status),
+            "phase2_status": solver2.StatusName(solver2._resolved_status),
+            "phase3_status": solver3.StatusName(solver3._resolved_status),
+            "tier0_optimum": v0,
+            "tier1_optimum": o1,
+            "tier2_proxy_value": t2 if isinstance(t2, int) else solver3.Value(t2),
+        }
+        return SolveResult(timetable=timetable, report=report, diagnostics=diagnostics)

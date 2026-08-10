@@ -492,7 +492,7 @@ property from DESIGN_OPTIONS.md §2.4/§3.6, made into an actual test).
 
 ---
 
-### - [ ] Step 14: CP-SAT — Phase 2/3 and the full solver
+### - [x] Step 14: CP-SAT — Phase 2/3 and the full solver
 
 **Goal**: Complete the three-phase lexicographic solve from
 DESIGN_OPTIONS.md §3.1 and wrap it as a `Solver`.
@@ -516,6 +516,20 @@ ordering must pick a specific, hand-identified one) — assert
 `CpSatSolver().solve(...)` returns that solution, proving the phases are
 genuinely sequential and not accidentally equivalent to a single weighted
 objective.
+
+**Deviations found during implementation:**
+- Tier 2 inside the CP-SAT model is minimised via an exact-integer proxy
+  (sum, per multi-session activity, of max-occupancy minus min-occupancy
+  across its sessions) rather than true population variance, which would
+  need quadratic terms and per-group rational scaling to normalise across
+  differently-sized activity groups. The validator's true
+  `tiers.score_tier2` (population variance) remains the authoritative,
+  reported score regardless of this internal proxy.
+- The installed `ortools` build's `CpSolver.StatusName()` is broken when
+  called with no arguments on this Python version (calls
+  `self._checked_response.status()` on a non-callable enum). Worked around
+  by stashing the `Solve()` return value as `solver._resolved_status` and
+  always calling `StatusName(status)` with an explicit argument.
 
 **Commit message**: `family_camp2 step 14: CP-SAT three-phase lexicographic solver`
 

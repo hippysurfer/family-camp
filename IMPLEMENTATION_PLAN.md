@@ -707,7 +707,7 @@ were removed now that both real solvers exist, per its own docstring.
 
 ---
 
-### - [ ] Step 20: Cross-solver consistency tests
+### - [x] Step 20: Cross-solver consistency tests
 
 **Goal**: Empirically validate the comparative claim in DESIGN_OPTIONS.md
 §5 — CP-SAT's Tier 0 result is optimal, so annealing should never beat it,

@@ -17,9 +17,9 @@ def register(name: str):
     return decorator
 
 
-def get_solver(name: str) -> Solver:
+def get_solver(name: str, **kwargs) -> Solver:
     try:
         cls = SOLVERS[name]
     except KeyError:
         raise KeyError(f"No solver registered under name {name!r}. Known solvers: {sorted(SOLVERS)}") from None
-    return cls()
+    return cls(**kwargs)

@@ -36,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out", type=Path, default=None, help="If given, also write the full report as JSON to this path."
     )
+    parser.add_argument(
+        "--time-limit", type=float, default=None, dest="time_limit",
+        help="Solver time limit in seconds (solver-dependent; NFR-2).",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility (NFR-3)."
+    )
     return parser
 
 
@@ -53,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         activities, sessions, campers = load_legacy_cache(args.legacy_cache)
 
     config = load_config(args.config)
-    solver = get_solver(args.solver)
+    solver = get_solver(args.solver, time_limit_seconds=args.time_limit, random_seed=args.seed)
     result = solver.solve(activities, sessions, campers, config)
 
     print(render_text(result.report))

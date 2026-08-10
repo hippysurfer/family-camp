@@ -535,7 +535,7 @@ objective.
 
 ---
 
-### - [ ] Step 15: CP-SAT — register in CLI, solver parameters, integration test
+### - [x] Step 15: CP-SAT — register in CLI, solver parameters, integration test
 
 **Goal**: `--solver cp_sat` now runs the real thing.
 
@@ -554,6 +554,18 @@ larger generated fixture (a helper that synthesises ~30 campers/6
 activities/10 sessions, still small enough to keep the test fast) solves
 within a test-appropriate timeout (a few seconds) and produces a
 `ValidationReport` with zero Class 1 violations.
+
+**Deviation found during implementation:** the plan called for adding a
+`cp_sat: CpSatParams` field to `EngineConfig`, but `EngineConfig` lives in
+`config.py` and `CpSatParams`/`CpSatSolver` live in `solvers/cp_sat.py`,
+which already imports `EngineConfig` - adding the reverse import would
+create a circular import. Instead, `CpSatSolver.__init__` takes
+`time_limit_seconds`/`random_seed` directly as constructor kwargs (not
+routed through `EngineConfig`, which stays scoped to "what does a good
+schedule look like" per NFR-4, not solver runtime parameters), and
+`registry.get_solver(name, **kwargs)` was generalised to pass arbitrary
+kwargs through to the solver's constructor so the CLI's new `--time-limit`/
+`--seed` flags reach it uniformly regardless of which solver is chosen.
 
 **Commit message**: `family_camp2 step 15: wire CP-SAT into the CLI (--solver cp_sat)`
 

@@ -1,11 +1,15 @@
-"""Temporary stub solver registrations - replaced in Steps 15 and 19.
+"""Temporary stub solver registration - replaced in Step 19.
 
-Registers a trivial (always-empty) solver under both "cp_sat" and
-"annealing" names so the CLI is fully exercisable end-to-end (Step 11)
-before either real solver exists. Step 15 imports the real cp_sat module
-(overwriting this file's "cp_sat" registration); Step 19 does the same for
-"annealing". Once both are replaced, this module and its import in
-solvers/__init__.py are removed.
+Registered a trivial (always-empty) solver under both "cp_sat" and
+"annealing" names so the CLI was fully exercisable end-to-end (Step 11)
+before either real solver existed. Step 15 imported the real cp_sat module
+(overwriting this file's "cp_sat" registration, see solvers/__init__.py);
+Step 19 does the same for "annealing". Once both are replaced, this module
+and its import in solvers/__init__.py should be removed.
+
+Accepts and ignores arbitrary constructor kwargs (e.g.
+``time_limit_seconds``, ``random_seed``) so it tolerates being constructed
+the same way real solvers are during this transitional period.
 """
 
 from __future__ import annotations
@@ -18,6 +22,9 @@ from family_camp2.validation.validator import validate
 
 
 class _StubSolver:
+    def __init__(self, **kwargs):
+        pass
+
     def solve(
         self,
         activities: list[Activity],

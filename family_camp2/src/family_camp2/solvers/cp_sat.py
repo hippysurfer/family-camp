@@ -19,6 +19,7 @@ from ortools.sat.python import cp_model
 from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable, sessions_overlap
 from family_camp2.solvers.base import SolveResult
+from family_camp2.solvers.registry import register
 from family_camp2.validation.class2 import Tier0Weights
 from family_camp2.validation.validator import validate
 
@@ -510,11 +511,17 @@ class CpSatParams:
     random_seed: int | None = None
 
 
+@register("cp_sat")
 class CpSatSolver:
-    """Design A (DESIGN_OPTIONS.md §3): the full three-phase lexicographic solve."""
+    """Design A (DESIGN_OPTIONS.md §3): the full three-phase lexicographic solve.
 
-    def __init__(self, params: CpSatParams | None = None):
-        self.params = params or CpSatParams()
+    Takes ``time_limit_seconds``/``random_seed`` directly (rather than a
+    single params object) so it can be constructed uniformly via
+    ``registry.get_solver(name, **kwargs)`` from CLI flags (Step 15).
+    """
+
+    def __init__(self, time_limit_seconds: float | None = None, random_seed: int | None = None):
+        self.params = CpSatParams(time_limit_seconds=time_limit_seconds, random_seed=random_seed)
 
     def solve(
         self,

@@ -571,7 +571,7 @@ kwargs through to the solver's constructor so the CLI's new `--time-limit`/
 
 ---
 
-### - [ ] Step 16: Annealing — move primitives
+### - [x] Step 16: Annealing — move primitives
 
 **Goal**: The start of Design B — moves that can never produce a Class 1
 violation, by construction (DESIGN_OPTIONS.md §4.1).

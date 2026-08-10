@@ -633,7 +633,7 @@ preserved it throughout, per Step 16).
 
 ---
 
-### - [ ] Step 18: Annealing — constructive seed, multi-chain restarts, full solver
+### - [x] Step 18: Annealing — constructive seed, multi-chain restarts, full solver
 
 **Goal**: Complete Design B per DESIGN_OPTIONS.md §4.1's restart strategy.
 
@@ -658,6 +658,13 @@ on `small_camp.json` returns a `SolveResult` whose report has zero Class 1
 violations; running with a fixed list of chain seeds twice produces
 identical results (NFR-3); result's Tier 0 score is `<=` the best single
 chain's score among the diagnostics (aggregation correctness).
+
+**Addition beyond the plan:** `run_chain` gained an optional `deadline`
+parameter (a `time.monotonic()` timestamp, checked every 100 iterations to
+keep overhead negligible) so `time_limit_seconds` - accepted by
+`AnnealingSolver` for CLI-uniformity with `CpSatSolver` - actually bounds
+wall-clock time per NFR-2, rather than being an accepted-but-ignored
+parameter.
 
 **Commit message**: `family_camp2 step 18: greedy seed, multi-chain restarts, full AnnealingSolver`
 

@@ -174,6 +174,31 @@ def test_swap_families_rejected_when_not_eligible_for_new_activity():
     assert result is None
 
 
+def test_swap_families_rejected_when_asymmetric_group_sizes_would_overflow_capacity():
+    """Regression test: swap_families previously computed the room freed up
+    in session_a using the *incoming* group's size instead of the group
+    vacating it, which failed to reject a swap that would overflow
+    session_a's capacity whenever the incoming family (from session_b) was
+    larger than the outgoing one."""
+    activity_a = activity("A", max_occ=1)
+    activity_b = activity("B", max_occ=2)
+    solo = camper("Solo", "FA", priorities=(activity_a, activity_b))
+    pair1 = camper("Pair1", "FB", priorities=(activity_a, activity_b))
+    pair2 = camper("Pair2", "FB", priorities=(activity_a, activity_b))
+    session_a = Session(activity=activity_a, label="A", start=DAY)
+    session_b = Session(activity=activity_b, label="B", start=DAY + timedelta(hours=5))
+    campers_by_family = by_family([solo, pair1, pair2])
+
+    state = State([solo, pair1, pair2], [session_a, session_b])
+    state._add(solo, session_a)  # session_a: 1/1 (full)
+    state._add(pair1, session_b)
+    state._add(pair2, session_b)  # session_b: 2/2 (full)
+
+    result = swap_families(state, "FA", session_a, "FB", session_b, campers_by_family)
+
+    assert result is None  # session_a (capacity 1) can't hold both members of FB
+
+
 # --- remove_family ---
 
 

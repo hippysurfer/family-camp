@@ -175,10 +175,12 @@ def swap_families(
     if not all(_is_eligible(c, session_a) for c in members_b):
         return None
 
+    # room_x = how much space will be free in session_x once its current
+    # occupants (who are leaving) have vacated it - the group replacing them.
     room_b = session_b.activity.max_occupancy - state.occupancy(session_b) + len(members_b)
     if room_b < len(members_a):
         return None
-    room_a = session_a.activity.max_occupancy - state.occupancy(session_a) + len(members_b)
+    room_a = session_a.activity.max_occupancy - state.occupancy(session_a) + len(members_a)
     if room_a < len(members_b):
         return None
 

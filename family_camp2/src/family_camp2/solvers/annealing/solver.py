@@ -30,6 +30,7 @@ from family_camp2.solvers.annealing.moves import (
 from family_camp2.solvers.annealing.scoring import Score, acceptance_probability, compare, score
 from family_camp2.solvers.annealing.seed import greedy_seed
 from family_camp2.solvers.base import SolveResult
+from family_camp2.solvers.registry import register
 from family_camp2.validation.class2 import Tier0Weights
 from family_camp2.validation.validator import validate
 
@@ -219,6 +220,7 @@ class AnnealingParams:
     cooling: CoolingSchedule = field(default_factory=CoolingSchedule)
 
 
+@register("annealing")
 class AnnealingSolver:
     """Design B (DESIGN_OPTIONS.md §4): multi-restart simulated annealing.
 

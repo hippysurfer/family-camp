@@ -670,7 +670,7 @@ parameter.
 
 ---
 
-### - [ ] Step 19: Annealing — register in CLI, solver parameters, integration test
+### - [x] Step 19: Annealing — register in CLI, solver parameters, integration test
 
 **Goal**: `--solver annealing` now runs the real thing.
 
@@ -685,6 +685,23 @@ parameter.
 "annealing", "--data", "tests/fixtures/small_camp.json"])` exits 0 with a
 zero Tier 0 score; the same ~30-camper synthetic fixture used in Step 15
 solves within a test-appropriate time budget.
+
+**Bug found and fixed during implementation:** the medium-synthetic-instance
+test (this step's own integration test) caught a real Class 1 violation -
+`swap_families` (Step 16) computed the room freed up in `session_a` using
+`len(members_b)` (the incoming group) instead of `len(members_a)` (the
+group actually vacating `session_a`), which meant the check was
+effectively a no-op whenever `session_a` wasn't already over capacity -
+allowing swaps that overflowed `session_a` whenever the incoming family
+was larger than the outgoing one. Fixed in `moves.py`, with a
+hand-verified regression test added to `test_annealing_moves.py`
+(`test_swap_families_rejected_when_asymmetric_group_sizes_would_overflow_capacity`).
+Also updated `EngineConfig`-adjacent CLI wiring: as in Step 15, annealing's
+tuning knobs (`--num-chains`, `--iterations-per-chain`) are separate CLI
+flags passed conditionally as constructor kwargs (only when `--solver
+annealing`), not routed through `EngineConfig`, for the same
+circular-import reason. `_stub.py` and its import in `solvers/__init__.py`
+were removed now that both real solvers exist, per its own docstring.
 
 **Commit message**: `family_camp2 step 19: wire annealing into the CLI (--solver annealing)`
 

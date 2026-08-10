@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = ["ortools"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "hypothesis"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

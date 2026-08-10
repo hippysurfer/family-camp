@@ -730,7 +730,7 @@ only match or trail it.
 
 ---
 
-### - [ ] Step 21: Property-based hardening for the validator
+### - [x] Step 21: Property-based hardening for the validator
 
 **Goal**: Strengthen confidence in Step 3's Class 1 checkers and Step 16's
 move preconditions beyond example-based tests, per DESIGN_OPTIONS.md

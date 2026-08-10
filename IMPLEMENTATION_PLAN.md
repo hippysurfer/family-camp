@@ -601,7 +601,7 @@ and assert it's still clean.
 
 ---
 
-### - [ ] Step 17: Annealing — lexicographic scorer and single-chain SA loop
+### - [x] Step 17: Annealing — lexicographic scorer and single-chain SA loop
 
 **Goal**: The comparator and core loop from DESIGN_OPTIONS.md §4.1.
 

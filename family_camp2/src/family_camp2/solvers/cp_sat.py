@@ -453,6 +453,26 @@ def tier2_expr(model: cp_model.CpModel, var_index: VarIndex, sessions: list[Sess
 
 
 # --- The three-phase lexicographic solve (DESIGN_OPTIONS.md §3.1) ---
+#
+# Each later phase pins earlier phases' results with an exact equality
+# (tier0 == v0, tier1 == o1), not an inequality. Inequalities ("no worse
+# than": tier0 <= v0, tier1 >= o1) look appealing when a phase stops at
+# FEASIBLE rather than OPTIMAL (its time limit was hit before it could
+# *prove* the best value, only find *a* good one) - matching an unproven
+# exact value can be a much harder search than matching-or-beating it. But
+# a regression test (test_cp_sat_solver.py,
+# test_phase3_can_still_reach_the_true_tier1_optimum_given_a_conservative_o1)
+# proved this actually breaks the core guarantee the three phases exist
+# for: given a *conservative* (not-yet-proven) o1, the ">=" version let
+# Phase 3 silently trade Tier 1 away, down towards that conservative
+# floor, in exchange for a better Tier 2 - precisely the "sacrifice a
+# higher tier for a lower one" behaviour lexicographic ordering exists to
+# forbid (see test_naive_scalarised_objective_would_have_sacrificed_a_satisfiable_request).
+# Equality is the correct, if less forgiving, choice: if a phase hasn't
+# proven its result optimal, the honest options are to give it more time,
+# or to accept that a later phase may fail to find any solution honouring
+# that exact value - CpSatSolver.solve() falls back to the previous
+# phase's already-valid result in that case, rather than crashing.
 
 
 def _new_solver(time_limit_seconds: float | None, random_seed: int | None) -> cp_model.CpSolver:
@@ -472,7 +492,8 @@ def solve_phase2(
     time_limit_seconds: float | None = None,
     random_seed: int | None = None,
 ) -> tuple[cp_model.CpSolver, int]:
-    """Fix Tier 0 at its Phase 1 optimum, then maximise Tier 1."""
+    """Fix Tier 0 at its Phase 1 optimum (see module note above on why
+    this is an exact equality, not an inequality), then maximise Tier 1."""
     model.Add(tier0_objective == v0)
     model.Maximize(tier1_objective)
     solver = _new_solver(time_limit_seconds, random_seed)
@@ -493,7 +514,8 @@ def solve_phase3(
     time_limit_seconds: float | None = None,
     random_seed: int | None = None,
 ) -> cp_model.CpSolver:
-    """Fix Tier 0 and Tier 1 at their achieved optima, then minimise Tier 2."""
+    """Fix Tier 0 and Tier 1 at their achieved optima (see module note
+    above), then minimise Tier 2."""
     model.Add(tier0_objective == v0)
     model.Add(tier1_objective == o1)
     model.Minimize(tier2_objective)
@@ -545,18 +567,32 @@ class CpSatSolver:
 
         solver1, v0 = solve_phase1(model, t0, **kwargs)
         solver2, o1 = solve_phase2(model, t0, v0, t1, **kwargs)
-        solver3 = solve_phase3(model, t0, v0, t1, o1, t2, **kwargs)
 
-        timetable = extract_timetable(solver3, var_index)
+        try:
+            solver3 = solve_phase3(model, t0, v0, t1, o1, t2, **kwargs)
+            final_solver = solver3
+            phase3_status = solver3.StatusName(solver3._resolved_status)
+        except RuntimeError:
+            # Phase 3 pins Tier 0/Tier 1 with an exact equality (see the
+            # module note above solve_phase2) and can fail to find *any*
+            # solution honouring it within its time budget at large scale,
+            # even though Phase 2's own solution already satisfies that
+            # exact pin by construction. Fall back to it rather than
+            # losing an already-valid result to a crash - it just won't
+            # have been optimised for Tier 2 evenness.
+            final_solver = solver2
+            phase3_status = "SKIPPED (found no solution in time; used Phase 2's result instead)"
+
+        timetable = extract_timetable(final_solver, var_index)
         report = validate(timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory)
 
         diagnostics = {
             "solver": "cp_sat",
             "phase1_status": solver1.StatusName(solver1._resolved_status),
             "phase2_status": solver2.StatusName(solver2._resolved_status),
-            "phase3_status": solver3.StatusName(solver3._resolved_status),
+            "phase3_status": phase3_status,
             "tier0_optimum": v0,
             "tier1_optimum": o1,
-            "tier2_proxy_value": t2 if isinstance(t2, int) else solver3.Value(t2),
+            "tier2_proxy_value": t2 if isinstance(t2, int) else final_solver.Value(t2),
         }
         return SolveResult(timetable=timetable, report=report, diagnostics=diagnostics)

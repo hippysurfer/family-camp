@@ -9,6 +9,10 @@ from family_camp2.solvers.cp_sat import (
     add_class2_indicators,
     build_model,
     extract_timetable,
+    solve_phase1,
+    solve_phase2,
+    solve_phase3,
+    tier0_expr,
     tier1_expr,
     tier2_expr,
 )
@@ -97,9 +101,59 @@ def test_naive_scalarised_objective_would_have_sacrificed_a_satisfiable_request(
     assert attendees == 2  # the naive objective sacrifices one satisfiable request
 
 
+def test_phase3_pins_tier1_exactly_even_when_a_better_value_is_reachable():
+    """Regression guard for a real design mistake made and caught during
+    development (see the module-level note above solve_phase2 in
+    cp_sat.py): Phase 3 must pin Tier 1 with an *exact* equality, not a
+    "no worse than" inequality. An inequality looks appealing when Phase 2
+    stops at FEASIBLE rather than OPTIMAL (matching an unproven exact
+    value can be a harder search than matching-or-beating it), but it lets
+    Phase 3 silently trade Tier 1 away for a better Tier 2 whenever a
+    strictly-better Tier 1 value is reachable but happens to force a worse
+    Tier 2 - exactly the "sacrifice a higher tier for a lower one"
+    behaviour lexicographic ordering exists to forbid. Here, a truly
+    reachable, strictly-better Tier 1 value exists (true_o1); Phase 3 must
+    still land exactly on the deliberately-lowered value it was given."""
+    activities, sessions, campers, craft = _build_lexicographic_trap()
+
+    model, var_index = build_model(activities, sessions, campers)
+    class2_vars = add_class2_indicators(model, var_index, campers, sessions)
+    t0 = tier0_expr(class2_vars)
+    t1 = tier1_expr(var_index, campers)
+    t2 = tier2_expr(model, var_index, sessions)
+
+    _, v0 = solve_phase1(model, t0)
+    _, true_o1 = solve_phase2(model, t0, v0, t1)
+
+    conservative_o1 = true_o1 - 1  # simulates Phase 2 having stopped early
+    solver3 = solve_phase3(model, t0, v0, t1, conservative_o1, t2)
+
+    assert solver3.Value(t1) == conservative_o1  # exact pin honoured, not silently improved
+
+
 def test_solver_runs_end_to_end_on_small_camp_fixture():
     activities, sessions, campers = load_small_camp()
     result = CpSatSolver().solve(activities, sessions, campers, EngineConfig())
 
     assert result.report is not None
     assert result.diagnostics["phase3_status"] in ("OPTIMAL", "FEASIBLE")
+
+
+def test_solve_falls_back_to_phase2_result_when_phase3_finds_nothing(monkeypatch):
+    """If Phase 3 can't find any solution honouring the exact Tier 0/Tier 1
+    pin within its time budget (observed on a real ~283-camper instance),
+    the overall solve must not crash - it should fall back to Phase 2's
+    already-valid (just not Tier-2-optimised) result."""
+    import family_camp2.solvers.cp_sat as cp_sat_module
+
+    def _always_fail(*args, **kwargs):
+        raise RuntimeError("CP-SAT Phase 3 solve failed with status UNKNOWN")
+
+    monkeypatch.setattr(cp_sat_module, "solve_phase3", _always_fail)
+
+    activities, sessions, campers = load_small_camp()
+    result = CpSatSolver().solve(activities, sessions, campers, EngineConfig())
+
+    assert result.report is not None
+    assert "SKIPPED" in result.diagnostics["phase3_status"]
+    assert result.report.tier0_score == result.diagnostics["tier0_optimum"]

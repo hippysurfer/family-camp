@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from family_camp2.io.json_loader import JsonLoadError, load_json
+from family_camp2.io.json_loader import JsonLoadError, dump_json, load_json
 from fixtures import load_small_camp
 
 
@@ -62,3 +62,32 @@ def test_camper_with_unknown_optional_activity_raises(tmp_path):
 
     with pytest.raises(JsonLoadError, match="Craft"):
         load_json(path)
+
+
+def test_dump_json_round_trips_through_load_json(tmp_path):
+    activities, sessions, campers = load_small_camp()
+
+    out_path = tmp_path / "round_trip.json"
+    dump_json(activities, sessions, campers, out_path)
+    reloaded_activities, reloaded_sessions, reloaded_campers = load_json(out_path)
+
+    assert {a.name for a in reloaded_activities} == {a.name for a in activities}
+    assert set(reloaded_activities) == set(activities)
+    assert set(reloaded_sessions) == set(sessions)
+    assert set(reloaded_campers) == set(campers)
+
+
+def test_dump_json_output_matches_documented_schema(tmp_path):
+    activities, sessions, campers = load_small_camp()
+
+    out_path = tmp_path / "round_trip.json"
+    dump_json(activities, sessions, campers, out_path)
+    data = json.loads(out_path.read_text())
+
+    assert set(data.keys()) == {"activities", "sessions", "campers"}
+    archery = next(a for a in data["activities"] if a["name"] == "Archery")
+    assert archery["duration_minutes"] == 60
+    assert archery["max_occupancy"] == 4
+
+    kid1_session = next(s for s in data["sessions"] if s["label"] == "Morning" and s["activity"] == "Archery")
+    assert kid1_session["start"] == "2026-08-01T09:00:00"

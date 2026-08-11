@@ -35,7 +35,7 @@ from pathlib import Path
 
 from family_camp2.domain import Activity, Camper, Session
 
-__all__ = ["JsonLoadError", "load_json"]
+__all__ = ["JsonLoadError", "load_json", "dump_json"]
 
 
 class JsonLoadError(ValueError):
@@ -87,6 +87,42 @@ def load_json(path: Path | str) -> tuple[list[Activity], list[Session], list[Cam
         )
 
     return list(activities_by_name.values()), sessions, campers
+
+
+def dump_json(
+    activities: list[Activity], sessions: list[Session], campers: list[Camper], path: Path | str
+) -> None:
+    """The counterpart to load_json: serialise domain objects back to this
+    module's documented schema. Used by fetch_cli.py to save data fetched
+    live from Google Sheets (io/google_sheets.py) ready for --data."""
+
+    data = {
+        "activities": [
+            {
+                "name": a.name,
+                "duration_minutes": round(a.duration.total_seconds() / 60),
+                "min_occupancy": a.min_occupancy,
+                "max_occupancy": a.max_occupancy,
+                "min_age": a.min_age,
+            }
+            for a in activities
+        ],
+        "sessions": [
+            {"activity": s.activity.name, "label": s.label, "start": s.start.isoformat()} for s in sessions
+        ],
+        "campers": [
+            {
+                "name": c.name,
+                "family_id": c.family_id,
+                "age": c.age,
+                "age_group": c.age_group,
+                "priorities": [a.name for a in c.priorities],
+                "optional": [a.name for a in c.optional],
+            }
+            for c in campers
+        ],
+    }
+    Path(path).write_text(json.dumps(data, indent=2))
 
 
 def _resolve_activities(

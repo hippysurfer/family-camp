@@ -5,8 +5,11 @@ consuming camper/activity/session data and producing a timetable, plus
 validating any timetable against the rules that define a correct schedule.
 
 This is *not* a replacement for the rest of the `family_camp` package yet:
-fetching data from Google Sheets, printing PDFs, and the hand-editing
-workflow all still live in `../family_camp/` and are untouched. See:
+printing PDFs and the hand-editing workflow still live in `../family_camp/`
+and are untouched. It does include its own way to fetch input data from
+Google Sheets (`fetch_cli.py`, below) — independent of the old
+`family_camp/schedule/fetch_data.py`, and producing this package's own
+JSON format rather than a pickle cache. See:
 
 - [`../DESIGN.md`](../DESIGN.md) — review of the original GA-based scheduler.
 - [`../REQUIREMENTS.md`](../REQUIREMENTS.md) — solver-agnostic requirements this rewrite implements (`FR-n`/`NFR-n`/`OQ-n` referenced throughout this codebase).
@@ -80,6 +83,38 @@ unmodified `family_camp/schedule/fetch_data.py` — see
 expects. This lets the new engine run against real historical camp data
 without needing any new data-fetch work.
 
+### Fetching data from Google Sheets (`fetch_cli.py`)
+
+`fetch_cli.py` downloads the same three worksheets the old system reads
+("Activities for schedule", "Sessions for schedule", "Activities") and
+saves them straight into this package's own JSON format, ready for
+`--data`:
+
+```sh
+pip install -e ".[google]"   # pulls in gspread, only needed for this tool
+
+python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL> --out data.json
+# or, via the console script installed by pip:
+family_camp2-fetch --sheet-id <SHEET_ID_OR_URL> --out data.json
+
+python -m family_camp2 --solver cp_sat --data data.json
+```
+
+Authentication is the interactive **user OAuth flow**, not the old
+system's service-account key: the first run opens a browser for you to
+sign in to Google and grant *read-only* access
+(`gspread.auth.READONLY_SCOPES` — this tool never writes to the sheet);
+gspread caches the resulting token afterwards, so you don't repeat the
+consent step on later runs. Pass `--credentials PATH` to use your own
+Google Cloud OAuth client instead of gspread's shared default one (needed
+if you hit its rate limits), and `--authorized-user PATH` to control where
+the cached token is stored. If your spreadsheet uses different tab names,
+override them with `--activities-worksheet`/`--sessions-worksheet`/`--campers-worksheet`.
+
+See `family_camp2.io.google_sheets` for the fetch/parse logic (it shares
+its row-parsing with `io/legacy_cache_loader.py`, since both start from
+the same raw worksheet-row shape) and `fetch_cli.py` for the full CLI.
+
 ### Engine config (`--config`)
 
 Optional JSON file overriding `EngineConfig` (see `family_camp2.config`):
@@ -94,13 +129,14 @@ everyone must attend, empty by default per OQ-5).
 domain.py            Activity / Session / Camper / Timetable
 validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time, the FR-40/41 report)
 config.py            EngineConfig (NFR-4)
-io/                  JSON and legacy-cache loaders
+io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth)
 solvers/
   base.py            the Solver protocol every design implements
   registry.py         name -> Solver lookup, used by the CLI
   cp_sat.py           Design A: OR-Tools CP-SAT, three-phase lexicographic solve
   annealing/          Design B: simulated annealing with domain-aware moves
 cli.py                argparse entry point (--solver cp_sat|annealing)
+fetch_cli.py          argparse entry point to download --data input from Google Sheets
 ```
 
 The validator (`validation/validator.py`) is the single source of truth

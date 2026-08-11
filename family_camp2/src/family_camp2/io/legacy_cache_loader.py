@@ -1,16 +1,22 @@
-"""Adapter for the file format already produced by the existing,
-unmodified ``family_camp/schedule/fetch_data.py``.
+"""Adapter for the raw worksheet-row format already produced by the
+existing, unmodified ``family_camp/schedule/fetch_data.py``.
 
 This is a data-contract dependency, not a code dependency: per
-REQUIREMENTS.md's "Google Sheets is a prerequisite" framing, this module
+REQUIREMENTS.md's "Google Sheets is a prerequisite" framing, ``load_legacy_cache``
 reads the pickle file that process already writes, so family_camp2 can be
 run against real historical camp data without waiting on any new
 data-fetch work. The parsing below is written from scratch against that
-known file shape, not imported from ``family_camp.schedule.deep`` - keeping
+known row shape, not imported from ``family_camp.schedule.deep`` - keeping
 family_camp2 fully independent of the old package.
 
-The pickle holds a ``(acts_wks, session_wks, campers_wks)`` tuple of raw
-worksheet rows, with this column layout:
+``parse_worksheet_rows`` is the shared core: it takes the same
+``(acts_wks, session_wks, campers_wks)`` raw-row shape regardless of how
+those rows were obtained - unpickled here, or fetched live via
+``io/google_sheets.py``'s OAuth-authenticated gspread client - so the
+column-index parsing logic below has exactly one implementation, not one
+per data source.
+
+Column layout:
 
   activities row: [name, "H:MM:SS" duration, min_occupancy, max_occupancy]
   sessions row:   [activity_name, label, "%d/%m/%Y %H:%M:%S" start]
@@ -20,10 +26,10 @@ worksheet rows, with this column layout:
                    (the first campers row is a header and is skipped)
 
 The legacy schema predates OQ-8 (activity minimum age), so every Activity
-loaded this way has ``min_age=None``. It also predates family_camp2's
+parsed this way has ``min_age=None``. It also predates family_camp2's
 config-level compulsory-activities concept (§ EngineConfig) - unlike the
-old system, this loader never mixes a compulsory-activities list into a
-camper's priorities.
+old system, this never mixes a compulsory-activities list into a camper's
+priorities.
 """
 
 from __future__ import annotations
@@ -34,11 +40,11 @@ from pathlib import Path
 
 from family_camp2.domain import Activity, Camper, Session
 
-__all__ = ["LegacyCacheLoadError", "load_legacy_cache"]
+__all__ = ["LegacyCacheLoadError", "load_legacy_cache", "parse_worksheet_rows"]
 
 
 class LegacyCacheLoadError(ValueError):
-    """Raised when the pickled cache is malformed or references unknown data."""
+    """Raised when worksheet rows are malformed or reference unknown data."""
 
 
 def _parse_duration(text: str) -> timedelta:
@@ -49,7 +55,12 @@ def _parse_duration(text: str) -> timedelta:
 def load_legacy_cache(path: Path | str) -> tuple[list[Activity], list[Session], list[Camper]]:
     with open(path, "rb") as f:
         acts_wks, session_wks, campers_wks = pickle.load(f)
+    return parse_worksheet_rows(acts_wks, session_wks, campers_wks)
 
+
+def parse_worksheet_rows(
+    acts_wks: list[list[str]], session_wks: list[list[str]], campers_wks: list[list[str]]
+) -> tuple[list[Activity], list[Session], list[Camper]]:
     activities_by_name: dict[str, Activity] = {}
     for row in acts_wks:
         if row[0] == "":

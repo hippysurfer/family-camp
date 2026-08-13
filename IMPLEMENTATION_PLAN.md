@@ -1096,7 +1096,7 @@ occupancy-vs-limit figures are correct.
 
 ---
 
-### - [ ] Step 29: Family-group and adult-specific idle reporting
+### - [x] Step 29: Family-group and adult-specific idle reporting
 
 **Goal**: Extend idle-time reporting to the family/group level and flag
 idle adults specifically (FR-74), matching the old system's two distinct

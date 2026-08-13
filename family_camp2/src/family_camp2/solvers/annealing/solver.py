@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Camper, Session
+from family_camp2.progress import NullProgressReporter, ProgressEvent, ProgressReporter
 from family_camp2.solvers.annealing.moves import (
     State,
     assign_family,
@@ -177,6 +178,53 @@ def _run_single_chain_from_seed(
     )
 
 
+def _run_single_chain_from_seed_args(args: tuple) -> tuple[int, State]:
+    """Adapter for pool.imap_unordered, which (unlike starmap) only passes
+    one argument per call - returns (seed, state) so the seed survives the
+    call even though imap_unordered yields results in completion order,
+    not submission order."""
+    state = _run_single_chain_from_seed(*args)
+    seed = args[7]  # (activities, sessions, campers, campers_by_family, tier0_weights, compulsory, cooling, seed, ...)
+    return seed, state
+
+
+def _report_chain_results(
+    results,
+    total: int,
+    campers: list[Camper],
+    sessions: list[Session],
+    tier0_weights: Tier0Weights,
+    compulsory: frozenset[Activity],
+    progress_reporter: ProgressReporter,
+    start_time: float,
+) -> dict[int, State]:
+    """Consumes an iterable of (seed, state) pairs as they arrive - reports
+    a progress event for each. Chain-completion, not a wall-clock timer, is
+    the progress unit here: chains run in separate worker processes (see
+    the module note above run_restarts), so a PeriodicHeartbeat like
+    CP-SAT's isn't directly usable without a cross-process progress queue
+    - and measured on real ~283-camper data, a full multi-chain run
+    completes in a couple of minutes, i.e. individual chains land well
+    inside the OQ-9 60-second default cadence in practice anyway."""
+    results_by_seed: dict[int, State] = {}
+    completed = 0
+    for seed, state in results:
+        completed += 1
+        results_by_seed[seed] = state
+        chain_score = score(state, campers, sessions, tier0_weights, compulsory)
+        progress_reporter.report(
+            ProgressEvent(
+                stage="restarts",
+                message=f"chain seed={seed} finished ({completed}/{total})",
+                elapsed_seconds=time.monotonic() - start_time,
+                tier0_score=chain_score[0],
+                tier1_score=-chain_score[1],
+                tier2_score=chain_score[2],
+            )
+        )
+    return results_by_seed
+
+
 def run_restarts(
     activities: list[Activity],
     sessions: list[Session],
@@ -189,25 +237,49 @@ def run_restarts(
     iterations: int,
     deadline: float | None = None,
     use_multiprocessing: bool = True,
+    progress_reporter: ProgressReporter = NullProgressReporter(),
 ) -> tuple[State, list[Score]]:
     """Run one independently-seeded chain per entry in `seeds` (each
     starting from its own greedy_seed construction), optionally in
     parallel, and return the best resulting state across all of them (per
     `compare`) plus every chain's own final score (for diagnostics)."""
 
+    start_time = time.monotonic()
     call_args = [
         (activities, sessions, campers, campers_by_family, tier0_weights, compulsory, cooling, seed, iterations, deadline)
         for seed in seeds
     ]
 
+    progress_reporter.report(
+        ProgressEvent(stage="restarts", message=f"started ({len(seeds)} chains)", elapsed_seconds=0.0)
+    )
+
     if use_multiprocessing and len(seeds) > 1:
         with multiprocessing.Pool() as pool:
-            states = pool.starmap(_run_single_chain_from_seed, call_args)
+            results = pool.imap_unordered(_run_single_chain_from_seed_args, call_args)
+            results_by_seed = _report_chain_results(
+                results, len(seeds), campers, sessions, tier0_weights, compulsory, progress_reporter, start_time
+            )
     else:
-        states = [_run_single_chain_from_seed(*a) for a in call_args]
+        results = ((a[7], _run_single_chain_from_seed(*a)) for a in call_args)
+        results_by_seed = _report_chain_results(
+            results, len(seeds), campers, sessions, tier0_weights, compulsory, progress_reporter, start_time
+        )
 
+    states = [results_by_seed[seed] for seed in seeds]
     scores = [score(s, campers, sessions, tier0_weights, compulsory) for s in states]
     best_index = min(range(len(states)), key=lambda i: scores[i])
+
+    progress_reporter.report(
+        ProgressEvent(
+            stage="restarts",
+            message="all chains finished",
+            elapsed_seconds=time.monotonic() - start_time,
+            tier0_score=scores[best_index][0],
+            tier1_score=-scores[best_index][1],
+            tier2_score=scores[best_index][2],
+        )
+    )
     return states[best_index], scores
 
 
@@ -218,15 +290,20 @@ class AnnealingParams:
     num_chains: int = 8
     iterations_per_chain: int = 2000
     cooling: CoolingSchedule = field(default_factory=CoolingSchedule)
+    progress_reporter: ProgressReporter = field(default_factory=NullProgressReporter)
 
 
 @register("annealing")
 class AnnealingSolver:
     """Design B (DESIGN_OPTIONS.md §4): multi-restart simulated annealing.
 
-    Takes the same ``time_limit_seconds``/``random_seed`` constructor kwargs
-    as ``CpSatSolver`` (plus annealing-specific tuning knobs) so it can be
-    constructed uniformly via ``registry.get_solver(name, **kwargs)``.
+    Takes the same ``time_limit_seconds``/``random_seed``/``progress_reporter``
+    constructor kwargs as ``CpSatSolver`` (plus annealing-specific tuning
+    knobs) so it can be constructed uniformly via
+    ``registry.get_solver(name, **kwargs)``. Unlike CP-SAT there's no
+    ``progress_interval_seconds`` - progress is reported per chain
+    completion (see the module note above ``run_restarts``), not on a
+    fixed timer.
     """
 
     def __init__(
@@ -236,6 +313,7 @@ class AnnealingSolver:
         num_chains: int = 8,
         iterations_per_chain: int = 2000,
         cooling: CoolingSchedule | None = None,
+        progress_reporter: ProgressReporter = NullProgressReporter(),
     ):
         self.params = AnnealingParams(
             time_limit_seconds=time_limit_seconds,
@@ -243,6 +321,7 @@ class AnnealingSolver:
             num_chains=num_chains,
             iterations_per_chain=iterations_per_chain,
             cooling=cooling or CoolingSchedule(),
+            progress_reporter=progress_reporter,
         )
 
     def solve(
@@ -277,6 +356,7 @@ class AnnealingSolver:
             seeds,
             self.params.iterations_per_chain,
             deadline=deadline,
+            progress_reporter=self.params.progress_reporter,
         )
 
         timetable = best_state.to_timetable()

@@ -949,7 +949,7 @@ new parameters doesn't change existing behaviour - the existing
 
 ---
 
-### - [ ] Step 25: Annealing progress integration
+### - [x] Step 25: Annealing progress integration
 
 **Goal**: Surface restart progress (FR-61/FR-62) for the multi-restart
 search, on the same wall-clock cadence.

@@ -198,6 +198,95 @@ adjust the trade-off (see NFR-4).
   (specific activity occurrence/time) each assignment refers to — no
   ambiguity between two sessions of the same activity.
 
+### 4.6 Progress reporting during generation
+
+Reverse-engineered from the current GA-based system's behaviour
+(`family_camp/schedule/generate_schedule.py`) and from direct experience
+running a real, hours-long generation with the family_camp2 rewrite (no
+progress reporting exists yet, so the only way to check on it was
+externally polling process/CPU state). The old system: prints a per-generation
+stats line (min/avg/max/std of the fitness tuple) automatically throughout
+the run; lets an operator press Enter on stdin at any time to dump the
+current best-known results to disk *without* stopping the run; and always
+writes out its best-known results on exit, including on a crash or
+Ctrl-C (a `try/finally` around the whole run). These requirements
+generalise that behaviour without assuming a GA, generations, or any
+particular solver's internal structure.
+
+- **FR-60**: The engine MUST periodically report progress during a
+  generation run long enough for it to matter (order of seconds to
+  hours), so an operator can tell the run is alive and making progress
+  without inspecting external process state.
+- **FR-61**: Each progress report MUST include, at minimum, elapsed time
+  and the best schedule quality found so far, expressed using the same
+  measures used everywhere else (the hard-constraint/best-effort picture
+  of FR-30/FR-31, and the soft objectives of FR-20–FR-22) — not a
+  separate, solver-specific metric an operator has to learn to interpret.
+- **FR-62**: For a solver whose search has distinguishable stages (e.g.
+  sequential objective phases, or independent restarts/chains), progress
+  reports MUST identify which stage is currently active and how it
+  relates to the overall run (e.g. "phase 2 of 3", "chain 4 of 8").
+- **FR-63**: The engine MUST be able to produce the best schedule found so
+  far without waiting for the run to finish, whether by stopping the run
+  early or by inspecting it while still running — a long run must not be
+  all-or-nothing.
+- **FR-64**: If a generation run ends before completing on its own
+  (operator-cancelled, crashed, or ran out of its time budget) after
+  having found at least one valid or best-effort schedule, that schedule
+  MUST NOT be lost — it must already be available or be salvageable,
+  rather than forcing the whole run to be repeated from scratch.
+
+### 4.7 Schedule export and human-readable reporting
+
+Reverse-engineered from the current system's `MyHallOfFame.dump_to_dir()`
+and `check_schedule.py` (`family_camp/schedule/deep.py`,
+`family_camp/schedule/check_schedule.py`), which together produce, for a
+given timetable: a CSV of the actual assignments; a per-family itinerary
+listing; a per-activity/session roster with occupancy totals against each
+activity's limit; and two separate idle-time views (whole family/groups
+with nothing scheduled, and individually named idle *adults*, for
+staffing/supervision purposes). None of this is the same thing as the
+FR-40/41 validation report, which describes how *good* a schedule is, not
+what it *is* or how to act on it day-to-day. Producing the underlying
+report *content* here is in scope even though rendering it to PDF/print
+layout is not (§1.2) — the distinction is between generating the
+information and laying it out on a page.
+
+- **FR-70**: The engine MUST be able to export a timetable (generated, or
+  hand-supplied and already validated) to a durable, machine-readable
+  format that captures every assignment (camper, activity, session). This
+  is the actual deliverable schedule, distinct from the scoring/violation
+  report of FR-40/41.
+- **FR-71**: An exported schedule (FR-70) MUST be re-importable by the
+  engine, so a previously generated (or manually adjusted, per the
+  manual-editing workflow excluded in §1.2) schedule can be re-validated
+  (FR-40) without needing to regenerate it from the original
+  activities/sessions/campers input. This requirement is only about the
+  import/export mechanism; building an editing workflow around it remains
+  out of scope.
+- **FR-72**: The engine MUST be able to produce a human-readable,
+  per-family itinerary report from a given timetable: for each family,
+  the sessions its members are assigned to, in time order.
+- **FR-73**: The engine MUST be able to produce a human-readable,
+  per-activity/session roster report from a given timetable: for each
+  session, who is assigned to it, and how that compares to the activity's
+  occupancy limits.
+- **FR-74**: The engine MUST be able to produce an idle-time report
+  suitable for staffing/supervision planning, covering both whole
+  family/groups with nothing scheduled at a given time and individually
+  named idle adults — the old system treated these as two distinct views
+  because they serve different purposes, and this rewrite should too, not
+  collapse them into one undifferentiated camper-level list. This extends
+  the idle-time reporting already required by FR-23.
+- **FR-75** (should, not must): Where a solver's search naturally produces
+  more than one good candidate schedule (e.g. independent restarts), the
+  engine SHOULD be able to export/report on more than just the single
+  best one, so an organiser can compare alternatives — the old system
+  surfaced its top 10 results for this reason. A solver that only ever
+  has one canonical best answer (e.g. a provably lexicographically
+  optimal one) is not deficient for not manufacturing artificial
+  alternatives.
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an
@@ -232,6 +321,16 @@ adjust the trade-off (see NFR-4).
   search), it must still be able to expand that score back into the
   human-readable violation/objective report required by FR-40 — a single
   opaque number is not sufficient as the *only* output.
+- **NFR-9 (Progress reporting stays cheap)**: Progress reporting (§4.6)
+  MUST NOT materially slow down the underlying search — e.g. no expensive
+  full re-validation triggered on every single search step. Reporting
+  granularity/cadence is a tunable trade-off, not something that should
+  force a choice between "informative" and "fast".
+- **NFR-10 (Reports reuse the same rules)**: The human-readable reports of
+  §4.7 MUST be derived from the same validator/scoring logic as
+  everything else (FR-40, NFR-8) — not a separate, potentially
+  inconsistent implementation of "who's idle" or "who's in which
+  session".
 
 ## 6. Success criteria
 
@@ -246,6 +345,11 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
    and explained via the same rules (FR-40/FR-41).
 4. The scheduling engine has no dependency on Google Sheets access or
    printing code to run or to be tested.
+5. A long-running generation reports its own progress and is never
+   all-or-nothing (FR-60–FR-64); its result can be exported, re-imported,
+   and turned into the operational reports organisers and activity leaders
+   actually use day-to-day, without repeating the generation run
+   (FR-70–FR-75).
 
 ## 7. Open questions to confirm before/while designing
 
@@ -303,4 +407,33 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   range/group, or is this out of scope?
 
   [Answer: yes, there should be a way to express a lower bound age for an activity]
+
+- **OQ-9 (Progress update cadence)**: What's a sensible default interval
+  for progress updates (FR-60) — wall-clock-time based (e.g. every N
+  seconds), event-based (e.g. every time the best-found score improves),
+  or both?
+
+  [Answer: wall-clock-time (defaut: 60s)]
+
+- **OQ-10 (Progress reporting channel)**: Should progress (FR-60) be
+  written to stdout/a log (as the old system did), to a separate
+  pollable status file (useful for exactly the kind of external
+  background-run monitoring done by hand this session), or both?
+
+  [Answer: command line option to send to file (default: '-' for stdout)]
+
+- **OQ-11 (Export format)**: Should the machine-readable schedule export
+  (FR-70) be CSV (matching the old system, directly inspectable in a
+  spreadsheet), the same JSON-based domain format already used for
+  `--data` input, or should both be supported?
+
+  [Answer: output both CSV and JSON]
+
+- **OQ-12 (Multiple candidate schedules)**: Given FR-75 is a *should*, not
+  a *must* — is presenting multiple candidate schedules actually wanted
+  for this rewrite, or is a single best/canonical answer sufficient?
+  Directly relevant to whether annealing's per-chain results are worth
+  formally exporting, rather than only being used internally to pick the
+  overall winner.
   
+  [Answer: single best answer is sufficient]

@@ -779,7 +779,365 @@ reliance on leftover local state) before the final commit.
 
 ---
 
-## 3. After this plan
+## 3. Progress reporting and final report generation (Steps 23–32)
+
+### Context
+
+Reverse-engineered from two sources: the old GA-based system's actual
+behaviour (`family_camp/schedule/generate_schedule.py`,
+`family_camp/schedule/deep.py`'s `MyHallOfFame.dump_to_dir`, and
+`family_camp/schedule/check_schedule.py`), and direct, first-hand
+experience running family_camp2's own CP-SAT solver for a real ~3-hour
+job against real 2026 camp data: there was no way to tell what stage the
+run was in, whether it was making progress, or to get anything useful out
+of it without waiting for the whole thing to finish — external `ps`/log
+polling was the only option. Separately, that same session surfaced a
+concrete functional gap: the CLI's `--out` only ever wrote the
+*validation report* (scores and violations), never the actual generated
+*timetable* — there was no way to get the schedule itself back out in a
+reusable form.
+
+This phase implements REQUIREMENTS.md §4.6 (FR-60–FR-64, progress
+reporting) and §4.7 (FR-70–FR-75, schedule export and human-readable
+reporting), plus NFR-9/NFR-10. It follows the same ground rules as §0
+above (one step at a time, tests before commit, commit per step).
+
+REQUIREMENTS.md OQ-9–OQ-12 are now answered; each affected step
+implements that answer directly (no longer provisional):
+
+- **OQ-9 (cadence)**: wall-clock-time based, **default 60 seconds** - not
+  event-based. This matters for design, not just the default number:
+  reporting must keep happening on a timer even during a long stretch
+  where the search finds nothing better (exactly the silent stretches
+  experienced during the real 3-hour run) - see Step 24's design note on
+  why a plain "report on every improving solution" callback isn't enough
+  on its own to satisfy this.
+- **OQ-10 (channel)**: a command-line option to send progress to a file;
+  **default `-` for stdout**. There's deliberately no separate on/off
+  switch (matching the old system's always-on `verbose=True`) - redirecting
+  to a file the operator doesn't look at (or `/dev/null`) is how it's
+  silenced if unwanted, which NFR-9 (progress reporting stays cheap) makes
+  safe to leave on by default.
+- **OQ-11 (export format)**: **both CSV and JSON**. `--export-schedule
+  PATH` writes both `PATH.csv` and `PATH.json` (any extension typed on
+  `PATH` is stripped first) rather than needing two separate flags.
+- **OQ-12 (multiple candidates)**: a single best answer is sufficient -
+  FR-75 is explicitly not implemented by this plan. Step 31 is retained
+  below only as a record of that decision.
+
+### Step list
+
+### - [ ] Step 23: Progress-reporting abstraction
+
+**Goal**: A solver-agnostic way to report progress (FR-60/FR-61) on a
+wall-clock cadence (OQ-9), usable by any current or future solver, cheap
+enough to leave on by default (NFR-9, OQ-10).
+
+**Add** `src/family_camp2/progress.py`:
+- `ProgressEvent` (frozen dataclass): `stage: str` (e.g. `"phase1"`,
+  `"restarts"`), `message: str`, `elapsed_seconds: float`,
+  `tier0_score: int | None`, `tier1_score: float | None`,
+  `tier2_score: float | None` — reusing the same tier vocabulary as the
+  rest of the engine (FR-61, NFR-10), not a separate ad-hoc metric.
+- `ProgressReporter` — a `Protocol` with one method, `report(event:
+  ProgressEvent) -> None`.
+- `NullProgressReporter` — a no-op implementation, used internally by
+  anything that doesn't need reporting (e.g. existing tests that don't
+  pass a reporter explicitly).
+- `PrintProgressReporter` — writes a formatted line to a given stream.
+  Takes a `destination: str` constructor argument resolved once, up
+  front: `"-"` → `sys.stdout`, anything else → that path opened for
+  writing (OQ-10) - resolving eagerly at construction, not per-call,
+  keeps the hot path (NFR-9) to a single write.
+- `PeriodicHeartbeat` — a small helper that owns a background daemon
+  thread: constructed with a `ProgressReporter`, an `interval_seconds`
+  (OQ-9 default 60), and a zero-argument `get_event: Callable[[],
+  ProgressEvent | None]` callback; every `interval_seconds` it calls
+  `get_event()` and, if not `None`, reports it. Used as a context manager
+  (`__enter__` starts the thread, `__exit__` stops and joins it). This is
+  what makes the cadence genuinely wall-clock-based rather than tied to
+  how often a solver happens to find something new to report (see Step
+  24) - accepts an injectable `sleep: Callable[[float], None]`-style hook
+  so tests don't need to wait on a real timer.
+
+**Tests** (`tests/test_progress.py`): `PrintProgressReporter("-")` writes
+to the given stdout-like stream; `PrintProgressReporter(path)` writes to
+that file. `PeriodicHeartbeat` calls `get_event` and reports its result
+repeatedly at the given interval while active (using a fake/controllable
+timing hook, not real sleeps), and stops cleanly on `__exit__` (no more
+reports after that, and the thread is not left running -
+`thread.is_alive()` is `False` shortly after). `NullProgressReporter.report()`
+is a no-op.
+
+**Commit message**: `family_camp2 step 23: progress-reporting abstraction (FR-60/FR-61/NFR-9)`
+
+---
+
+### - [ ] Step 24: CP-SAT progress integration
+
+**Goal**: Surface phase transitions and search progress from the
+three-phase solve (FR-61/FR-62) on a genuine wall-clock cadence (OQ-9) -
+the exact gap felt during the real 3-hour run, where Phase 2/3 went long,
+silent stretches with no signal at all.
+
+**Design note**: `cp_model.CpSolverSolutionCallback` only fires when the
+solver finds a *new, improving* solution - during a long stall (observed
+for real on the 283-camper run) it fires rarely or not at all, so relying
+on it alone cannot satisfy "reports on a timer" (OQ-9). Instead: the
+callback's only job is to cheaply record the latest solution's info
+(objective value, elapsed time) into a small lock-protected holder
+(`solver.Solve()` may run CP-SAT's own internal worker threads, so the
+callback can fire from a thread other than the caller's - a `threading.Lock`
+around the holder is required, not optional). A `PeriodicHeartbeat`
+(Step 23) runs alongside the blocking `solver.Solve(...)` call for that
+phase's duration, reading the holder every `interval_seconds` and
+reporting whatever it finds (even if unchanged since the last report -
+that repetition *is* the "still alive" signal) regardless of whether the
+callback has fired recently.
+
+**Update** `src/family_camp2/solvers/cp_sat.py`:
+- Add a `_ProgressCallback(cp_model.CpSolverSolutionCallback)` that
+  updates a shared, lock-protected "latest known solution" holder on
+  every new solution (elapsed time + objective value); no reporting
+  happens inside the callback itself.
+- Thread `progress_reporter: ProgressReporter = NullProgressReporter()`
+  and `progress_interval_seconds: float = 60` through `solve_phase1`/
+  `solve_phase2`/`solve_phase3`: report a "phase started" event, wrap the
+  `solver.Solve(model, callback)` call in a `PeriodicHeartbeat` reading
+  the callback's holder (tagging events with the right tier field for
+  that phase), then report a "phase finished" event with the final
+  status.
+- `CpSatSolver.__init__`/`.solve()` gain the same two parameters, passed
+  through to all three phases.
+
+**Tests** (`tests/test_cp_sat_progress.py`): a fake, list-collecting
+`ProgressReporter` with a short `progress_interval_seconds` passed into
+`CpSatSolver().solve(...)` on a small instance; assert phase-start/finish
+events appear in order (1 before 2 before 3) and at least one heartbeat
+event fires per phase with a tier-score value consistent with that
+phase's known result on the fixture. A dedicated test simulates a "stall"
+(a phase with no improving solutions after the first, e.g. a trivially
+small/instantly-solved model with a short artificial delay before
+`Solve()` returns) and confirms heartbeat events still arrive on the
+timer, not zero. Confirm omitting the new parameters (the defaults)
+doesn't change existing behaviour - the existing `test_cp_sat_solver.py`
+suite passes unchanged.
+
+**Commit message**: `family_camp2 step 24: CP-SAT progress reporting (phase transitions + wall-clock heartbeat)`
+
+---
+
+### - [ ] Step 25: Annealing progress integration
+
+**Goal**: Surface restart progress (FR-61/FR-62) for the multi-restart
+search, on the same wall-clock cadence.
+
+**Design note (scope)**: annealing's chains run in separate *worker
+processes* (`multiprocessing.Pool`), not threads in the caller's process -
+a `ProgressReporter` (potentially wrapping an open file handle) isn't
+safely shareable across that boundary the way it is for CP-SAT's
+in-process callback. Rather than building a cross-process progress queue,
+this step reports at **chain-completion** boundaries in the *main*
+process, using `pool.imap_unordered` (which yields each chain's result as
+soon as it's ready) in place of the current `pool.starmap` (which blocks
+until *all* chains finish). This is a deliberate scope decision, not an
+oversight: measured on real ~283-camper data, a full 8-chain ×
+5000-iteration run completes in about 2.5 minutes total, i.e. individual
+chains are seconds, not the tens-of-minutes-plus that motivated Step 24's
+in-phase heartbeat for CP-SAT - per-chain-completion events already land
+well inside the 60-second default cadence in practice. If a future,
+much-larger-scale run made individual chains themselves run for a long
+time, intra-chain reporting could be added the same way as Step 24 (a
+progress queue drained by a `PeriodicHeartbeat` in the main process) -
+worth a one-line note in the code, not implementing pre-emptively now.
+
+**Update** `src/family_camp2/solvers/annealing/solver.py`:
+- `run_restarts` gains `progress_reporter: ProgressReporter =
+  NullProgressReporter()`; switch its pool usage from `pool.starmap` to
+  `pool.imap_unordered` over a small single-argument adapter (since
+  `imap_unordered` doesn't support multiple positional args the way
+  `starmap` does), and report an event each time a chain's result arrives
+  (`stage="restarts"`, message noting which chain of how many just
+  finished and its resulting Tier 0/1/2 scores).
+- `AnnealingSolver.__init__`/`.solve()` gain the same parameter.
+
+**Tests** (`tests/test_annealing_progress.py`): fake reporter passed into
+`AnnealingSolver(...).solve(...)` with a handful of chains on a small
+instance; assert one completion event arrives per chain (order not
+guaranteed, per `imap_unordered`'s nature - assert the *set* of chains
+reported matches, not a fixed order). Confirm omitting the parameter
+doesn't change existing behaviour - existing annealing tests pass
+unchanged.
+
+**Commit message**: `family_camp2 step 25: annealing progress reporting (per-chain completion via imap_unordered)`
+
+---
+
+### - [ ] Step 26: CLI progress wiring
+
+**Goal**: Make progress reporting usable from the command line, on by
+default (FR-60, OQ-10).
+
+**Update**:
+- `src/family_camp2/solvers/base.py`: the `Solver` protocol's `solve()`
+  gains optional `progress_reporter`/`progress_interval_seconds`
+  parameters (defaults as in Steps 24/25), so the CLI can pass them
+  uniformly regardless of which solver is chosen.
+- `src/family_camp2/cli.py`: add `--progress-output PATH` (default `"-"`
+  for stdout, per OQ-10) and `--progress-interval SECONDS` (default `60`,
+  per OQ-9). Always construct a `PrintProgressReporter` from these (no
+  separate on/off flag - redirect to a file or `/dev/null` to silence,
+  per the Context note above) and pass it to `solver.solve(...)`.
+
+**Tests** (`tests/test_cli.py` additions): CLI run on a tiny instance with
+a short `--progress-interval` and `--progress-output` pointed at a temp
+file produces at least one progress line in that file; `--progress-output -`
+(the default) produces progress lines on stdout (`capsys`), interleaved
+with (but not replacing) the final validation report already printed
+there.
+
+**Commit message**: `family_camp2 step 26: wire --progress-output/--progress-interval into the CLI`
+
+---
+
+### - [ ] Step 27: Schedule CSV + JSON export/import
+
+**Goal**: Make the actual generated timetable - not just the validation
+report - durably exportable and re-importable (FR-70/FR-71), in both
+formats (OQ-11), closing the gap found during the real 3-hour run where
+the only way to get the schedule out was an ad-hoc one-off script.
+
+**Add** `src/family_camp2/io/schedule_export.py`:
+- `ScheduleExportError` (new exception type, matching the project's
+  established "fail loud and specific" convention from FR-1).
+- A shared internal helper building one row/record per assignment
+  (`family_id`, `camper_name`, `activity_name`, `session_label`,
+  `session_start` as ISO 8601) - used by both formats below, so the
+  "what does an exported assignment look like" logic exists exactly once.
+- `dump_schedule_csv(timetable: Timetable, path: Path | str) -> None` and
+  `dump_schedule_json(timetable: Timetable, path: Path | str) -> None`.
+- `load_schedule_csv(path, activities, sessions, campers) -> Timetable`
+  and `load_schedule_json(path, activities, sessions, campers) -> Timetable`
+  - the import side (FR-71), resolving each row/record back to the
+  matching `Camper`/`Session` from the given reference collections;
+  raises `ScheduleExportError` naming the specific row and the
+  unresolvable camper/session if it can't, rather than crashing or
+  silently skipping it.
+
+**Update** `src/family_camp2/cli.py`: add `--export-schedule PATH`. Strip
+any extension from `PATH` and always write both `<stem>.csv` and
+`<stem>.json` (OQ-11) after solving - independent of `--out`, which
+continues to write the validation report only.
+
+**Tests** (`tests/test_schedule_export.py`): round-trip a small
+`Timetable` through both `dump_schedule_csv`/`load_schedule_csv` and
+`dump_schedule_json`/`load_schedule_json`, asserting equality in each
+case; an unresolvable row/record raises `ScheduleExportError` naming it,
+for both formats. CLI test: `--export-schedule PATH` produces both
+`PATH.csv` and `PATH.json`, each independently re-loadable to the same
+assignments.
+
+**Commit message**: `family_camp2 step 27: schedule CSV + JSON export/import (FR-70/FR-71)`
+
+---
+
+### - [ ] Step 28: Per-family and per-activity reports
+
+**Goal**: Human-readable operational reports from a timetable (FR-72/FR-73),
+matching the *content* of the old system's `campers_out`/`activites_out`
+reports (not their exact formatting).
+
+**Add** `src/family_camp2/reporting.py`:
+- `render_family_itinerary(timetable: Timetable, campers: list[Camper]) -> str`
+  - for each family (sorted alphabetically, matching the old system's
+  human-friendly ordering), its members' sessions in time order.
+- `render_activity_roster(timetable: Timetable, sessions: list[Session]) -> str`
+  - for each activity's sessions, who's assigned plus an occupancy-vs-limit
+  summary line.
+
+Both functions read only `Timetable`/domain objects - per NFR-10, no new
+validation/scoring logic, only presentation of what `validation/` already
+computes.
+
+**Tests** (`tests/test_reporting.py`): small fixture; assert expected
+campers/sessions appear under the right family/activity grouping, and
+occupancy-vs-limit figures are correct.
+
+**Commit message**: `family_camp2 step 28: per-family itinerary and per-activity roster reports (FR-72/FR-73)`
+
+---
+
+### - [ ] Step 29: Family-group and adult-specific idle reporting
+
+**Goal**: Extend idle-time reporting to the family/group level and flag
+idle adults specifically (FR-74), matching the old system's two distinct
+staffing-relevant views (a whole idle family vs. specifically which
+adults are free) rather than one undifferentiated camper-level list.
+
+**Update** `src/family_camp2/validation/idle.py`: extend `IdleBucket` (or
+add a parallel structure - exact shape is an implementation decision, the
+requirement is the two distinct views) with `idle_families: tuple[str,
+...]` and `idle_adults: tuple[Camper, ...]`, computed from the same
+active-session scan `find_idle_slots` already does (no second full pass,
+per NFR-9).
+
+**Tests** (`tests/test_idle.py` additions): a family with every member
+idle at a bucket is reported as an idle family; an idle adult is named
+specifically; a family with at least one active member is not reported as
+idle even if others are.
+
+**Commit message**: `family_camp2 step 29: family-group and adult-specific idle reporting (FR-74)`
+
+---
+
+### - [ ] Step 30: CLI wiring for reports
+
+**Goal**: Let an operator actually get Steps 28/29's reports out of a run,
+mirroring the old system's per-run output-directory convention
+(`MyHallOfFame.dump_to_dir`/`check_schedule.py`).
+
+**Update** `src/family_camp2/cli.py`: add `--report-dir PATH` - if given,
+after solving, write `family_itinerary.txt`, `activity_roster.txt`, and
+`idle_report.txt` into that directory.
+
+**Tests**: CLI run with `--report-dir` produces the three expected files
+with correct, non-empty content on a small fixture.
+
+**Commit message**: `family_camp2 step 30: wire report generation into the CLI (--report-dir)`
+
+---
+
+### - [x] Step 31: Multi-candidate export for annealing (FR-75) — SKIPPED
+
+**Not implemented.** FR-75 is explicitly a *should*, not a *must*, and
+REQUIREMENTS.md OQ-12 answered that a single best answer is sufficient for
+this rewrite. Recorded here (checked off, with this note) rather than
+silently deleted, so the decision and its reasoning stay visible: if a
+future need arises to compare annealing's per-chain candidates rather than
+only using them internally to pick the overall winner, `run_restarts`
+(Step 25) already has every chain's result available in-process before
+picking the winner - exposing them would be additive, not a redesign.
+
+---
+
+### - [ ] Step 32: Documentation
+
+**Goal**: `family_camp2/README.md` documents everything this phase added.
+
+**Update** `README.md`: document `--progress-output`/`--progress-interval`,
+`--export-schedule` (now writing both `.csv` and `.json`), `--report-dir`,
+and the new report/export file formats, alongside the existing CLI usage
+examples. Note FR-75/OQ-12's outcome (single-candidate export only) so a
+future reader doesn't wonder why annealing's other chains aren't surfaced.
+
+**Final check**: full test suite green from a fresh `pip install -e
+".[dev]"` in a new venv, same as Step 22.
+
+**Commit message**: `family_camp2 step 32: document progress reporting and report generation`
+
+---
+
+## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:

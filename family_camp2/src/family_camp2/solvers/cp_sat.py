@@ -9,6 +9,8 @@ three-phase lexicographic solve and the ``CpSatSolver`` itself.
 
 from __future__ import annotations
 
+import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,6 +20,7 @@ from ortools.sat.python import cp_model
 
 from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable, sessions_overlap
+from family_camp2.progress import NullProgressReporter, PeriodicHeartbeat, ProgressEvent, ProgressReporter
 from family_camp2.solvers.base import SolveResult
 from family_camp2.solvers.registry import register
 from family_camp2.validation.class2 import Tier0Weights
@@ -348,11 +351,74 @@ def tier0_expr(class2_vars: Class2Vars, weights: Tier0Weights = Tier0Weights()):
     )
 
 
+# --- Progress reporting (REQUIREMENTS.md §4.6, FR-60-64) ---
+#
+# CpSolverSolutionCallback only fires when the solver finds a new,
+# improving solution - during a long stall (observed for real on a
+# 283-camper instance) it can fire rarely or not at all, so it cannot by
+# itself satisfy a wall-clock cadence (OQ-9: every 60s by default). The
+# callback's only job is to cheaply record the latest solution into a
+# lock-protected holder (Solve() may run CP-SAT's own internal search
+# threads, so the callback can fire from a thread other than the caller's
+# - the lock is required, not defensive theatre); a PeriodicHeartbeat
+# (family_camp2.progress) reads that holder on its own timer, independent
+# of whether the callback has fired recently, and does the actual
+# reporting. Phase 2/3's reported tier1/tier2 values are the solver's raw
+# internal objective (see tier1_expr/tier2_expr) - directionally
+# meaningful (trending better over time) but not in the same units as the
+# final validated report's tiers.score_tier1/score_tier2; only Tier 0's
+# progress value matches score_tier0 exactly (tier0_expr mirrors it
+# exactly, unlike the other two).
+
+
+class _ProgressCallback(cp_model.CpSolverSolutionCallback):
+    def __init__(self, start_time: float):
+        super().__init__()
+        self._start_time = start_time
+        self._lock = threading.Lock()
+        self._latest: tuple[float, float] | None = None  # (elapsed_seconds, objective_value)
+
+    def on_solution_callback(self) -> None:
+        elapsed = time.monotonic() - self._start_time
+        value = self.ObjectiveValue()
+        with self._lock:
+            self._latest = (elapsed, value)
+
+    def latest(self) -> tuple[float, float] | None:
+        with self._lock:
+            return self._latest
+
+
+def _make_get_event(callback: _ProgressCallback, stage: str, tier_index: int, start_time: float):
+    def get_event() -> ProgressEvent | None:
+        elapsed = time.monotonic() - start_time
+        latest = callback.latest()
+        if latest is None:
+            return ProgressEvent(stage=stage, message="searching, no solution found yet", elapsed_seconds=elapsed)
+        solution_elapsed, value = latest
+        kwargs: dict = {
+            "stage": stage,
+            "message": f"best so far found {solution_elapsed:.0f}s in",
+            "elapsed_seconds": elapsed,
+        }
+        if tier_index == 0:
+            kwargs["tier0_score"] = round(value)
+        elif tier_index == 1:
+            kwargs["tier1_score"] = value
+        else:
+            kwargs["tier2_score"] = value
+        return ProgressEvent(**kwargs)
+
+    return get_event
+
+
 def solve_phase1(
     model: cp_model.CpModel,
     objective,
     time_limit_seconds: float | None = None,
     random_seed: int | None = None,
+    progress_reporter: ProgressReporter = NullProgressReporter(),
+    progress_interval_seconds: float = 60,
 ) -> tuple[cp_model.CpSolver, int]:
     """Minimise the Tier 0 objective. Returns the solved CpSolver (so
     variable values can still be inspected) and the achieved optimum."""
@@ -362,8 +428,20 @@ def solve_phase1(
         solver.parameters.max_time_in_seconds = time_limit_seconds
     if random_seed is not None:
         solver.parameters.random_seed = random_seed
-    status = solver.Solve(model)
+
+    start_time = time.monotonic()
+    progress_reporter.report(ProgressEvent(stage="phase1", message="started", elapsed_seconds=0.0))
+    callback = _ProgressCallback(start_time)
+    with PeriodicHeartbeat(progress_reporter, progress_interval_seconds, _make_get_event(callback, "phase1", 0, start_time)):
+        status = solver.Solve(model, callback)
     solver._resolved_status = status  # StatusName() with no args is broken on some ortools/Python builds
+    progress_reporter.report(
+        ProgressEvent(
+            stage="phase1",
+            message=f"finished: {solver.StatusName(status)}",
+            elapsed_seconds=time.monotonic() - start_time,
+        )
+    )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError(f"CP-SAT Phase 1 solve failed with status {solver.StatusName(status)}")
     return solver, round(solver.ObjectiveValue())
@@ -491,14 +569,28 @@ def solve_phase2(
     tier1_objective,
     time_limit_seconds: float | None = None,
     random_seed: int | None = None,
+    progress_reporter: ProgressReporter = NullProgressReporter(),
+    progress_interval_seconds: float = 60,
 ) -> tuple[cp_model.CpSolver, int]:
     """Fix Tier 0 at its Phase 1 optimum (see module note above on why
     this is an exact equality, not an inequality), then maximise Tier 1."""
     model.Add(tier0_objective == v0)
     model.Maximize(tier1_objective)
     solver = _new_solver(time_limit_seconds, random_seed)
-    status = solver.Solve(model)
+
+    start_time = time.monotonic()
+    progress_reporter.report(ProgressEvent(stage="phase2", message="started", elapsed_seconds=0.0))
+    callback = _ProgressCallback(start_time)
+    with PeriodicHeartbeat(progress_reporter, progress_interval_seconds, _make_get_event(callback, "phase2", 1, start_time)):
+        status = solver.Solve(model, callback)
     solver._resolved_status = status
+    progress_reporter.report(
+        ProgressEvent(
+            stage="phase2",
+            message=f"finished: {solver.StatusName(status)}",
+            elapsed_seconds=time.monotonic() - start_time,
+        )
+    )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError(f"CP-SAT Phase 2 solve failed with status {solver.StatusName(status)}")
     return solver, round(solver.ObjectiveValue())
@@ -513,6 +605,8 @@ def solve_phase3(
     tier2_objective,
     time_limit_seconds: float | None = None,
     random_seed: int | None = None,
+    progress_reporter: ProgressReporter = NullProgressReporter(),
+    progress_interval_seconds: float = 60,
 ) -> cp_model.CpSolver:
     """Fix Tier 0 and Tier 1 at their achieved optima (see module note
     above), then minimise Tier 2."""
@@ -520,8 +614,20 @@ def solve_phase3(
     model.Add(tier1_objective == o1)
     model.Minimize(tier2_objective)
     solver = _new_solver(time_limit_seconds, random_seed)
-    status = solver.Solve(model)
+
+    start_time = time.monotonic()
+    progress_reporter.report(ProgressEvent(stage="phase3", message="started", elapsed_seconds=0.0))
+    callback = _ProgressCallback(start_time)
+    with PeriodicHeartbeat(progress_reporter, progress_interval_seconds, _make_get_event(callback, "phase3", 2, start_time)):
+        status = solver.Solve(model, callback)
     solver._resolved_status = status
+    progress_reporter.report(
+        ProgressEvent(
+            stage="phase3",
+            message=f"finished: {solver.StatusName(status)}",
+            elapsed_seconds=time.monotonic() - start_time,
+        )
+    )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise RuntimeError(f"CP-SAT Phase 3 solve failed with status {solver.StatusName(status)}")
     return solver
@@ -531,19 +637,33 @@ def solve_phase3(
 class CpSatParams:
     time_limit_seconds: float | None = None
     random_seed: int | None = None
+    progress_reporter: ProgressReporter = field(default_factory=NullProgressReporter)
+    progress_interval_seconds: float = 60
 
 
 @register("cp_sat")
 class CpSatSolver:
     """Design A (DESIGN_OPTIONS.md §3): the full three-phase lexicographic solve.
 
-    Takes ``time_limit_seconds``/``random_seed`` directly (rather than a
-    single params object) so it can be constructed uniformly via
-    ``registry.get_solver(name, **kwargs)`` from CLI flags (Step 15).
+    Takes ``time_limit_seconds``/``random_seed``/``progress_reporter``/
+    ``progress_interval_seconds`` directly (rather than a single params
+    object) so it can be constructed uniformly via
+    ``registry.get_solver(name, **kwargs)`` from CLI flags (Step 15/26).
     """
 
-    def __init__(self, time_limit_seconds: float | None = None, random_seed: int | None = None):
-        self.params = CpSatParams(time_limit_seconds=time_limit_seconds, random_seed=random_seed)
+    def __init__(
+        self,
+        time_limit_seconds: float | None = None,
+        random_seed: int | None = None,
+        progress_reporter: ProgressReporter = NullProgressReporter(),
+        progress_interval_seconds: float = 60,
+    ):
+        self.params = CpSatParams(
+            time_limit_seconds=time_limit_seconds,
+            random_seed=random_seed,
+            progress_reporter=progress_reporter,
+            progress_interval_seconds=progress_interval_seconds,
+        )
 
     def solve(
         self,
@@ -563,6 +683,8 @@ class CpSatSolver:
         kwargs = {
             "time_limit_seconds": self.params.time_limit_seconds,
             "random_seed": self.params.random_seed,
+            "progress_reporter": self.params.progress_reporter,
+            "progress_interval_seconds": self.params.progress_interval_seconds,
         }
 
         solver1, v0 = solve_phase1(model, t0, **kwargs)

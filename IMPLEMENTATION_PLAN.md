@@ -827,7 +827,7 @@ implements that answer directly (no longer provisional):
 
 ### Step list
 
-### - [ ] Step 23: Progress-reporting abstraction
+### - [x] Step 23: Progress-reporting abstraction
 
 **Goal**: A solver-agnostic way to report progress (FR-60/FR-61) on a
 wall-clock cadence (OQ-9), usable by any current or future solver, cheap
@@ -857,17 +857,27 @@ enough to leave on by default (NFR-9, OQ-10).
   (`__enter__` starts the thread, `__exit__` stops and joins it). This is
   what makes the cadence genuinely wall-clock-based rather than tied to
   how often a solver happens to find something new to report (see Step
-  24) - accepts an injectable `sleep: Callable[[float], None]`-style hook
-  so tests don't need to wait on a real timer.
+  24).
+
+**Deviation found during implementation**: the plan originally called for
+an injectable `sleep` hook so tests could drive the loop without a fake
+clock. Building it that way first surfaced a real deadlock: if `__exit__`
+sets the stop flag while the background thread is blocked inside a
+same-signature-but-uninterruptible fake `sleep`, `thread.join()` hangs
+forever, since nothing wakes that `sleep` up early. Fixed by using
+`threading.Event.wait(interval_seconds)` as the timer instead of a plain
+`sleep` call - `Event.wait` doubles as the shutdown signal, so it returns
+immediately once `__exit__` sets the stop event, rather than only after a
+full interval (or never). This is also simpler to test: no fake clock
+needed, just a short real `interval_seconds` (tests use ~0.02s).
 
 **Tests** (`tests/test_progress.py`): `PrintProgressReporter("-")` writes
 to the given stdout-like stream; `PrintProgressReporter(path)` writes to
-that file. `PeriodicHeartbeat` calls `get_event` and reports its result
-repeatedly at the given interval while active (using a fake/controllable
-timing hook, not real sleeps), and stops cleanly on `__exit__` (no more
-reports after that, and the thread is not left running -
-`thread.is_alive()` is `False` shortly after). `NullProgressReporter.report()`
-is a no-op.
+that file. `PeriodicHeartbeat` reports repeatedly on a short real
+interval while active, produces nothing when `get_event` returns `None`,
+and - the regression test for the deadlock above - `__exit__` returns
+promptly even with a very long `interval_seconds` (999s), not blocking
+until that interval elapses. `NullProgressReporter.report()` is a no-op.
 
 **Commit message**: `family_camp2 step 23: progress-reporting abstraction (FR-60/FR-61/NFR-9)`
 

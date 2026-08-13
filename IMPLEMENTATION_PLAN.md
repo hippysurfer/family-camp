@@ -1149,7 +1149,7 @@ picking the winner - exposing them would be additive, not a redesign.
 
 ---
 
-### - [ ] Step 32: Documentation
+### - [x] Step 32: Documentation
 
 **Goal**: `family_camp2/README.md` documents everything this phase added.
 

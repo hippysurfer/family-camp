@@ -45,11 +45,60 @@ python -m family_camp2 --solver cp_sat --legacy-cache ../.cache.pickle
 
 # Write the full structured report to a file as well as stdout
 python -m family_camp2 --solver cp_sat --data tests/fixtures/small_camp.json --out report.json
+
+# A long CP-SAT run: progress every 60s to a log file, plus the actual
+# schedule (not just the validation report) and human-readable reports
+python -m family_camp2 --solver cp_sat --data data.json --time-limit 5400 \
+    --progress-output run.log --export-schedule schedule --report-dir reports/
 ```
 
 Other flags: `--config PATH` (an `EngineConfig` JSON file, see below),
 `--time-limit SECONDS` (both solvers), `--seed INT` (both solvers),
-`--num-chains`/`--iterations-per-chain` (annealing only).
+`--num-chains`/`--iterations-per-chain` (annealing only),
+`--progress-output`/`--progress-interval`, `--export-schedule`,
+`--report-dir` (all documented in the next section).
+
+## Progress reporting and report generation
+
+Implements REQUIREMENTS.md §4.6/§4.7 (FR-60–75) - reverse-engineered from
+the old system's per-generation progress printing and its
+Hall-of-Fame/`check_schedule.py` reports, plus direct experience running a
+real multi-hour CP-SAT job with none of this and no way to see what was
+happening (see DESIGN_OPTIONS.md-adjacent history in
+IMPLEMENTATION_PLAN.md §3).
+
+**Progress** (`--progress-output`, `--progress-interval`): on by default -
+there's no separate on/off flag, redirect to a file (or `/dev/null`) to
+silence it. `--progress-output -` (the default) writes to stdout,
+interleaved with the final report; any other value is a file path.
+`--progress-interval SECONDS` (default 60) controls the cadence for
+CP-SAT, which reports on a genuine wall-clock timer via a background
+heartbeat thread (so it keeps reporting even during a long stretch with no
+improving solution - see the module note in `solvers/cp_sat.py`).
+Annealing instead reports each time a restart chain finishes (see the
+module note in `solvers/annealing/solver.py` for why - at real-world
+scale, chains finish in seconds, well inside the default cadence anyway).
+
+**Schedule export** (`--export-schedule PATH`): writes the actual
+generated timetable - who's assigned to what, distinct from `--out`'s
+scoring/violation report - as **both** `PATH.csv` and `PATH.json` (any
+extension typed on `PATH` is stripped first). Re-importable via
+`family_camp2.io.schedule_export.load_schedule_csv`/`load_schedule_json`.
+
+**Operational reports** (`--report-dir PATH`): writes three text files
+into `PATH` (created if needed):
+- `family_itinerary.txt` - each family's assigned sessions, in time order.
+- `activity_roster.txt` - each session's assigned campers, with occupancy
+  against the activity's limit.
+- `idle_report.txt` - per time-bucket, which whole families have nobody
+  scheduled and which adults specifically are idle (two distinct views,
+  matching the old system - a family with nobody scheduled is a different
+  signal from "this specific adult happens to be free to help").
+
+Not implemented: exporting more than one candidate schedule when a solver
+has several (e.g. annealing's other restart chains) - REQUIREMENTS.md
+FR-75 is a *should*, and OQ-12 confirmed a single best answer is
+sufficient for this rewrite.
 
 ## Input data
 
@@ -127,14 +176,16 @@ everyone must attend, empty by default per OQ-5).
 
 ```
 domain.py            Activity / Session / Camper / Timetable
-validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time, the FR-40/41 report)
+validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time incl. family/adult views, the FR-40/41 report)
 config.py            EngineConfig (NFR-4)
-io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth)
+progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
+reporting.py         per-family/per-activity/idle text reports, from a Timetable (FR-72/73/74)
+io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements
   registry.py         name -> Solver lookup, used by the CLI
-  cp_sat.py           Design A: OR-Tools CP-SAT, three-phase lexicographic solve
-  annealing/          Design B: simulated annealing with domain-aware moves
+  cp_sat.py           Design A: OR-Tools CP-SAT, three-phase lexicographic solve, wall-clock progress heartbeat
+  annealing/          Design B: simulated annealing with domain-aware moves, per-chain progress
 cli.py                argparse entry point (--solver cp_sat|annealing)
 fetch_cli.py          argparse entry point to download --data input from Google Sheets
 ```
@@ -157,3 +208,14 @@ and add `"your-name"` to the CLI's `--solver` choices
 `Timetable` — pass it through `validation.validator.validate(...)` before
 returning, so its correctness/quality is reported exactly like the other
 two.
+
+Progress reporting is optional but recommended for anything that can run
+longer than a few seconds: accept a `progress_reporter: ProgressReporter =
+NullProgressReporter()` constructor kwarg (matching `time_limit_seconds`/
+`random_seed`'s existing pattern - `registry.get_solver(name, **kwargs)`
+already passes constructor kwargs through uniformly, no protocol change
+needed) and call `.report(ProgressEvent(...))` on it periodically. See
+`progress.py` for `PeriodicHeartbeat` (a wall-clock timer, for a solver
+with one long blocking call) and `solvers/annealing/solver.py`'s
+`run_restarts` (per-unit-of-work reporting, for a solver that's already a
+visible Python loop or naturally chunked across multiple processes).

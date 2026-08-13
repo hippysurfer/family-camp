@@ -3,6 +3,8 @@ import json
 import pytest
 
 from family_camp2 import cli
+from family_camp2.io.json_loader import load_json
+from family_camp2.io.schedule_export import load_schedule_csv, load_schedule_json
 from fixtures import SMALL_CAMP_JSON
 
 
@@ -69,3 +71,23 @@ def test_cli_progress_output_can_be_redirected_to_a_file(tmp_path, capsys):
 
     progress_content = progress_path.read_text()
     assert "phase1" in progress_content
+
+
+def test_cli_export_schedule_writes_both_csv_and_json(tmp_path):
+    export_path = tmp_path / "schedule"  # deliberately no extension
+    exit_code = cli.main([
+        "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
+        "--export-schedule", str(export_path),
+    ])
+
+    assert exit_code == 0
+    csv_path = export_path.with_suffix(".csv")
+    json_path = export_path.with_suffix(".json")
+    assert csv_path.exists()
+    assert json_path.exists()
+
+    activities, sessions, campers = load_json(SMALL_CAMP_JSON)
+    csv_timetable = load_schedule_csv(csv_path, activities, sessions, campers)
+    json_timetable = load_schedule_json(json_path, activities, sessions, campers)
+    assert csv_timetable == json_timetable
+    assert len(csv_timetable) > 0

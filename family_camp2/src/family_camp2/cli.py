@@ -10,6 +10,7 @@ from pathlib import Path
 from family_camp2.config import load_config
 from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
+from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json
 from family_camp2.progress import PrintProgressReporter
 from family_camp2.solvers.registry import get_solver
 from family_camp2.validation.report import render_text
@@ -62,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Wall-clock seconds between progress updates (OQ-9, default 60). CP-SAT only - "
         "annealing reports per restart-chain completion instead (see solvers/annealing/solver.py).",
     )
+    parser.add_argument(
+        "--export-schedule", type=Path, default=None, dest="export_schedule",
+        help="If given, write the actual generated timetable (not the validation report) to "
+        "<path>.csv and <path>.json (any extension on <path> is stripped first; OQ-11).",
+    )
     return parser
 
 
@@ -106,5 +112,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.out is not None:
         args.out.write_text(_report_to_json(result.report))
+
+    if args.export_schedule is not None:
+        stem = args.export_schedule.with_suffix("")
+        dump_schedule_csv(result.timetable, stem.with_suffix(".csv"))
+        dump_schedule_json(result.timetable, stem.with_suffix(".json"))
 
     return 0

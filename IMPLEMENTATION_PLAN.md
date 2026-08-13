@@ -1029,7 +1029,7 @@ default `--progress-output -` produces progress lines interleaved with
 
 ---
 
-### - [ ] Step 27: Schedule CSV + JSON export/import
+### - [x] Step 27: Schedule CSV + JSON export/import
 
 **Goal**: Make the actual generated timetable - not just the validation
 report - durably exportable and re-importable (FR-70/FR-71), in both

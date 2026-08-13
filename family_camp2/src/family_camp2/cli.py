@@ -12,7 +12,9 @@ from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
 from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json
 from family_camp2.progress import PrintProgressReporter
+from family_camp2.reporting import render_activity_roster, render_family_itinerary, render_idle_report
 from family_camp2.solvers.registry import get_solver
+from family_camp2.validation.idle import find_idle_slots
 from family_camp2.validation.report import render_text
 
 
@@ -68,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="If given, write the actual generated timetable (not the validation report) to "
         "<path>.csv and <path>.json (any extension on <path> is stripped first; OQ-11).",
     )
+    parser.add_argument(
+        "--report-dir", type=Path, default=None, dest="report_dir",
+        help="If given, write family_itinerary.txt, activity_roster.txt, and idle_report.txt "
+        "into this directory (created if needed) after solving (FR-72/FR-73/FR-74).",
+    )
     return parser
 
 
@@ -117,5 +124,12 @@ def main(argv: list[str] | None = None) -> int:
         stem = args.export_schedule.with_suffix("")
         dump_schedule_csv(result.timetable, stem.with_suffix(".csv"))
         dump_schedule_json(result.timetable, stem.with_suffix(".json"))
+
+    if args.report_dir is not None:
+        args.report_dir.mkdir(parents=True, exist_ok=True)
+        idle_report = find_idle_slots(result.timetable, campers, sessions)
+        (args.report_dir / "family_itinerary.txt").write_text(render_family_itinerary(result.timetable, campers))
+        (args.report_dir / "activity_roster.txt").write_text(render_activity_roster(result.timetable, sessions))
+        (args.report_dir / "idle_report.txt").write_text(render_idle_report(idle_report))
 
     return 0

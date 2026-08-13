@@ -1,11 +1,11 @@
 """Human-readable operational reports from a timetable (REQUIREMENTS.md
-§4.7, FR-72/FR-73) - matching the *content* of the old system's
-``campers_out``/``activites_out`` reports (`deep.py:print_individual`),
-not their exact formatting.
+§4.7, FR-72/FR-73/FR-74) - matching the *content* of the old system's
+``campers_out``/``activites_out``/``inactive_*_out`` reports
+(`deep.py:print_individual`), not their exact formatting.
 
-Per NFR-10, these read only ``Timetable``/domain objects that
-``validation/`` already computes from - no new scoring/validation logic
-lives here, only presentation.
+Per NFR-10, these read only ``Timetable``/domain objects and the
+already-computed ``IdleReport`` that ``validation/`` produces - no new
+scoring/validation logic lives here, only presentation.
 """
 
 from __future__ import annotations
@@ -13,8 +13,9 @@ from __future__ import annotations
 from collections import defaultdict
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
+from family_camp2.validation.idle import IdleReport
 
-__all__ = ["render_family_itinerary", "render_activity_roster"]
+__all__ = ["render_family_itinerary", "render_activity_roster", "render_idle_report"]
 
 _TIME_FORMAT = "%a %H:%M"
 
@@ -71,6 +72,25 @@ def render_activity_roster(timetable: Timetable, sessions: list[Session]) -> str
             )
             for camper in occupants:
                 lines.append(f"    - {camper.name} ({camper.family_id})")
+        lines.append("")
+
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def render_idle_report(idle_report: IdleReport) -> str:
+    """For each active time bucket (buckets with nothing scheduled at all,
+    e.g. a lunch break, are already excluded by find_idle_slots): the
+    families with nobody active, and the individually-named idle adults
+    (FR-74) - two distinct staffing-relevant views, not one
+    undifferentiated camper list."""
+
+    lines: list[str] = []
+    for bucket in idle_report.buckets:
+        lines.append(f"{bucket.start.strftime(_TIME_FORMAT)}:")
+        families = ", ".join(bucket.idle_families) if bucket.idle_families else "none"
+        lines.append(f"  Idle families: {families}")
+        adults = ", ".join(c.name for c in bucket.idle_adults) if bucket.idle_adults else "none"
+        lines.append(f"  Idle adults: {adults}")
         lines.append("")
 
     return "\n".join(lines).rstrip("\n") + "\n"

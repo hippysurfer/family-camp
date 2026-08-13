@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.reporting import render_activity_roster, render_family_itinerary
+from family_camp2.reporting import render_activity_roster, render_family_itinerary, render_idle_report
+from family_camp2.validation.idle import find_idle_slots
 
 DAY = datetime(2026, 8, 1, 9, 0)
 
@@ -62,3 +63,17 @@ def test_activity_roster_shows_occupancy_against_limit():
     assert "Craft (capacity 1-2 per session):" in text
     assert "1/2" in text
     assert "Kid One" in text
+
+
+def test_idle_report_lists_idle_families_and_adults_per_bucket():
+    sessions, campers, timetable = _fixture()
+    idle_report = find_idle_slots(timetable, campers, sessions, granularity=timedelta(hours=1))
+
+    text = render_idle_report(idle_report)
+
+    # At 09:00, Parent One is in Archery; Kid One and Lonely Two are idle,
+    # but only "002/Two" (Lonely Two's family) has *every* member idle -
+    # 001/One has Parent One active.
+    first_bucket = text.split("\n\n")[0]
+    assert "Idle families: 002/Two" in first_bucket
+    assert "Idle adults: Lonely Two" in first_bucket

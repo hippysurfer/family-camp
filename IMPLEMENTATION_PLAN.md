@@ -1119,7 +1119,7 @@ idle even if others are.
 
 ---
 
-### - [ ] Step 30: CLI wiring for reports
+### - [x] Step 30: CLI wiring for reports
 
 **Goal**: Let an operator actually get Steps 28/29's reports out of a run,
 mirroring the old system's per-run output-directory convention

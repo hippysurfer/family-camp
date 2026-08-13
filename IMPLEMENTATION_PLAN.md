@@ -1070,7 +1070,7 @@ assignments.
 
 ---
 
-### - [ ] Step 28: Per-family and per-activity reports
+### - [x] Step 28: Per-family and per-activity reports
 
 **Goal**: Human-readable operational reports from a timetable (FR-72/FR-73),
 matching the *content* of the old system's `campers_out`/`activites_out`

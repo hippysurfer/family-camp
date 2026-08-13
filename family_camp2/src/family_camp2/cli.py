@@ -10,6 +10,7 @@ from pathlib import Path
 from family_camp2.config import load_config
 from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
+from family_camp2.progress import PrintProgressReporter
 from family_camp2.solvers.registry import get_solver
 from family_camp2.validation.report import render_text
 
@@ -51,11 +52,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--iterations-per-chain", type=int, default=None, dest="iterations_per_chain",
         help="Annealing only: iterations per chain (NFR-4).",
     )
+    parser.add_argument(
+        "--progress-output", type=str, default="-", dest="progress_output",
+        help='Where to write progress updates: "-" for stdout (default), or a file path (OQ-10). '
+        "There's no separate on/off switch - redirect to a file you won't read (or /dev/null) to silence it.",
+    )
+    parser.add_argument(
+        "--progress-interval", type=float, default=60.0, dest="progress_interval",
+        help="Wall-clock seconds between progress updates (OQ-9, default 60). CP-SAT only - "
+        "annealing reports per restart-chain completion instead (see solvers/annealing/solver.py).",
+    )
     return parser
 
 
-def _solver_kwargs(args: argparse.Namespace) -> dict:
-    kwargs = {"time_limit_seconds": args.time_limit, "random_seed": args.seed}
+def _solver_kwargs(args: argparse.Namespace, progress_reporter) -> dict:
+    kwargs = {
+        "time_limit_seconds": args.time_limit,
+        "random_seed": args.seed,
+        "progress_reporter": progress_reporter,
+    }
+    if args.solver == "cp_sat":
+        kwargs["progress_interval_seconds"] = args.progress_interval
     if args.solver == "annealing":
         if args.num_chains is not None:
             kwargs["num_chains"] = args.num_chains
@@ -78,8 +95,12 @@ def main(argv: list[str] | None = None) -> int:
         activities, sessions, campers = load_legacy_cache(args.legacy_cache)
 
     config = load_config(args.config)
-    solver = get_solver(args.solver, **_solver_kwargs(args))
-    result = solver.solve(activities, sessions, campers, config)
+    progress_reporter = PrintProgressReporter(args.progress_output)
+    try:
+        solver = get_solver(args.solver, **_solver_kwargs(args, progress_reporter))
+        result = solver.solve(activities, sessions, campers, config)
+    finally:
+        progress_reporter.close()
 
     print(render_text(result.report))
 

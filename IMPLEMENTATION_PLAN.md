@@ -995,28 +995,35 @@ unchanged.
 
 ---
 
-### - [ ] Step 26: CLI progress wiring
+### - [x] Step 26: CLI progress wiring
 
 **Goal**: Make progress reporting usable from the command line, on by
 default (FR-60, OQ-10).
 
 **Update**:
-- `src/family_camp2/solvers/base.py`: the `Solver` protocol's `solve()`
-  gains optional `progress_reporter`/`progress_interval_seconds`
-  parameters (defaults as in Steps 24/25), so the CLI can pass them
-  uniformly regardless of which solver is chosen.
 - `src/family_camp2/cli.py`: add `--progress-output PATH` (default `"-"`
   for stdout, per OQ-10) and `--progress-interval SECONDS` (default `60`,
-  per OQ-9). Always construct a `PrintProgressReporter` from these (no
-  separate on/off flag - redirect to a file or `/dev/null` to silence,
-  per the Context note above) and pass it to `solver.solve(...)`.
+  per OQ-9, CP-SAT only - passed as `progress_interval_seconds` only when
+  `--solver cp_sat`, since annealing has no such parameter, per Step 25).
+  Always construct a `PrintProgressReporter` from `--progress-output` (no
+  separate on/off flag - redirect to a file or `/dev/null` to silence, per
+  the Context note above), pass it as `progress_reporter=` alongside
+  `time_limit_seconds`/`random_seed` in `_solver_kwargs`, and `.close()`
+  it in a `finally` after solving.
 
-**Tests** (`tests/test_cli.py` additions): CLI run on a tiny instance with
-a short `--progress-interval` and `--progress-output` pointed at a temp
-file produces at least one progress line in that file; `--progress-output -`
-(the default) produces progress lines on stdout (`capsys`), interleaved
-with (but not replacing) the final validation report already printed
-there.
+**Deviation from the plan**: didn't touch `solvers/base.py`'s `Solver`
+protocol at all. Both `CpSatSolver` and `AnnealingSolver` already accept
+`progress_reporter` as a **constructor** kwarg (Steps 24/25), exactly like
+the existing `time_limit_seconds`/`random_seed` pattern - `get_solver(name,
+**kwargs)` already passes constructor kwargs through uniformly, so there
+was nothing left for the `Solver.solve()` method signature to do. Simpler
+than planned, not a redesign.
+
+**Tests** (`tests/test_cli.py` additions): CLI run with `--progress-output`
+pointed at a temp file produces a progress line in that file, not on
+stdout, while the final validation report still prints to stdout; the
+default `--progress-output -` produces progress lines interleaved with
+(not replacing) that same final report on stdout.
 
 **Commit message**: `family_camp2 step 26: wire --progress-output/--progress-interval into the CLI`
 

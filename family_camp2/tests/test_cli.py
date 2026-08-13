@@ -42,3 +42,30 @@ def test_cli_out_writes_round_trippable_json_report(tmp_path):
     assert "tier0_score" in data
     assert "class1" in data
     assert "class2" in data
+
+
+def test_cli_progress_defaults_to_stdout_interleaved_with_the_final_report(capsys):
+    exit_code = cli.main(
+        ["--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--progress-interval", "60"]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "phase1" in out  # a progress line
+    assert "Validation Report" in out  # the final report, on the same stream
+
+
+def test_cli_progress_output_can_be_redirected_to_a_file(tmp_path, capsys):
+    progress_path = tmp_path / "progress.log"
+    exit_code = cli.main([
+        "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
+        "--progress-output", str(progress_path),
+    ])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "phase1" not in out  # progress went to the file, not stdout
+    assert "Validation Report" in out  # the final report still prints to stdout
+
+    progress_content = progress_path.read_text()
+    assert "phase1" in progress_content

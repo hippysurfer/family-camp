@@ -38,7 +38,13 @@ later design documents can reference them directly.
   as a **prerequisite** — a solved problem supplied by an existing or future
   upstream process. This document does not specify how that data arrives.
 - **Printing/rendering** (PDF/text output, pagination, page layout, per-family
-  info packs).
+  info packs). *Partially reopened by §4.8*: two specific PDF reports
+  (activity roster, per-family itinerary) were added at the user's
+  explicit request after reviewing the old system's PDF output — a
+  narrow, presentation-only addition over the same data §4.7's text
+  reports already produce, not a general printing/layout framework (no
+  manual editing, no per-family "packs" beyond the itinerary PDF, no
+  other page/document types).
 - **Manual editing workflow** (hand-tweaking a generated schedule in a
   spreadsheet/CSV and re-importing it, diffing against a previous run, etc.).
 - Camp registration, payment, or booking-form automation.
@@ -333,6 +339,36 @@ information and laying it out on a page.
   has plenty of free time elsewhere), and exists to help an organiser
   distinguish "not enough capacity" from "not enough time" as the reason
   an optional request went unmet.
+
+### 4.8 PDF reports
+
+Added after the user shared the old system's PDF output
+(`family_camp/schedule/schedule_printer.py`, examples in
+`fetched_data/old_reports/`) and asked for a deliberately different,
+more compact design, not a like-for-like port — see IMPLEMENTATION_PLAN.md's
+corresponding step for the specific layout decisions this reacted
+against (one Paragraph per camper name driving page count up to 41
+pages at A4; a forced page break before every activity/family regardless
+of how much room was left).
+
+- **FR-80**: The engine MUST be able to produce a PDF activity roster:
+  for each activity, its sessions with attendees and occupancy against
+  capacity — the same information as the existing text report (FR-73),
+  laid out for printing rather than terminal/file reading.
+- **FR-81**: The engine MUST be able to produce a PDF per-family
+  itinerary, distinct from FR-80's document (a different audience: staff
+  running a session vs. a family finding their own day) — the same
+  information as the existing text report (FR-72), laid out for
+  printing.
+- **FR-82**: Both PDF reports MUST support the organiser choosing paper
+  size (A4 or A3) and orientation (portrait or landscape) independently,
+  matching the old system's two example outputs.
+- **FR-83** (should, not must): Layout SHOULD adapt to the chosen paper
+  size/orientation to use space efficiently (e.g. more columns on a
+  wider page) rather than a fixed layout scaled to fit, and SHOULD avoid
+  forcing a new page/section for every activity or family regardless of
+  how much room remains, since it was exactly this combination that made
+  the old system's output unnecessarily long.
 
 ## 5. Non-functional requirements
 

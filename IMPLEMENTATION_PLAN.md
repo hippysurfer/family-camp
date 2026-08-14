@@ -1273,6 +1273,72 @@ function both need to reflect the new rule.
 
 ---
 
+### - [x] Step 35: PDF reports (FR-80/81/82/83)
+
+**Goal**: partially reopen §1.2's printing exclusion at the user's
+explicit request - they shared the old system's PDF output
+(`fetched_data/old_reports/`, generated from
+`family_camp/schedule/schedule_printer.py`) and asked for separate
+activities/campers PDFs, A4/A3 and portrait/landscape support, using
+"only native python tools", but explicitly inviting a better layout
+rather than a port.
+
+- Visually reviewed the old PDFs (`Read` renders PDF pages as images via
+  `pdftoppm`/poppler - installed via `brew install poppler` for this,
+  since it wasn't already present) and the old renderer's source. Found
+  two structural causes of its 41-page-at-A4 length: one `Paragraph`
+  flowable per camper name (no wrapping/table), and a forced
+  `PageBreak()` before every single activity/family regardless of
+  remaining room.
+- `pyproject.toml`: new `pdf` extra (`reportlab` - pure-Python PDF
+  generation, no external binaries/subprocesses, matching "native python
+  tools" and the old system's own choice of library).
+- `pdf_reports.py` (new): `PageSpec` (paper size x orientation ->
+  resolved `reportlab.lib.pagesizes` tuple); `render_activities_pdf` (one
+  table per activity, rows are *sessions* with attendees wrapped into one
+  cell, not one row per camper); `render_campers_pdf` (one small
+  attendance-matrix table per family - rows are sessions, columns are
+  members, "X" marks who's where - falling back to a compact
+  [session, attendees] list when a family has too many members for
+  matrix columns to stay legible, see deviation below). Both use a
+  single adaptive multi-column `BaseDocTemplate` (column count computed
+  from actual page width, not the old system's hardcoded 2/4) with
+  nothing force-broken between entries, and a single non-duplicated
+  `_NumberedCanvas` (the old file had two drifted copies pasted in).
+- `cli.py`: `--pdf-dir`/`--pdf-paper`/`--pdf-orientation`, lazily
+  importing `pdf_reports` only when `--pdf-dir` is given (so `cli.py`
+  itself doesn't require the `pdf` extra) with a friendly `ImportError`
+  naming the install command if `reportlab` is missing, matching
+  `io/google_sheets.py`'s existing pattern for the `google` extra.
+- `REQUIREMENTS.md`: FR-80-83 added under a new §4.8, with a note on
+  §1.2 marking the printing exclusion partially (narrowly) reopened.
+
+**Deviations found during implementation**:
+1. Wrapping a session's attendees into one cell revealed the real data's
+   session `label` is usually identical to its own activity's name (e.g.
+   a single-label activity), so naively showing both repeated the
+   activity name on every row. Added `_activity_label` to suppress the
+   label when it duplicates the activity name.
+2. The campers matrix broke badly (mid-word wrapping, e.g. "Benjami n
+   Winwo od") for families with several long-named members in a narrow
+   column - the fundamental issue is that no font-size reduction can
+   make an 11-character surname fit an ~28pt column while staying
+   legible. Fixed two ways: `_short_name` drops a member's surname from
+   their column header when it matches the family's own (inferred from
+   `family_id`, e.g. `"012/Winwood"` -> `"Winwood"`) rather than
+   repeating it in every column; and `render_campers_pdf` measures the
+   resulting per-member column width and falls back to a plain
+   [session, attendees] list (still one row per session, not per member)
+   whenever it would drop below `_MIN_MEMBER_COLUMN_WIDTH`, which is
+   robust regardless of name length or family size.
+3. Verified against real data (283 campers): `activities.pdf` went from
+   the old system's 41 pages (A4) to 6; `campers.pdf` to 15 (down further
+   to 15 from an initial 19 after fixes 1-2 above).
+
+**Commit message**: `family_camp2 step 35: PDF reports (FR-80/81/82/83)`
+
+---
+
 ## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this

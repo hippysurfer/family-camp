@@ -83,6 +83,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="If given, write family_itinerary.txt, activity_roster.txt, and idle_report.txt "
         "into this directory (created if needed) after solving (FR-72/FR-73/FR-74).",
     )
+    parser.add_argument(
+        "--pdf-dir", type=Path, default=None, dest="pdf_dir",
+        help="If given, write activities.pdf and campers.pdf into this directory (created if "
+        "needed) after solving (FR-80/FR-81). Requires the 'pdf' extra (pip install -e \".[pdf]\").",
+    )
+    parser.add_argument(
+        "--pdf-paper", choices=["a4", "a3"], default="a4", dest="pdf_paper",
+        help="Paper size for --pdf-dir output (default a4).",
+    )
+    parser.add_argument(
+        "--pdf-orientation", choices=["portrait", "landscape"], default="portrait", dest="pdf_orientation",
+        help="Orientation for --pdf-dir output (default portrait).",
+    )
     return parser
 
 
@@ -147,5 +160,18 @@ def main(argv: list[str] | None = None) -> int:
         (args.report_dir / "unfeasible_families_report.txt").write_text(
             render_unfeasible_families_report(overdemand)
         )
+
+    if args.pdf_dir is not None:
+        try:
+            from family_camp2.pdf_reports import PageSpec, render_activities_pdf, render_campers_pdf
+        except ImportError as exc:  # pragma: no cover - exercised only when reportlab isn't installed
+            raise ImportError(
+                "reportlab is required for --pdf-dir. Install it with: pip install -e \".[pdf]\""
+            ) from exc
+
+        args.pdf_dir.mkdir(parents=True, exist_ok=True)
+        page_spec = PageSpec(paper_size=args.pdf_paper, orientation=args.pdf_orientation)
+        render_activities_pdf(result.timetable, sessions, args.pdf_dir / "activities.pdf", page_spec)
+        render_campers_pdf(result.timetable, campers, args.pdf_dir / "campers.pdf", page_spec)
 
     return 0

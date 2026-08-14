@@ -116,6 +116,30 @@ has several (e.g. annealing's other restart chains) - REQUIREMENTS.md
 FR-75 is a *should*, and OQ-12 confirmed a single best answer is
 sufficient for this rewrite.
 
+**PDF reports** (`--pdf-dir PATH`, `--pdf-paper {a4,a3}` default a4,
+`--pdf-orientation {portrait,landscape}` default portrait): writes
+`activities.pdf` and `campers.pdf` into `PATH` (created if needed) -
+FR-80/81/82, added at the user's request after reviewing the old
+system's PDF output. Requires the `pdf` extra
+(`pip install -e ".[pdf]"`, pulling in `reportlab` - a pure-Python PDF
+library, no external binaries/subprocesses); `--pdf-dir` raises a clear
+`ImportError` naming that install command if it isn't installed, rather
+than failing on a bare `ModuleNotFoundError`.
+
+Deliberately not a port of the old layout - see
+`family_camp2.pdf_reports`'s module docstring for the two changes that
+make these documents dramatically shorter for the same camp (41 pages of
+activity roster at A4 down to 6): a session's attendees are one wrapped
+table cell, not one line per camper; and nothing is force-broken onto a
+new page, so short entries pack into the adaptive multi-column layout
+(more/fewer columns depending on paper size and orientation) instead of
+each claiming a page. `campers.pdf` also uses a different shape entirely:
+one small attendance-matrix table per family (rows = sessions, columns =
+members, an "X" marks who's where) rather than one row per
+(member, session) pair, falling back to a compact list when a family has
+too many members for matrix columns to stay legible at the current paper
+size.
+
 ## Input data
 
 ### JSON format (`--data`)
@@ -222,6 +246,7 @@ validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time in
 config.py            EngineConfig (NFR-4)
 progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
 reporting.py         per-family/per-activity/idle/unmet-optional/overdemand text reports, from a Timetable (FR-72/73/74/76/77)
+pdf_reports.py       activities.pdf / campers.pdf, from a Timetable (FR-80/81/82/83; needs the 'pdf' extra)
 io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements

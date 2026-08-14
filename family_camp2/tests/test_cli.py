@@ -111,3 +111,18 @@ def test_cli_report_dir_writes_the_operational_reports(tmp_path):
         path = report_dir / name
         assert path.exists()
         assert path.read_text().strip() != ""
+
+
+def test_cli_pdf_dir_writes_both_pdfs(tmp_path):
+    pytest.importorskip("reportlab")
+    pdf_dir = tmp_path / "pdfs"
+    exit_code = cli.main([
+        "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
+        "--pdf-dir", str(pdf_dir), "--pdf-paper", "a3", "--pdf-orientation", "landscape",
+    ])
+
+    assert exit_code == 0
+    for name in ("activities.pdf", "campers.pdf"):
+        path = pdf_dir / name
+        assert path.exists()
+        assert path.read_bytes().startswith(b"%PDF-")

@@ -47,6 +47,10 @@ later design documents can reference them directly.
   other page/document types).
 - **Manual editing workflow** (hand-tweaking a generated schedule in a
   spreadsheet/CSV and re-importing it, diffing against a previous run, etc.).
+  *Partially reopened by §4.9*: re-validating and re-reporting a hand-edited
+  schedule through the existing pipeline, at the user's explicit request —
+  not an interactive editor, not edit-time constraint enforcement, and
+  diffing against a previous run remains excluded pending OQ-17.
 - Camp registration, payment, or booking-form automation.
 
 These exclusions are about this rewrite's scope, not a judgement that they
@@ -384,6 +388,43 @@ of how much room was left).
   computation (FR-74's `idle_families`) intersected with FR-84's idle
   adults, not a new concept.
 
+### 4.9 Manual editing and re-validation workflow
+
+Reopens part of §1.2's "Manual editing workflow" exclusion, at the
+user's explicit request. The scope agreed is narrow: taking a
+hand-edited schedule back through validation and reporting — not an
+interactive editor, not edit-time constraint enforcement, not (yet)
+diffing against a prior run. Most of what this needs already exists and
+was built with exactly this in mind: `io/schedule_export.py` (FR-70/71)
+already round-trips a `Timetable` to/from CSV/JSON, and `validate()`/the
+FR-72-74/FR-80-85 reports were already built solver-agnostic — they only
+ever need a `Timetable` plus the original `activities`/`sessions`/
+`campers`, never a solver-specific result. The one piece that doesn't
+exist yet is an entry point that skips solving entirely and goes
+straight from an edited schedule file to validation and reporting.
+
+- **FR-86**: The engine MUST support taking a previously exported
+  schedule (FR-70/71's format) that has been edited by hand, and
+  producing the same validation report (FR-40/41) and human-readable/PDF
+  reports (FR-72-74, FR-80-85) it would for a freshly solved schedule,
+  without invoking a solver.
+- **FR-87**: Re-importing an edited schedule MUST NOT silently accept a
+  row that can't be resolved back to a known camper or session from the
+  original input data (e.g. a typo'd name). See OQ-16 for whether this
+  stops at the first such row or collects all of them.
+- **FR-88**: The engine MUST report Class 1 (structural) violations in a
+  re-validated schedule exactly as it would for a solver's output. This
+  needs no new check — `validate()` already does this — but is worth
+  stating explicitly: unlike a solver-built `Timetable` (where a Class 1
+  violation is structurally impossible by construction), a hand edit can
+  genuinely introduce one (e.g. double-booking, capacity overflow), and
+  the engine must not treat re-validated input as inherently trustworthy.
+- **FR-89** (should, not must): The re-validation entry point SHOULD
+  support the same export flags available for a freshly generated
+  schedule (schedule export, the text reports, the PDF reports), so a
+  re-validated schedule can itself be re-exported and edited again,
+  supporting multiple rounds of hand-tweaking.
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an
@@ -554,3 +595,46 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   to minimise the number [of] split families if this is better for the
   solver)." Implemented as FR-17 (supervision) and FR-24 (minimisation,
   ranked above FR-20-23 but below §4.1's hard/demand-driven constraints).
+
+- **OQ-14 (Edit format, FR-86)**: Should hand-editing reuse the existing
+  CSV/JSON export format as-is (FR-70/71 — one row per assignment, every
+  edit is just adding/removing/changing a row), or is a different,
+  more edit-oriented layout worth building instead — e.g. grouped by
+  session or by family, closer to the existing text/PDF reports' shape —
+  or a real spreadsheet (`.xlsx`) with data-validation dropdowns on the
+  camper/session columns, so an invalid reference is impossible to enter
+  rather than just caught at import time?
+
+  [Answer: use existing CSV/JSON, allow both]
+
+- **OQ-15 (Entry point shape, FR-86)**: How should "validate an edited
+  schedule" actually be invoked? Options considered: (a) a new
+  `--solver none`-style choice on the existing `family_camp2` command,
+  paired with a new `--schedule PATH` flag, instead of solving; (b) a
+  separate console script, e.g. `family_camp2-revalidate`, mirroring the
+  existing `family_camp2-fetch` precedent, sharing an internal
+  output-writing helper with `cli.py` so `--out`/`--export-schedule`/
+  `--report-dir`/`--pdf-dir` logic isn't duplicated; (c) restructuring
+  the CLI into subcommands (`family_camp2 solve` / `family_camp2
+  revalidate`).
+
+  [Answer: (c) restructure into subcommands ]
+
+- **OQ-16 (Bad-row handling, FR-87)**: When re-importing a schedule that
+  references an unknown camper or session (most likely a hand-editing
+  typo), should this stop at the first such row (current
+  `load_schedule_csv`/`load_schedule_json` behaviour, unchanged), or
+  collect and report every bad row before raising — friendlier for a
+  hand-editing session that's likely to contain more than one mistake,
+  since it avoids a fix-one/re-run/hit-the-next-one loop?
+
+  [Answer: collect and report every bad row before raising]
+
+- **OQ-17 (Diff summary, FR-89)**: Should re-validation also report a
+  summary of what changed versus the schedule being edited (assignments
+  added/removed/moved) — a narrower, in-scope version of the "diffing"
+  §1.2 still excludes more generally (e.g. diffing across separate
+  solver runs, which stays out of scope regardless) — or is even this
+  narrower version out of scope for now?
+
+  [Answer: out of scope for now]

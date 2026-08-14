@@ -8,6 +8,12 @@ the schedule itself.
 Both CSV and JSON are supported (OQ-11) from one shared row-building
 helper, so "what does an exported assignment look like" exists exactly
 once regardless of format.
+
+Also the re-import path a hand-edited schedule goes through
+(REQUIREMENTS.md §4.9, FR-86/87): ``load_schedule_csv``/``load_schedule_json``
+collect *every* row that can't be resolved to a known camper/session
+before raising, rather than stopping at the first (OQ-16) - friendlier
+for a hand-editing session likely to contain more than one mistake.
 """
 
 from __future__ import annotations
@@ -90,14 +96,40 @@ def _index_reference_data(
     return campers_by_key, sessions_by_key
 
 
+def _resolve_rows(
+    rows: list[dict],
+    campers_by_key: dict[tuple[str, str], Camper],
+    sessions_by_key: dict[tuple[str, str, datetime], Session],
+) -> frozenset[Assignment]:
+    """Resolves every row, collecting *all* unresolvable ones (OQ-16)
+    rather than stopping at the first - a hand-editing session is likely
+    to contain more than one typo, and finding them one fix-and-rerun at
+    a time is tedious. Row numbers are 1-based over the data rows only
+    (matching what a spreadsheet's row selector would show once its
+    header row is accounted for)."""
+
+    assignments: set[Assignment] = set()
+    errors: list[str] = []
+    for i, row in enumerate(rows, start=1):
+        try:
+            assignments.add(_resolve_row(row, campers_by_key, sessions_by_key))
+        except ScheduleExportError as exc:
+            errors.append(f"Row {i}: {exc}")
+
+    if errors:
+        raise ScheduleExportError(
+            f"{len(errors)} row(s) could not be resolved:\n" + "\n".join(errors)
+        )
+    return frozenset(assignments)
+
+
 def load_schedule_csv(
     path: Path | str, activities: list[Activity], sessions: list[Session], campers: list[Camper]
 ) -> Timetable:
     campers_by_key, sessions_by_key = _index_reference_data(sessions, campers)
     with open(path, newline="") as f:
         rows = list(csv.DictReader(f))
-    assignments = {_resolve_row(row, campers_by_key, sessions_by_key) for row in rows}
-    return Timetable(frozenset(assignments))
+    return Timetable(_resolve_rows(rows, campers_by_key, sessions_by_key))
 
 
 def load_schedule_json(
@@ -105,5 +137,4 @@ def load_schedule_json(
 ) -> Timetable:
     campers_by_key, sessions_by_key = _index_reference_data(sessions, campers)
     rows = json.loads(Path(path).read_text())
-    assignments = {_resolve_row(row, campers_by_key, sessions_by_key) for row in rows}
-    return Timetable(frozenset(assignments))
+    return Timetable(_resolve_rows(rows, campers_by_key, sessions_by_key))

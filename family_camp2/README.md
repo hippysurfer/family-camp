@@ -4,9 +4,11 @@ A from-scratch rewrite of the Family Camp **scheduling engine only** —
 consuming camper/activity/session data and producing a timetable, plus
 validating any timetable against the rules that define a correct schedule.
 
-This is *not* a replacement for the rest of the `family_camp` package yet:
-printing PDFs and the hand-editing workflow still live in `../family_camp/`
-and are untouched. It does include its own way to fetch input data from
+This is *not* a full replacement for the rest of the `family_camp`
+package: this package has its own PDF reports (`pdf_reports.py`, below)
+and its own hand-editing/re-validation workflow (`revalidate`, below),
+but the old package's other tooling (packs, the booking-site automation)
+is untouched. It does include its own way to fetch input data from
 Google Sheets (`fetch_cli.py`, below) — independent of the old
 `family_camp/schedule/fetch_data.py`, and producing this package's own
 JSON format rather than a pickle cache. See:
@@ -28,35 +30,43 @@ pytest
 
 ## CLI usage
 
-`--solver` is required and selects which of the two designs to run.
-Exactly one of `--data` or `--legacy-cache` supplies the input data.
+`python -m family_camp2` has two subcommands (OQ-15): `solve` generates
+a schedule with a solver; `revalidate` takes a previously exported
+schedule (optionally hand-edited) and runs it through the same
+validation/reporting pipeline *without* running a solver - see "Manual
+editing and re-validation" below. Both share the `--data`/`--legacy-cache`
+data-source flags and the `--out`/`--export-schedule`/`--report-dir`/
+`--pdf-dir` output flags.
 
 ```sh
 # Constraint programming (Design A) against a JSON camp file
-python -m family_camp2 --solver cp_sat --data tests/fixtures/small_camp.json
+python -m family_camp2 solve --solver cp_sat --data tests/fixtures/small_camp.json
 
 # Simulated annealing (Design B), tuned, with a reproducible seed
-python -m family_camp2 --solver annealing --data tests/fixtures/small_camp.json \
+python -m family_camp2 solve --solver annealing --data tests/fixtures/small_camp.json \
     --num-chains 8 --iterations-per-chain 2000 --seed 1
 
 # Against a real camp's existing .cache.pickle (produced by the unmodified
 # family_camp/schedule/fetch_data.py - see io/legacy_cache_loader.py)
-python -m family_camp2 --solver cp_sat --legacy-cache ../.cache.pickle
+python -m family_camp2 solve --solver cp_sat --legacy-cache ../.cache.pickle
 
 # Write the full structured report to a file as well as stdout
-python -m family_camp2 --solver cp_sat --data tests/fixtures/small_camp.json --out report.json
+python -m family_camp2 solve --solver cp_sat --data tests/fixtures/small_camp.json --out report.json
 
 # A long CP-SAT run: progress every 60s to a log file, plus the actual
 # schedule (not just the validation report) and human-readable reports
-python -m family_camp2 --solver cp_sat --data data.json --time-limit 5400 \
+python -m family_camp2 solve --solver cp_sat --data data.json --time-limit 5400 \
     --progress-output run.log --export-schedule schedule --report-dir reports/
 ```
 
-Other flags: `--config PATH` (an `EngineConfig` JSON file, see below),
+`solve`-only flags: `--solver {cp_sat,annealing}` (required),
 `--time-limit SECONDS` (both solvers), `--seed INT` (both solvers),
 `--num-chains`/`--iterations-per-chain` (annealing only),
-`--progress-output`/`--progress-interval`, `--export-schedule`,
-`--report-dir` (all documented in the next section).
+`--progress-output`/`--progress-interval`. Shared with `revalidate`:
+`--data`/`--legacy-cache` (mutually exclusive, required), `--config
+PATH` (an `EngineConfig` JSON file, see below), `--export-schedule`,
+`--report-dir`, `--pdf-dir`/`--pdf-paper`/`--pdf-orientation` (all
+documented in the next section).
 
 ## Progress reporting and report generation
 
@@ -152,6 +162,46 @@ logic. `available_families.pdf` narrows this further to adults whose
 adult themselves) - a stronger availability signal, since they won't
 need to break away to rejoin a family member who's mid-activity.
 
+## Manual editing and re-validation
+
+Implements REQUIREMENTS.md §4.9 (FR-86-89) - partially reopens §1.2's
+"manual editing workflow" exclusion, at the user's explicit request. The
+scope is narrow and specifically *not* an interactive editor: take a
+schedule `solve --export-schedule` already wrote out, hand-edit the CSV
+(or JSON) in a spreadsheet, and get it back through the exact same
+validation and reporting `solve` would have run, without re-running a
+solver.
+
+```sh
+python -m family_camp2 solve --solver cp_sat --data data.json --export-schedule schedule
+# ...open schedule.csv, tweak who's assigned where, save...
+python -m family_camp2 revalidate --data data.json --schedule schedule.csv \
+    --report-dir reports/ --pdf-dir pdfs/
+```
+
+`--schedule PATH` (required) is dispatched to `io.schedule_export.load_schedule_csv`/
+`load_schedule_json` by its extension (OQ-14 - the existing FR-70/71
+export format is reused as-is, not a new edit-oriented layout: every
+edit is just adding, removing, or changing a row). A row that doesn't
+resolve to a known camper/session (most likely a typo) raises - and
+(OQ-16) *every* bad row is collected and reported together, not just the
+first, since a hand-editing session is likely to contain more than one
+mistake.
+
+Unlike a solver's own output, a hand-edited schedule can genuinely fail
+Class 1 (structural) checks - double-booking, capacity overflow, a
+duplicate activity - since those are only *structurally* impossible when
+a solver builds the `Timetable` itself (FR-88). `revalidate` doesn't
+special-case this: it calls the exact same `validate(...)` `solve` does,
+so a bad edit shows up in `Feasible: False` and the itemised Class 1
+section exactly like any other violation would.
+
+`revalidate` accepts every output flag `solve` does (`--out`,
+`--export-schedule`, `--report-dir`, `--pdf-dir`/`--pdf-paper`/
+`--pdf-orientation`), so a revalidated schedule can itself be
+re-exported and edited again for a second round (FR-89). Not built:
+a diff summary against the schedule being edited (OQ-17 - deferred).
+
 ## Input data
 
 ### JSON format (`--data`)
@@ -198,7 +248,7 @@ python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL> --out data.json
 # or, via the console script installed by pip:
 family_camp2-fetch --sheet-id <SHEET_ID_OR_URL> --out data.json
 
-python -m family_camp2 --solver cp_sat --data data.json
+python -m family_camp2 solve --solver cp_sat --data data.json
 ```
 
 Authentication is the interactive **user OAuth flow**, not the old
@@ -265,7 +315,7 @@ solvers/
   registry.py         name -> Solver lookup, used by the CLI
   cp_sat.py           Design A: OR-Tools CP-SAT, three-phase lexicographic solve, wall-clock progress heartbeat
   annealing/          Design B: simulated annealing with domain-aware moves, per-chain progress
-cli.py                argparse entry point (--solver cp_sat|annealing)
+cli.py                argparse entry point, subcommands: solve (--solver cp_sat|annealing), revalidate (FR-86-89)
 fetch_cli.py          argparse entry point to download --data input from Google Sheets
 ```
 

@@ -1397,10 +1397,172 @@ rejoin a family member mid-activity).
 
 ---
 
-## 4. After this plan
+## 4. Manual editing and re-validation workflow (Steps 38–40)
+
+### Context
+
+Raised by the user wanting to hand-tweak a generated schedule and feed
+it back through validation and reporting, rather than only ever
+consuming a solver's own output as-is. Reopens part of §1.2's "Manual
+editing workflow" exclusion in REQUIREMENTS.md, narrowly — re-validating
+and re-reporting an edited schedule, not an interactive editor or
+edit-time constraint enforcement.
+
+Good news going in: most of what this needs already exists, built with
+exactly this in mind. `io/schedule_export.py` (Step 27, FR-70/71)
+already round-trips a `Timetable` to/from CSV/JSON. `validation/validator.py`'s
+`validate()`, `reporting.py`, and `pdf_reports.py` were all already
+built solver-agnostic — every one of them takes a `Timetable` plus the
+original `activities`/`sessions`/`campers`, never a solver-specific
+`SolveResult`. The gap is narrow: `cli.py`'s `main()` always calls a
+solver; there is currently no path that skips solving and goes straight
+from an edited schedule file to validation/reporting.
+
+**REQUIREMENTS.md OQ-14–OQ-17 are now answered**; each step below
+implements that answer directly (no longer provisional):
+
+- **OQ-14 (edit format)**: reuse the existing CSV/JSON export format
+  as-is, both supported.
+- **OQ-15 (entry point shape)**: **(c) restructure the CLI into
+  subcommands** (`family_camp2 solve` / `family_camp2 revalidate`) —
+  this plan's original draft assumed (b), a separate
+  `family_camp2-revalidate` script; Steps 38/40 below were rewritten for
+  (c) once the answer came back. No new console script or
+  `pyproject.toml` entry was needed as a result — `revalidate` lives in
+  the same `cli.py`, dispatched via `argparse`'s subparsers.
+- **OQ-16 (bad-row handling)**: collect and report every bad row before
+  raising, not just the first.
+- **OQ-17 (diff summary)**: out of scope for now — deferred, noted as a
+  follow-on in §5 below.
+
+### Step list
+
+### - [x] Step 38: Restructure `cli.py` into `solve`/`revalidate` subcommands (OQ-15)
+
+**Goal**: `argparse` subparsers (`solve`, `revalidate`), each command's
+own flags kept separate (`--solver`/`--time-limit`/etc. only make sense
+for `solve`), sharing everything downstream of "I have a Timetable" via
+extracted helpers - so this step folds in what the draft plan had as a
+separate "extract a shared output-writing helper" step, since the
+subcommand restructuring needed that extraction anyway.
+
+**Change** `cli.py`: `build_parser()` now builds a top-level parser with
+`add_subparsers(dest="command", required=True)`; `_add_data_source_args`/
+`_add_output_args` factor out the flag definitions shared by both
+subcommands (`--data`/`--legacy-cache`/`--config` and
+`--out`/`--export-schedule`/`--report-dir`/`--pdf-dir`/`--pdf-paper`/
+`--pdf-orientation` respectively) so they're defined exactly once, not
+duplicated per subcommand. `_write_outputs(timetable, report, campers,
+sessions, args)` extracts the "given a timetable, its `ValidationReport`,
+and the output flags, write everything `--out`/`--export-schedule`/
+`--report-dir`/`--pdf-dir` ask for" logic that used to live inline in
+`main()`'s tail - both `_run_solve`/`_run_revalidate` (see Step 40) call
+it, so the two commands can never write reports differently. Each
+subparser is wired to its handler via `set_defaults(func=...)`; `main()`
+is now just `parser.parse_args(argv)` then `args.func(args)`.
+
+**Deviation from the plan's draft**: the draft assumed OQ-15 would land
+on a separate `family_camp2-revalidate` console script. The actual
+answer was subcommands - no new script, no new `pyproject.toml` entry;
+`revalidate` is dispatched from the same `cli.py`/`python -m family_camp2`
+entry point `solve` already used (which itself changes shape:
+`python -m family_camp2 --solver cp_sat ...` becomes
+`python -m family_camp2 solve --solver cp_sat ...` - a breaking change
+to the existing invocation, made deliberately rather than shimmed with a
+default subcommand, consistent with this project's stance against
+backwards-compatibility hacks).
+
+**Tests**: every existing `test_cli.py`/`test_cli_smoke.py`/
+`test_cp_sat_cli.py`/`test_annealing_cli.py` invocation updated to
+prepend `"solve"` - this is a behaviour-preserving refactor for the
+`solve` path (same flags, same outputs), just reached through one extra
+positional argument.
+
+**Commit message**: `family_camp2 step 38: restructure cli.py into solve/revalidate subcommands (OQ-15)`
+
+---
+
+### - [x] Step 39: Collect every unresolvable row on schedule re-import (OQ-16)
+
+**Goal**: Change `load_schedule_csv`/`load_schedule_json`
+(`io/schedule_export.py`) to report *every* row that can't be resolved
+to a known camper/session, not just the first. Strict improvement for
+every existing caller too (a solver's own valid export never has any bad
+rows, so this only changes behaviour on genuinely invalid input) - no
+fork/variant function needed, the existing functions' behaviour changes
+in place.
+
+**Add** `_resolve_rows(rows, campers_by_key, sessions_by_key)`: calls
+the existing per-row `_resolve_row` for each row, catching
+`ScheduleExportError` per row instead of letting the first one propagate,
+collecting `f"Row {i}: {message}"` (1-based over data rows, matching what
+a spreadsheet's row selector would show once the header row is
+accounted for) for each failure, and raising once at the end - one
+`ScheduleExportError` whose message lists every failing row - only if
+there was at least one. `load_schedule_csv`/`load_schedule_json` now
+call this instead of a bare set comprehension over `_resolve_row`.
+
+**Tests** (`tests/test_schedule_export.py`): a CSV with three rows, two
+independently bad (an unknown camper, and later an unknown session
+label) and one good, raises a single error naming both bad rows and both
+their row numbers; a bad row appended after otherwise-valid dumped rows
+is still caught; existing round-trip tests (zero bad rows) unaffected.
+
+**Commit message**: `family_camp2 step 39: collect every unresolvable row on schedule re-import (OQ-16)`
+
+---
+
+### - [x] Step 40: `revalidate` subcommand (FR-86/87/88/89)
+
+**Goal**: The actual new capability - skip solving, load a hand-edited
+schedule, and run it through the same validation/reporting pipeline a
+solve would, using Step 38's subcommand structure and shared output
+helper.
+
+**Add** to `cli.py`: `_run_revalidate(args)` - loads the original input
+data (`--data`/`--legacy-cache`, same as `solve`), loads `--schedule`
+into a `Timetable` via `load_schedule_json`/`load_schedule_csv`
+(dispatched on `args.schedule.suffix`), resolves `compulsory` from
+`config.compulsory_activities` exactly as each solver already does
+internally, then calls `validation.validator.validate(...)` directly -
+no `get_solver`/`.solve()` call anywhere in this path (FR-86). Prints
+`render_text` of the result exactly like `solve` does, then calls Step
+38's `_write_outputs` for the export flags (FR-89). No new check for
+FR-88 - `validate()` already reports Class 1 violations regardless of
+where the `Timetable` came from; this step only exercises that on a new
+kind of input.
+
+**Update** `README.md` with a "Manual editing and re-validation" section
+showing the two-command workflow end to end (generate + export,
+hand-edit the CSV, re-validate), all CLI usage examples elsewhere in the
+file updated for the `solve`/`revalidate` split, and the Architecture
+section's `cli.py` line updated.
+
+**Tests** (`tests/test_cli.py`): `revalidate` on a schedule freshly
+exported by `solve` (unedited) reproduces the same Tier 0 score printed
+by `solve` - confirms no solver involvement changes the outcome;
+`.json`-suffixed schedules are also accepted; a schedule hand-built to
+duplicate an existing assignment onto a second session of the same
+activity (a genuine Class 1 violation no solver output could ever have)
+surfaces as `Feasible: False` with a `Duplicate activity` line (FR-88);
+a schedule with two independently-unresolvable rows raises one error
+naming both (OQ-16, exercised through the CLI as well as directly in
+`test_schedule_export.py`); `--out`/`--report-dir` both work from
+`revalidate` (FR-89).
+
+**Commit message**: `family_camp2 step 40: revalidate subcommand (FR-86/87/88/89)`
+
+---
+
+## 5. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:
+
+- OQ-17: a diff summary (assignments added/removed/moved) when
+  re-validating an edited schedule against the one it was edited from -
+  deferred by this plan; would sit naturally alongside Step 40's entry
+  point if wanted later.
 
 - Wiring `family_camp2`'s output back into the existing printing/export
   code (`family_camp/schedule/schedule_printer.py`, `family_camp/pack/`),

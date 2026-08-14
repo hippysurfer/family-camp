@@ -8,7 +8,7 @@ from fixtures import SMALL_CAMP_JSON, generate_medium_instance
 
 
 def test_cli_solves_small_camp_fully_feasibly_with_cp_sat(capsys):
-    exit_code = cli.main(["--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON)])
+    exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON)])
 
     assert exit_code == 0
     out = capsys.readouterr().out

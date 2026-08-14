@@ -83,3 +83,40 @@ def test_load_json_raises_on_unknown_session(tmp_path):
 
     with pytest.raises(ScheduleExportError, match="Evening"):
         load_schedule_json(path, activities, sessions, campers)
+
+
+def test_load_csv_reports_every_bad_row_not_just_the_first(tmp_path):
+    """OQ-16: a hand-editing session is likely to have more than one
+    mistake - all of them should surface in one error, not just the
+    first, so they can all be fixed in one pass."""
+    activities, sessions, campers, timetable = _small_timetable()
+    path = tmp_path / "schedule.csv"
+    path.write_text(
+        "family_id,camper_name,activity_name,session_label,session_start\n"
+        "F1,Stranger One,Archery,Morning,2026-08-01T09:00:00\n"
+        "F1,Parent,Archery,Nonexistent Label,2026-08-01T09:00:00\n"
+        "F1,Stranger Two,Craft,Afternoon,2026-08-01T14:00:00\n"
+    )
+
+    with pytest.raises(ScheduleExportError) as excinfo:
+        load_schedule_csv(path, activities, sessions, campers)
+
+    message = str(excinfo.value)
+    assert "Stranger One" in message
+    assert "Nonexistent Label" in message
+    assert "Stranger Two" in message
+    assert "Row 1" in message
+    assert "Row 2" in message
+    assert "Row 3" in message
+
+
+def test_load_csv_with_one_bad_row_among_good_ones_still_reports_it(tmp_path):
+    activities, sessions, campers, timetable = _small_timetable()
+    path = tmp_path / "schedule.csv"
+    dump_schedule_csv(timetable, path)
+    # Append one bad row after the good, dumped ones.
+    with open(path, "a") as f:
+        f.write("F1,Stranger,Archery,Morning,2026-08-01T09:00:00\n")
+
+    with pytest.raises(ScheduleExportError, match="Stranger"):
+        load_schedule_csv(path, activities, sessions, campers)

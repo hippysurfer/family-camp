@@ -294,11 +294,15 @@ information and laying it out on a page.
   to add capacity or sessions.
 - **FR-77**: The engine MUST be able to produce a human-readable report,
   derived from the input activities/sessions/campers alone (not from any
-  particular timetable), of families where a member has requested more
-  distinct activities than the maximum number of non-overlapping session
-  slots that member could ever occupy across the whole camp — i.e. a
-  structural, time-based ceiling that no solver could work around
-  regardless of available capacity. This is a necessary-infeasibility
+  particular timetable), of families whose members have collectively
+  requested more distinct activities than the maximum number of
+  non-overlapping session slots the *family* could ever occupy across the
+  whole camp — i.e. a structural, time-based ceiling that no solver could
+  work around regardless of available capacity. This is computed at
+  family, not individual, granularity: since no two members of a family
+  may be in overlapping sessions (the family-time-conflict rule), the
+  family as a whole — not each member separately — is the unit that can
+  only occupy one slot at a time. This is a necessary-infeasibility
   check only (requesting fewer activities than this ceiling does not
   guarantee everything fits — sessions of the specific requested
   activities may still clash with each other even when the camp overall

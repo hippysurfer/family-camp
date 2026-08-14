@@ -97,14 +97,19 @@ into `PATH` (created if needed):
 - `unmet_optional_report.txt` (FR-76) - optional (non-priority) activity
   requests that weren't met in the generated timetable, grouped by
   activity - the per-request breakdown behind the aggregate Tier 1 score.
-- `unfeasible_families_report.txt` (FR-77) - families with a member who
-  requested more distinct activities than the maximum number of
-  non-overlapping session slots they could ever occupy across the whole
-  camp, regardless of capacity (see `validation/feasibility.py`'s module
-  docstring for exactly what this ceiling does and doesn't prove - it's a
-  necessary-infeasibility check, not a full solver). Useful for telling
-  "not enough capacity" apart from "not enough time" as the reason an
-  optional request went unmet.
+  Campers whose family also appears in `unfeasible_families_report.txt`
+  are marked `[over demand]`.
+- `unfeasible_families_report.txt` (FR-77) - families whose members
+  collectively requested more distinct activities than the family could
+  ever fit into non-overlapping session slots across the whole camp,
+  regardless of capacity. This is computed per-*family*, not per-camper:
+  Class 2's family-time-conflict rule means no two members can be in
+  overlapping sessions, so the family - not the individual - is the unit
+  that can only occupy one slot at a time (see
+  `validation/feasibility.py`'s module docstring for exactly what this
+  ceiling does and doesn't prove - it's a necessary-infeasibility check,
+  not a full solver). Useful for telling "not enough capacity" apart from
+  "not enough time" as the reason an optional request went unmet.
 
 Not implemented: exporting more than one candidate schedule when a solver
 has several (e.g. annealing's other restart chains) - REQUIREMENTS.md

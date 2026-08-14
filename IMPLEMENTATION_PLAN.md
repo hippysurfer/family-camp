@@ -1176,20 +1176,32 @@ input-only diagnostic.
 
 - `validation/tiers.py`: `UnmetOptionalRequest`/`find_unmet_optional_requests`
   - the per-request breakdown behind `score_tier1`, from a `Timetable`.
-- `validation/feasibility.py` (new): `CamperOverdemand`/
-  `find_overdemanding_campers`/`max_non_overlapping_sessions` - derived
+- `validation/feasibility.py` (new): `FamilyOverdemand`/
+  `find_overdemanding_families`/`max_non_overlapping_sessions` - derived
   from `activities`/`sessions`/`campers` alone, not a `Timetable`, since
   it's a property of demand vs. the shape of the schedule, not of any
   particular solve. Uses the standard interval-scheduling-maximisation
-  greedy to find the true ceiling on non-overlapping sessions a camper
-  could ever occupy; documented as a necessary-, not sufficient-,
-  infeasibility check (module docstring).
+  greedy to find the true ceiling on non-overlapping sessions a *family*
+  could ever occupy (initially built per-camper, then corrected to
+  per-family - see the deviation note below); documented as a necessary-,
+  not sufficient-, infeasibility check (module docstring).
 - `reporting.py`: `render_unmet_optional_report`/
   `render_unfeasible_families_report`, both pure presentation over the
-  above (NFR-10).
+  above (NFR-10). `render_unmet_optional_report` also marks any camper
+  whose family appears in the overdemand list with `[over demand]`.
 - `cli.py`: both wired into the existing `--report-dir` block as
   `unmet_optional_report.txt`/`unfeasible_families_report.txt`.
 - `REQUIREMENTS.md`: FR-76/FR-77 added to §4.7.
+
+**Deviation found during implementation**: the first version of FR-77
+computed the ceiling per-camper (`CamperOverdemand`/
+`find_overdemanding_campers`). This undercounted real infeasibility:
+Class 2's family-time-conflict rule means no two members of a family may
+ever be in overlapping sessions, so the *family* - not each member
+separately - is the unit that can only occupy one non-overlapping slot at
+a time. Corrected to `FamilyOverdemand`/`find_overdemanding_families`,
+comparing the union of every member's distinct requests against a ceiling
+computed from the union of sessions any member is age-eligible for.
 
 **Commit message**: `family_camp2 step 33: unmet-optional and structural-overdemand reports (FR-76/77)`
 

@@ -8,7 +8,7 @@ from family_camp2.reporting import (
     render_unfeasible_families_report,
     render_unmet_optional_report,
 )
-from family_camp2.validation.feasibility import CamperOverdemand, find_overdemanding_campers
+from family_camp2.validation.feasibility import FamilyOverdemand, find_overdemanding_families
 from family_camp2.validation.idle import find_idle_slots
 from family_camp2.validation.tiers import UnmetOptionalRequest, find_unmet_optional_requests
 
@@ -106,19 +106,19 @@ def test_unmet_optional_report_empty_when_nothing_missed():
     assert render_unmet_optional_report([]) == "Total unmet optional requests: 0\n"
 
 
-def test_unmet_optional_report_marks_overdemanding_campers():
+def test_unmet_optional_report_marks_campers_whose_family_is_overdemanding():
     craft = Activity("Craft", timedelta(minutes=45), min_occupancy=1, max_occupancy=2)
     canoeing = Activity("Canoeing", timedelta(minutes=60), min_occupancy=1, max_occupancy=4)
     overdemanded_kid = Camper(name="Kid One", family_id="001/One", age=10, age_group="Cub", optional=(craft,))
     plain_kid = Camper(name="Kid Two", family_id="002/Two", age=10, age_group="Cub", optional=(canoeing,))
 
     unmet = [UnmetOptionalRequest(overdemanded_kid, craft), UnmetOptionalRequest(plain_kid, canoeing)]
-    overdemand = [CamperOverdemand(overdemanded_kid, requested_count=3, available_timeslots=2)]
+    overdemand = [FamilyOverdemand("001/One", (overdemanded_kid,), requested_count=3, available_timeslots=2)]
 
     text = render_unmet_optional_report(unmet, overdemand)
 
     assert "Kid One (001/One) [over demand]" in text
-    assert "Kid Two (002/Two)\n" in text  # not marked - not in the overdemand list
+    assert "Kid Two (002/Two)\n" in text  # not marked - a different, non-overdemanding family
 
 
 def test_unmet_optional_report_defaults_to_no_overdemand_markers():
@@ -130,19 +130,20 @@ def test_unmet_optional_report_defaults_to_no_overdemand_markers():
     assert "[over demand]" not in text
 
 
-def test_unfeasible_families_report_groups_by_family():
+def test_unfeasible_families_report_lists_pooled_family_demand():
     craft = Activity("Craft", timedelta(minutes=60), min_occupancy=1, max_occupancy=2)
     canoeing = Activity("Canoeing", timedelta(minutes=60), min_occupancy=1, max_occupancy=2)
     sessions = [Session(craft, "A", DAY), Session(canoeing, "A", DAY)]  # same time - 1 slot max
-    kid = Camper(name="Kid One", family_id="001/One", age=10, age_group="Cub", optional=(craft, canoeing))
+    sib1 = Camper(name="Kid One", family_id="001/One", age=10, age_group="Cub", optional=(craft,))
+    sib2 = Camper(name="Kid Two", family_id="001/One", age=10, age_group="Cub", optional=(canoeing,))
 
-    overdemand = find_overdemanding_campers(sessions, [kid])
+    overdemand = find_overdemanding_families(sessions, [sib1, sib2])
     text = render_unfeasible_families_report(overdemand)
 
-    assert "Families with a structurally overdemanding member: 1" in text
-    assert "001/One:" in text
-    assert "Kid One: requested 2 activities, only 1 non-overlapping slot(s) available (short by 1)" in text
+    assert "Structurally overdemanding families: 1" in text
+    assert "001/One: Kid One, Kid Two" in text
+    assert "requested 2 distinct activities between them, only 1 non-overlapping slot(s) available (short by 1)" in text
 
 
 def test_unfeasible_families_report_empty_when_nothing_flagged():
-    assert render_unfeasible_families_report([]) == "Families with a structurally overdemanding member: 0\n"
+    assert render_unfeasible_families_report([]) == "Structurally overdemanding families: 0\n"

@@ -20,7 +20,7 @@ from family_camp2.reporting import (
     render_unmet_optional_report,
 )
 from family_camp2.solvers.registry import get_solver
-from family_camp2.validation.feasibility import find_overdemanding_campers
+from family_camp2.validation.feasibility import find_overdemanding_families
 from family_camp2.validation.idle import find_idle_slots
 from family_camp2.validation.report import render_text
 from family_camp2.validation.tiers import find_unmet_optional_requests
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         args.report_dir.mkdir(parents=True, exist_ok=True)
         idle_report = find_idle_slots(result.timetable, campers, sessions)
         unmet_optional = find_unmet_optional_requests(result.timetable, campers)
-        overdemand = find_overdemanding_campers(sessions, campers)
+        overdemand = find_overdemanding_families(sessions, campers)
         (args.report_dir / "family_itinerary.txt").write_text(render_family_itinerary(result.timetable, campers))
         (args.report_dir / "activity_roster.txt").write_text(render_activity_roster(result.timetable, sessions))
         (args.report_dir / "idle_report.txt").write_text(render_idle_report(idle_report))

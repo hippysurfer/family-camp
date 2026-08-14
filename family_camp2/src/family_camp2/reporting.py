@@ -5,7 +5,7 @@ system's ``campers_out``/``activites_out``/``inactive_*_out`` reports
 
 Per NFR-10, these read only ``Timetable``/domain objects and the
 already-computed ``IdleReport``/``UnmetOptionalRequest``/
-``CamperOverdemand`` lists that ``validation/`` produces - no new
+``FamilyOverdemand`` lists that ``validation/`` produces - no new
 scoring/validation logic lives here, only presentation.
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.validation.feasibility import CamperOverdemand
+from family_camp2.validation.feasibility import FamilyOverdemand
 from family_camp2.validation.idle import IdleReport
 from family_camp2.validation.tiers import UnmetOptionalRequest
 
@@ -106,19 +106,20 @@ def render_idle_report(idle_report: IdleReport) -> str:
 
 
 def render_unmet_optional_report(
-    unmet: list[UnmetOptionalRequest], overdemand: list[CamperOverdemand] = ()
+    unmet: list[UnmetOptionalRequest], overdemand: list[FamilyOverdemand] = ()
 ) -> str:
     """FR-76: unmet optional-activity requests, grouped by activity (most
     campers missed first), so an organiser can see at a glance where
     demand for optional activities went unsatisfied.
 
-    Campers who also appear in ``overdemand`` (FR-77 - structurally asked
-    for more distinct activities than they could ever fit into
-    non-overlapping slots) are marked ``[over demand]``, so a reader can
-    tell "there wasn't enough time for this camper regardless of
+    Campers whose family also appears in ``overdemand`` (FR-77 - the
+    family structurally asked for more distinct activities than it could
+    ever fit into non-overlapping slots, since members can't be split
+    across overlapping sessions) are marked ``[over demand]``, so a reader
+    can tell "there wasn't enough time for this family regardless of
     capacity" apart from a plain capacity/allocation shortfall."""
 
-    overdemanding_campers = {entry.camper for entry in overdemand}
+    overdemanding_family_ids = {entry.family_id for entry in overdemand}
 
     by_activity: dict[str, list[UnmetOptionalRequest]] = defaultdict(list)
     for request in unmet:
@@ -129,34 +130,30 @@ def render_unmet_optional_report(
         requests = by_activity[name]
         lines.append(f"{name}: {len(requests)} camper(s) missed it")
         for request in sorted(requests, key=lambda r: (r.camper.family_id, r.camper.name)):
-            marker = " [over demand]" if request.camper in overdemanding_campers else ""
+            marker = " [over demand]" if request.camper.family_id in overdemanding_family_ids else ""
             lines.append(f"  - {request.camper.name} ({request.camper.family_id}){marker}")
         lines.append("")
 
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def render_unfeasible_families_report(overdemand: list[CamperOverdemand]) -> str:
-    """FR-77: families with a member whose combined priority+optional
-    request count structurally cannot fit into the non-overlapping session
-    slots available to them, regardless of capacity - see
-    validation/feasibility.py for what this ceiling does and doesn't
-    prove."""
+def render_unfeasible_families_report(overdemand: list[FamilyOverdemand]) -> str:
+    """FR-77: families whose members collectively requested more distinct
+    activities than the family - which can't be split across overlapping
+    sessions - could ever fit into non-overlapping slots, regardless of
+    capacity. See validation/feasibility.py for what this ceiling does and
+    doesn't prove, and why it's computed per-family rather than
+    per-camper."""
 
-    by_family: dict[str, list[CamperOverdemand]] = defaultdict(list)
-    for entry in overdemand:
-        by_family[entry.camper.family_id].append(entry)
-
-    lines: list[str] = [f"Families with a structurally overdemanding member: {len(by_family)}", ""]
-    for family_id in sorted(by_family):
-        lines.append(f"{family_id}:")
-        for entry in sorted(by_family[family_id], key=lambda e: e.camper.name):
-            shortfall = entry.requested_count - entry.available_timeslots
-            lines.append(
-                f"  - {entry.camper.name}: requested {entry.requested_count} activities, "
-                f"only {entry.available_timeslots} non-overlapping slot(s) available "
-                f"(short by {shortfall})"
-            )
+    lines: list[str] = [f"Structurally overdemanding families: {len(overdemand)}", ""]
+    for entry in sorted(overdemand, key=lambda e: e.family_id):
+        shortfall = entry.requested_count - entry.available_timeslots
+        member_names = ", ".join(sorted(m.name for m in entry.members))
+        lines.append(f"{entry.family_id}: {member_names}")
+        lines.append(
+            f"  requested {entry.requested_count} distinct activities between them, only "
+            f"{entry.available_timeslots} non-overlapping slot(s) available (short by {shortfall})"
+        )
         lines.append("")
 
     return "\n".join(lines).rstrip("\n") + "\n"

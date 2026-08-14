@@ -28,6 +28,13 @@ the family attends, columns = the family's members, an "X" marks who's
 where) instead of one row per (member, session) pair - a family that's
 mostly together produces mostly-full rows in a handful of lines, rather
 than repeating the same time/activity text once per attending member.
+
+A third document, ``render_available_adults_pdf``, answers a different
+question: not "who's doing what", but "who's free right now" - one row
+per active time bucket listing which adult campers have nothing
+scheduled (reusing ``validation.idle.find_idle_slots``'s existing
+computation, filtered to ``idle_adults`` - children aren't volunteer
+candidates), for an organiser trying to find a spare pair of hands.
 """
 
 from __future__ import annotations
@@ -47,8 +54,9 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Frame, KeepTogether, PageTemplate, Paragraph, Table, TableStyle
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
+from family_camp2.validation.idle import IdleReport
 
-__all__ = ["PageSpec", "render_activities_pdf", "render_campers_pdf"]
+__all__ = ["PageSpec", "render_activities_pdf", "render_campers_pdf", "render_available_adults_pdf"]
 
 _PAGE_SIZES = {"a4": A4, "a3": A3}
 _TIME_FORMAT = "%a %H:%M"
@@ -339,3 +347,44 @@ def render_campers_pdf(
         story.append(KeepTogether(block))
 
     doc.build(story, canvasmaker=partial(_NumberedCanvas, title="FAMILY ITINERARIES", pagesize=doc.pagesize))
+
+
+def render_available_adults_pdf(idle_report: IdleReport, output_path: Path, page_spec: PageSpec = PageSpec()) -> None:
+    """One table, one row per active time bucket, listing which adult
+    campers have nothing scheduled at that time - for finding a volunteer
+    who's free right now. Only adults (``IdleBucket.idle_adults`` is
+    already filtered to ``is_adult`` by ``find_idle_slots`` - idle
+    children aren't volunteer candidates); buckets with nobody idle at
+    all are shown with an explicit "—" rather than being dropped, so a
+    fully-staffed hour is still visible as "checked, nobody free" rather
+    than looking like a gap in the document.
+
+    Unlike the activities/campers documents there's only one dimension
+    here, so this is a single continuous table rather than one per group
+    - ``Table`` already splits itself across the multi-column frame's
+    columns/pages on its own, repeating the header each time
+    (``repeatRows=1``)."""
+
+    doc, column_width = _build_doc(output_path, page_spec)
+    time_w = column_width * 0.28
+    count_w = column_width * 0.10
+    names_w = column_width - time_w - count_w
+
+    rows = [[
+        Paragraph("Time", _styles["table_header"]),
+        Paragraph("#", _styles["table_header"]),
+        Paragraph("Available adults", _styles["table_header"]),
+    ]]
+    for bucket in idle_report.buckets:
+        names = ", ".join(escape(c.name) for c in sorted(bucket.idle_adults, key=lambda c: c.name))
+        time_label = f"{escape(bucket.start.strftime(_TIME_FORMAT))}&#8211;{escape(bucket.end.strftime('%H:%M'))}"
+        rows.append([
+            Paragraph(time_label, _styles["table_cell"]),
+            Paragraph(str(len(bucket.idle_adults)), _styles["table_cell_center"]),
+            Paragraph(names if names else "—", _styles["table_cell"]),
+        ])
+
+    table = Table(rows, colWidths=[time_w, count_w, names_w], repeatRows=1)
+    table.setStyle(_table_style())
+
+    doc.build([table], canvasmaker=partial(_NumberedCanvas, title="AVAILABLE ADULTS", pagesize=doc.pagesize))

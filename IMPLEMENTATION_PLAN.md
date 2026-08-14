@@ -1339,6 +1339,33 @@ rather than a port.
 
 ---
 
+### - [x] Step 36: Available-adults PDF (FR-84)
+
+**Goal**: a third PDF, requested right after Step 35, answering a
+different question than the first two - not "who's doing what" but
+"who's free right now" - to help an organiser find a spare adult
+volunteer at a given point in time.
+
+- `pdf_reports.py`: `render_available_adults_pdf` - one continuous table
+  (not grouped, since there's only one dimension), one row per active
+  time bucket from `validation.idle.find_idle_slots`, columns
+  `[Time, #, Available adults]`. Reuses `IdleBucket.idle_adults` directly
+  (already filtered to `Camper.is_adult` by the existing idle-time
+  computation) rather than inventing a new "who's idle" concept -
+  matches NFR-10's existing "reports reuse validator logic" principle.
+  A bucket with nobody free renders as an explicit "—" row rather than
+  being silently dropped, so a fully-staffed hour still shows as
+  "checked, nobody available" rather than looking like a documentation
+  gap.
+- `cli.py`: wired into the existing `--pdf-dir` block as
+  `available_adults.pdf` (no new CLI flags - reuses `--pdf-paper`/
+  `--pdf-orientation`).
+- `REQUIREMENTS.md`: FR-84 added to §4.8.
+
+**Commit message**: `family_camp2 step 36: available-adults PDF (FR-84)`
+
+---
+
 ## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this

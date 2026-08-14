@@ -5,7 +5,15 @@ import pytest
 pytest.importorskip("reportlab")  # pdf_reports.py is only usable with the optional 'pdf' extra installed
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.pdf_reports import PageSpec, _activity_label, _short_name, render_activities_pdf, render_campers_pdf
+from family_camp2.pdf_reports import (
+    PageSpec,
+    _activity_label,
+    _short_name,
+    render_activities_pdf,
+    render_available_adults_pdf,
+    render_campers_pdf,
+)
+from family_camp2.validation.idle import find_idle_slots
 
 DAY = datetime(2026, 8, 1, 9, 0)
 
@@ -152,4 +160,47 @@ def test_render_campers_pdf_falls_back_to_list_for_a_large_family(tmp_path):
 
     render_campers_pdf(timetable, members, out, PageSpec("a4", "portrait"))
 
+    _assert_valid_pdf(out)
+
+
+# --- render_available_adults_pdf ---
+
+
+@pytest.mark.parametrize("paper_size", ["a4", "a3"])
+@pytest.mark.parametrize("orientation", ["portrait", "landscape"])
+def test_render_available_adults_pdf_produces_a_valid_pdf(tmp_path, paper_size, orientation):
+    sessions, campers, timetable = _fixture()
+    idle_report = find_idle_slots(timetable, campers, sessions)
+    out = tmp_path / "available_adults.pdf"
+
+    render_available_adults_pdf(idle_report, out, PageSpec(paper_size, orientation))
+
+    _assert_valid_pdf(out)
+
+
+def test_render_available_adults_pdf_excludes_children():
+    """Only Camper.is_adult campers should ever appear - children aren't
+    volunteer candidates. Checked at the IdleReport level, since that's
+    what render_available_adults_pdf consumes directly."""
+    sessions, campers, timetable = _fixture()
+    idle_report = find_idle_slots(timetable, campers, sessions)
+
+    for bucket in idle_report.buckets:
+        assert all(c.is_adult for c in bucket.idle_adults)
+
+
+def test_render_available_adults_pdf_shows_a_dash_when_nobody_is_free(tmp_path):
+    """A bucket where every adult is busy should still render as an
+    explicit "nobody free" row, not be silently dropped."""
+    archery = activity("Archery", max_occ=4)
+    s = session(archery, "A", 9)
+    only_adult = camper("Solo Adult", age=40, age_group="Adult", priorities=(archery,))
+    timetable = Timetable().with_assignment(only_adult, s)
+    idle_report = find_idle_slots(timetable, [only_adult], [s])
+    out = tmp_path / "available_adults.pdf"
+
+    render_available_adults_pdf(idle_report, out)
+
+    assert len(idle_report.buckets) == 1
+    assert idle_report.buckets[0].idle_adults == ()
     _assert_valid_pdf(out)

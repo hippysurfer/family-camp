@@ -118,9 +118,9 @@ sufficient for this rewrite.
 
 **PDF reports** (`--pdf-dir PATH`, `--pdf-paper {a4,a3}` default a4,
 `--pdf-orientation {portrait,landscape}` default portrait): writes
-`activities.pdf` and `campers.pdf` into `PATH` (created if needed) -
-FR-80/81/82, added at the user's request after reviewing the old
-system's PDF output. Requires the `pdf` extra
+`activities.pdf`, `campers.pdf`, and `available_adults.pdf` into `PATH`
+(created if needed) - FR-80/81/82/84, added at the user's request after
+reviewing the old system's PDF output. Requires the `pdf` extra
 (`pip install -e ".[pdf]"`, pulling in `reportlab` - a pure-Python PDF
 library, no external binaries/subprocesses); `--pdf-dir` raises a clear
 `ImportError` naming that install command if it isn't installed, rather
@@ -138,7 +138,12 @@ one small attendance-matrix table per family (rows = sessions, columns =
 members, an "X" marks who's where) rather than one row per
 (member, session) pair, falling back to a compact list when a family has
 too many members for matrix columns to stay legible at the current paper
-size.
+size. `available_adults.pdf` answers a different question again - not
+"who's doing what" but "who's free right now": one row per active time
+period listing which *adult* campers (children aren't volunteer
+candidates) have nothing scheduled, for an organiser hunting for a spare
+pair of hands - reusing the existing idle-time computation
+(`validation.idle.find_idle_slots`) rather than any new logic.
 
 ## Input data
 
@@ -246,7 +251,7 @@ validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time in
 config.py            EngineConfig (NFR-4)
 progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
 reporting.py         per-family/per-activity/idle/unmet-optional/overdemand text reports, from a Timetable (FR-72/73/74/76/77)
-pdf_reports.py       activities.pdf / campers.pdf, from a Timetable (FR-80/81/82/83; needs the 'pdf' extra)
+pdf_reports.py       activities.pdf / campers.pdf / available_adults.pdf (FR-80/81/82/83/84; needs the 'pdf' extra)
 io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements

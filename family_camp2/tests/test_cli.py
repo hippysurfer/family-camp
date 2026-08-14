@@ -113,7 +113,7 @@ def test_cli_report_dir_writes_the_operational_reports(tmp_path):
         assert path.read_text().strip() != ""
 
 
-def test_cli_pdf_dir_writes_both_pdfs(tmp_path):
+def test_cli_pdf_dir_writes_all_three_pdfs(tmp_path):
     pytest.importorskip("reportlab")
     pdf_dir = tmp_path / "pdfs"
     exit_code = cli.main([
@@ -122,7 +122,7 @@ def test_cli_pdf_dir_writes_both_pdfs(tmp_path):
     ])
 
     assert exit_code == 0
-    for name in ("activities.pdf", "campers.pdf"):
+    for name in ("activities.pdf", "campers.pdf", "available_adults.pdf"):
         path = pdf_dir / name
         assert path.exists()
         assert path.read_bytes().startswith(b"%PDF-")

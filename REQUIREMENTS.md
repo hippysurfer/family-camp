@@ -369,6 +369,13 @@ of how much room was left).
   forcing a new page/section for every activity or family regardless of
   how much room remains, since it was exactly this combination that made
   the old system's output unnecessarily long.
+- **FR-84**: The engine MUST be able to produce a PDF listing, for each
+  active time period, which *adult* campers have nothing scheduled — a
+  third document, distinct from FR-80/81 (a different question: not
+  "who's doing what", but "who's free right now"), for an organiser
+  trying to find a spare adult volunteer. Only adults appear (children
+  are not volunteer candidates) — reuses the existing idle-time
+  computation (FR-23/FR-74) filtered to `is_adult`, not a new concept.
 
 ## 5. Non-functional requirements
 

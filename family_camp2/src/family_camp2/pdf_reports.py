@@ -29,17 +29,24 @@ where) instead of one row per (member, session) pair - a family that's
 mostly together produces mostly-full rows in a handful of lines, rather
 than repeating the same time/activity text once per attending member.
 
-A third document, ``render_available_adults_pdf``, answers a different
-question: not "who's doing what", but "who's free right now" - one row
-per active time bucket listing which adult campers have nothing
-scheduled (reusing ``validation.idle.find_idle_slots``'s existing
-computation, filtered to ``idle_adults`` - children aren't volunteer
-candidates), for an organiser trying to find a spare pair of hands.
+A third and fourth document, ``render_available_adults_pdf`` and
+``render_available_families_pdf``, answer a different question again:
+not "who's doing what", but "who's free right now" - one row per active
+time bucket listing which adult campers have nothing scheduled (reusing
+``validation.idle.find_idle_slots``'s existing computation, filtered to
+``idle_adults`` - children aren't volunteer candidates), for an
+organiser trying to find a spare pair of hands. The "families" variant
+narrows this further to adults whose *entire* family also has nothing
+scheduled at that time (``IdleBucket.idle_families``, already computed
+alongside ``idle_adults``) - a stronger availability signal than the
+adult alone being free, since they won't need to break away to rejoin a
+family member who's mid-activity.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -54,9 +61,15 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Frame, KeepTogether, PageTemplate, Paragraph, Table, TableStyle
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.validation.idle import IdleReport
+from family_camp2.validation.idle import IdleBucket, IdleReport
 
-__all__ = ["PageSpec", "render_activities_pdf", "render_campers_pdf", "render_available_adults_pdf"]
+__all__ = [
+    "PageSpec",
+    "render_activities_pdf",
+    "render_campers_pdf",
+    "render_available_adults_pdf",
+    "render_available_families_pdf",
+]
 
 _PAGE_SIZES = {"a4": A4, "a3": A3}
 _TIME_FORMAT = "%a %H:%M"
@@ -349,13 +362,25 @@ def render_campers_pdf(
     doc.build(story, canvasmaker=partial(_NumberedCanvas, title="FAMILY ITINERARIES", pagesize=doc.pagesize))
 
 
-def render_available_adults_pdf(idle_report: IdleReport, output_path: Path, page_spec: PageSpec = PageSpec()) -> None:
-    """One table, one row per active time bucket, listing which adult
-    campers have nothing scheduled at that time - for finding a volunteer
-    who's free right now. Only adults (``IdleBucket.idle_adults`` is
-    already filtered to ``is_adult`` by ``find_idle_slots`` - idle
-    children aren't volunteer candidates); buckets with nobody idle at
-    all are shown with an explicit "—" rather than being dropped, so a
+def _family_idle_adults(bucket: IdleBucket) -> list[Camper]:
+    """Adults from ``bucket.idle_adults`` whose entire family also appears
+    in ``bucket.idle_families`` - not just personally free, but with
+    nobody else in their family mid-activity either."""
+    return [c for c in bucket.idle_adults if c.family_id in bucket.idle_families]
+
+
+def _render_available_pdf(
+    idle_report: IdleReport,
+    output_path: Path,
+    page_spec: PageSpec,
+    title: str,
+    select: Callable[[IdleBucket], list[Camper]],
+) -> None:
+    """One table, one row per active time bucket, listing whichever
+    adults ``select`` picks out of that bucket - shared by
+    ``render_available_adults_pdf``/``render_available_families_pdf``,
+    which differ only in that selection. Buckets with nobody selected are
+    shown with an explicit "—" rather than being dropped, so a
     fully-staffed hour is still visible as "checked, nobody free" rather
     than looking like a gap in the document.
 
@@ -376,15 +401,35 @@ def render_available_adults_pdf(idle_report: IdleReport, output_path: Path, page
         Paragraph("Available adults", _styles["table_header"]),
     ]]
     for bucket in idle_report.buckets:
-        names = ", ".join(escape(c.name) for c in sorted(bucket.idle_adults, key=lambda c: c.name))
+        available = sorted(select(bucket), key=lambda c: c.name)
+        names = ", ".join(escape(c.name) for c in available)
         time_label = f"{escape(bucket.start.strftime(_TIME_FORMAT))}&#8211;{escape(bucket.end.strftime('%H:%M'))}"
         rows.append([
             Paragraph(time_label, _styles["table_cell"]),
-            Paragraph(str(len(bucket.idle_adults)), _styles["table_cell_center"]),
+            Paragraph(str(len(available)), _styles["table_cell_center"]),
             Paragraph(names if names else "—", _styles["table_cell"]),
         ])
 
     table = Table(rows, colWidths=[time_w, count_w, names_w], repeatRows=1)
     table.setStyle(_table_style())
 
-    doc.build([table], canvasmaker=partial(_NumberedCanvas, title="AVAILABLE ADULTS", pagesize=doc.pagesize))
+    doc.build([table], canvasmaker=partial(_NumberedCanvas, title=title, pagesize=doc.pagesize))
+
+
+def render_available_adults_pdf(idle_report: IdleReport, output_path: Path, page_spec: PageSpec = PageSpec()) -> None:
+    """Which adult campers have nothing scheduled at each active time
+    bucket - for finding a volunteer who's free right now. Only adults
+    (``IdleBucket.idle_adults`` is already filtered to ``is_adult`` by
+    ``find_idle_slots`` - idle children aren't volunteer candidates)."""
+    _render_available_pdf(idle_report, output_path, page_spec, "AVAILABLE ADULTS", lambda b: b.idle_adults)
+
+
+def render_available_families_pdf(
+    idle_report: IdleReport, output_path: Path, page_spec: PageSpec = PageSpec()
+) -> None:
+    """Narrower than ``render_available_adults_pdf``: only adults whose
+    *entire* family has nothing scheduled at that time (see
+    ``_family_idle_adults``) - a stronger availability signal, since
+    they won't need to break away to rejoin a family member who's
+    mid-activity."""
+    _render_available_pdf(idle_report, output_path, page_spec, "AVAILABLE FAMILIES", _family_idle_adults)

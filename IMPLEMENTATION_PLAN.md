@@ -1366,6 +1366,37 @@ volunteer at a given point in time.
 
 ---
 
+### - [x] Step 37: Available-families PDF (FR-85)
+
+**Goal**: a fourth PDF, requested right after Step 36 - the same
+"who's free right now" question, but narrowed to adults whose *entire*
+family has nothing scheduled at that time, a stronger availability
+signal than the adult alone being idle (they won't need to break away to
+rejoin a family member mid-activity).
+
+- `pdf_reports.py`: `render_available_adults_pdf` refactored to share a
+  new `_render_available_pdf(idle_report, output_path, page_spec, title,
+  select)` helper with the new `render_available_families_pdf` - both
+  build the identical `[Time, #, Available adults]` table, differing
+  only in which adults `select` picks out of each `IdleBucket`. New
+  `_family_idle_adults(bucket)` intersects `bucket.idle_adults` with
+  `bucket.idle_families` (both already computed by `find_idle_slots` -
+  no new validation logic, matching NFR-10) and is unit-tested directly
+  (`test_family_idle_adults_excludes_an_adult_whose_family_member_is_busy`)
+  rather than only indirectly through PDF output.
+- `cli.py`: wired into the existing `--pdf-dir` block as
+  `available_families.pdf`.
+- `REQUIREMENTS.md`: FR-85 added to §4.8.
+- Example PDFs (both A4 portrait and A3 landscape, from real 2026 camp
+  data) written to `fetched_data/pdfs/` for all four PDF reports.
+  Verified the narrowing has real effect: the busiest available-adults
+  bucket lists up to 96 names; the same bucket in available-families
+  narrows to a smaller, more genuinely-actionable list.
+
+**Commit message**: `family_camp2 step 37: available-families PDF (FR-85)`
+
+---
+
 ## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this

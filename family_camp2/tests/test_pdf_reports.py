@@ -8,9 +8,11 @@ from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.pdf_reports import (
     PageSpec,
     _activity_label,
+    _family_idle_adults,
     _short_name,
     render_activities_pdf,
     render_available_adults_pdf,
+    render_available_families_pdf,
     render_campers_pdf,
 )
 from family_camp2.validation.idle import find_idle_slots
@@ -203,4 +205,40 @@ def test_render_available_adults_pdf_shows_a_dash_when_nobody_is_free(tmp_path):
 
     assert len(idle_report.buckets) == 1
     assert idle_report.buckets[0].idle_adults == ()
+    _assert_valid_pdf(out)
+
+
+# --- render_available_families_pdf / _family_idle_adults ---
+
+
+def test_family_idle_adults_excludes_an_adult_whose_family_member_is_busy():
+    """A personally-idle adult should NOT count as "family available" if
+    another member of their family is mid-activity at the same time."""
+    craft = activity("Craft")
+    s = session(craft, "A", 9)
+    parent = camper("Parent", family="001/One", age=40, age_group="Adult")  # personally idle
+    kid = camper("Kid", family="001/One", age=10, priorities=(craft,))  # busy - attends s
+    solo_adult = camper("Solo Adult", family="002/Two", age=35, age_group="Adult")  # idle, whole family
+
+    timetable = Timetable().with_assignment(kid, s)
+    idle_report = find_idle_slots(timetable, [parent, kid, solo_adult], [s])
+
+    assert len(idle_report.buckets) == 1
+    bucket = idle_report.buckets[0]
+    assert parent in bucket.idle_adults  # personally idle...
+    assert "001/One" not in bucket.idle_families  # ...but their family isn't
+
+    available = _family_idle_adults(bucket)
+    assert available == [solo_adult]  # parent excluded, solo_adult (whole family idle) included
+
+
+@pytest.mark.parametrize("paper_size", ["a4", "a3"])
+@pytest.mark.parametrize("orientation", ["portrait", "landscape"])
+def test_render_available_families_pdf_produces_a_valid_pdf(tmp_path, paper_size, orientation):
+    sessions, campers, timetable = _fixture()
+    idle_report = find_idle_slots(timetable, campers, sessions)
+    out = tmp_path / "available_families.pdf"
+
+    render_available_families_pdf(idle_report, out, PageSpec(paper_size, orientation))
+
     _assert_valid_pdf(out)

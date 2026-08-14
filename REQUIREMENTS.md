@@ -376,6 +376,13 @@ of how much room was left).
   trying to find a spare adult volunteer. Only adults appear (children
   are not volunteer candidates) — reuses the existing idle-time
   computation (FR-23/FR-74) filtered to `is_adult`, not a new concept.
+- **FR-85**: The engine MUST be able to produce a PDF, in the same shape
+  as FR-84, narrowed to adults whose *entire family* has nothing
+  scheduled at that time (not just the adult themselves) — a stronger
+  availability signal, since they won't need to break away to rejoin a
+  family member who's mid-activity. Reuses the existing idle-family
+  computation (FR-74's `idle_families`) intersected with FR-84's idle
+  adults, not a new concept.
 
 ## 5. Non-functional requirements
 

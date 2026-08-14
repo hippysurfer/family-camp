@@ -118,13 +118,16 @@ sufficient for this rewrite.
 
 **PDF reports** (`--pdf-dir PATH`, `--pdf-paper {a4,a3}` default a4,
 `--pdf-orientation {portrait,landscape}` default portrait): writes
-`activities.pdf`, `campers.pdf`, and `available_adults.pdf` into `PATH`
-(created if needed) - FR-80/81/82/84, added at the user's request after
-reviewing the old system's PDF output. Requires the `pdf` extra
+`activities.pdf`, `campers.pdf`, `available_adults.pdf`, and
+`available_families.pdf` into `PATH` (created if needed) -
+FR-80/81/82/84/85, added at the user's request after reviewing the old
+system's PDF output. Requires the `pdf` extra
 (`pip install -e ".[pdf]"`, pulling in `reportlab` - a pure-Python PDF
 library, no external binaries/subprocesses); `--pdf-dir` raises a clear
 `ImportError` naming that install command if it isn't installed, rather
-than failing on a bare `ModuleNotFoundError`.
+than failing on a bare `ModuleNotFoundError`. Examples of all four
+(both A4 portrait and A3 landscape) generated from real 2026 camp data
+are in `fetched_data/pdfs/`.
 
 Deliberately not a port of the old layout - see
 `family_camp2.pdf_reports`'s module docstring for the two changes that
@@ -138,12 +141,16 @@ one small attendance-matrix table per family (rows = sessions, columns =
 members, an "X" marks who's where) rather than one row per
 (member, session) pair, falling back to a compact list when a family has
 too many members for matrix columns to stay legible at the current paper
-size. `available_adults.pdf` answers a different question again - not
-"who's doing what" but "who's free right now": one row per active time
-period listing which *adult* campers (children aren't volunteer
-candidates) have nothing scheduled, for an organiser hunting for a spare
-pair of hands - reusing the existing idle-time computation
-(`validation.idle.find_idle_slots`) rather than any new logic.
+size. `available_adults.pdf`/`available_families.pdf` answer a different
+question again - not "who's doing what" but "who's free right now": one
+row per active time period listing which *adult* campers (children
+aren't volunteer candidates) have nothing scheduled, for an organiser
+hunting for a spare pair of hands - reusing the existing idle-time
+computation (`validation.idle.find_idle_slots`) rather than any new
+logic. `available_families.pdf` narrows this further to adults whose
+*entire family* also has nothing scheduled at that time (not just the
+adult themselves) - a stronger availability signal, since they won't
+need to break away to rejoin a family member who's mid-activity.
 
 ## Input data
 
@@ -251,7 +258,7 @@ validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time in
 config.py            EngineConfig (NFR-4)
 progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
 reporting.py         per-family/per-activity/idle/unmet-optional/overdemand text reports, from a Timetable (FR-72/73/74/76/77)
-pdf_reports.py       activities.pdf / campers.pdf / available_adults.pdf (FR-80/81/82/83/84; needs the 'pdf' extra)
+pdf_reports.py       activities.pdf / campers.pdf / available_adults.pdf / available_families.pdf (FR-80/81/82/83/84/85; needs the 'pdf' extra)
 io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements

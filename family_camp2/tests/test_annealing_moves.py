@@ -5,6 +5,7 @@ from family_camp2.domain import Activity, Camper, Session
 from family_camp2.solvers.annealing.moves import (
     State,
     assign_family,
+    fix_lone_adult_split,
     fix_unsupervised_split,
     move_family,
     remove_family,
@@ -265,4 +266,51 @@ def test_fix_unsupervised_split_rejected_when_session_full():
     state._add(kid, session)  # session already at capacity 1
 
     result = fix_unsupervised_split(state, "F1", session, campers_by_family)
+    assert result is None
+
+
+# --- fix_lone_adult_split ---
+
+
+def test_fix_lone_adult_split_adds_an_available_child():
+    swimming = activity("Swimming", max_occ=5)
+    parent = camper("Parent", "F1", age=40, age_group="Adult", priorities=(swimming,))
+    kid = camper("Kid", "F1", age=10, priorities=(swimming,))
+    session = Session(activity=swimming, label="A", start=DAY)
+    campers_by_family = by_family([parent, kid])
+
+    state = State([parent, kid], [session])
+    state._add(parent, session)  # adult-only session - nothing to supervise
+
+    fixed = fix_lone_adult_split(state, "F1", session, campers_by_family)
+
+    assert fixed is not None
+    assert fixed.is_assigned(kid, session)
+    assert_class1_clean(fixed)
+
+
+def test_fix_lone_adult_split_rejected_when_no_child_available():
+    swimming = activity("Swimming", max_occ=5)
+    parent = camper("Parent", "F1", age=40, age_group="Adult", priorities=(swimming,))
+    campers_by_family = by_family([parent])
+    session = Session(activity=swimming, label="A", start=DAY)
+
+    state = State([parent], [session])
+    state._add(parent, session)
+
+    result = fix_lone_adult_split(state, "F1", session, campers_by_family)
+    assert result is None
+
+
+def test_fix_lone_adult_split_rejected_when_session_full():
+    swimming = activity("Swimming", max_occ=1)
+    parent = camper("Parent", "F1", age=40, age_group="Adult", priorities=(swimming,))
+    kid = camper("Kid", "F1", age=10, priorities=(swimming,))
+    session = Session(activity=swimming, label="A", start=DAY)
+    campers_by_family = by_family([parent, kid])
+
+    state = State([parent, kid], [session])
+    state._add(parent, session)  # session already at capacity 1
+
+    result = fix_lone_adult_split(state, "F1", session, campers_by_family)
     assert result is None

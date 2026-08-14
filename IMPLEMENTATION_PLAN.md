@@ -1207,6 +1207,72 @@ computed from the union of sessions any member is age-eligible for.
 
 ---
 
+### - [x] Step 34: Tighten and minimise family splits (FR-17/FR-24)
+
+**Goal**: after showing the user a real family (022/Glen) split across
+two *optional* activities with an unbalanced adult/child mix, the user
+asked to (1) tighten the supervision rule so every split session needs
+both an adult and a child present (with an idle-adult exception for
+children-only sessions - see REQUIREMENTS.md OQ-13 for the verbatim ask)
+and (2) make the engine actively prefer not splitting families at all,
+only doing so when unavoidable. This touches the shared validator and
+*both* solvers, since Design A's exact objective and Design B's fitness
+function both need to reflect the new rule.
+
+- `validation/class2.py`: `UnsupervisedFamilySplit` gained a `reason`
+  field (`"lone_adult"` / `"unaccompanied_child"`); `find_unsupervised_family_splits`
+  now takes `campers` (needed for the idle-adult exception, which must
+  see adults with *no* assignments at all, not just ones inferable from
+  the timetable) and applies to every requested activity, not just
+  priorities - broadened after 022/Glen's actual splits turned out to
+  both be on optional activities. New `FamilySplitOccurrence`/
+  `find_family_splits` (timetable-only, no violation implied) backs the
+  new `Tier0Weights.family_split` band and `Class2Report.family_splits`
+  (deliberately excluded from `is_clean` - a well-supervised split is a
+  last resort, not a wrong answer).
+- `validation/report.py`: reason-aware wording for poorly-supervised
+  splits; a new non-violation "Family splits: N" summary line.
+- `solvers/cp_sat.py`: `add_class2_indicators` rewritten to build
+  `is_split`/`lone_adult`/`unaccompanied_child` BoolVars per
+  (family, activity, session) for every requested activity, using a new
+  `_idle_during` helper (memoised per (camper, session) - the same pair
+  recurs across activities) for the idle-adult exception; `tier0_expr`
+  gained the `family_split` weighted term. Mirrors the validator exactly
+  (test_cp_sat_family_split.py cross-checks solver objective vs.
+  independent validator score, matching test_cp_sat_tier0.py's existing
+  pattern).
+- `solvers/annealing/moves.py`: new `fix_lone_adult_split` (the symmetric
+  repair to the existing `fix_unsupervised_split`, adding a child instead
+  of an adult); wired into `solver.py`'s `_MOVE_KINDS`. No change needed
+  to `scoring.py` - it already calls the shared `check_class2`/
+  `score_tier0` directly, so the tightened rule and the new objective
+  term apply automatically.
+- `config.py`: `family_split` added to `_TIER0_WEIGHT_FIELDS`.
+- `REQUIREMENTS.md`: FR-17 (supervision), FR-24 (minimisation, ranked
+  above FR-20-23), OQ-13 (verbatim provenance), OQ-7 marked superseded.
+
+**Deviations found during implementation**:
+1. A literal per-member reading of "at least one adult and one child"
+   would permanently, unfixably flag any split of an activity that no
+   child in the family ever requested (or a family with no children at
+   all) - there's no assignment that could ever satisfy it. Both the
+   validator and CP-SAT's model exempt a (family, activity) pair from the
+   lone-adult check when no non-adult family member requested that
+   activity (`test_unsupervised_family_split_not_flagged_when_no_child_ever_requested_the_activity`).
+2. The first `Tier0Weights` draft (10,000x ratios, matching the
+   pre-existing pattern) pushed `missing_priority` to `10**16`, which made
+   CP-SAT reject the model outright as `MODEL_INVALID` against real
+   ~283-camper data - the objective's coefficients got large enough to
+   risk integer overflow internally. Rescaled to 1,000x ratios
+   (`missing_priority` back to its original `10**12`, `family_safety`
+   `10**9`, `family_split` `10**6`, `under_minimum` `10**3`,
+   `compulsory` `1`) - still comfortably clear of NFR-1's 500-camper
+   scale, and verified against real data afterwards.
+
+**Commit message**: `family_camp2 step 34: tighten and minimise family splits (FR-17/FR-24)`
+
+---
+
 ## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this

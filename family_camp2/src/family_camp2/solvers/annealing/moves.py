@@ -22,6 +22,7 @@ __all__ = [
     "swap_families",
     "remove_family",
     "fix_unsupervised_split",
+    "fix_lone_adult_split",
 ]
 
 
@@ -223,15 +224,43 @@ def remove_family(state: State, family_id: str, session: Session, campers_by_fam
 def fix_unsupervised_split(
     state: State, family_id: str, session: Session, campers_by_family: dict[str, list[Camper]]
 ) -> State | None:
-    """If session is missing an adult from the family (OQ-7), try to move
-    one in from elsewhere. Rejected if no eligible, available adult exists,
-    or there's no room."""
+    """If session (part of a family split, FR-17) has a child but no adult
+    from the family, try to move an adult in from elsewhere. Rejected if no
+    eligible, available adult exists, or there's no room."""
 
     members = campers_by_family.get(family_id, [])
     candidates = [
         c
         for c in members
         if c.is_adult
+        and _is_eligible(c, session)
+        and not state.is_assigned(c, session)
+        and not _has_activity(state, c, session.activity)
+        and not _has_overlap(state, c, session)
+    ]
+    if not candidates:
+        return None
+    if state.occupancy(session) >= session.activity.max_occupancy:
+        return None
+
+    new_state = state.copy()
+    new_state._add(candidates[0], session)
+    return new_state
+
+
+def fix_lone_adult_split(
+    state: State, family_id: str, session: Session, campers_by_family: dict[str, list[Camper]]
+) -> State | None:
+    """If session (part of a family split, FR-17) has only adults from the
+    family and no child, try to move a child in from elsewhere - the
+    symmetric repair to fix_unsupervised_split. Rejected if no eligible,
+    available child exists, or there's no room."""
+
+    members = campers_by_family.get(family_id, [])
+    candidates = [
+        c
+        for c in members
+        if not c.is_adult
         and _is_eligible(c, session)
         and not state.is_assigned(c, session)
         and not _has_activity(state, c, session.activity)

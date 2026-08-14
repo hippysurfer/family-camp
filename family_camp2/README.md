@@ -183,10 +183,36 @@ the same raw worksheet-row shape) and `fetch_cli.py` for the full CLI.
 ### Engine config (`--config`)
 
 Optional JSON file overriding `EngineConfig` (see `family_camp2.config`):
-`tier0_weights` (severity weights for the demand-driven Class 2 rules),
-`objective_order` (must be a permutation of `["tier0", "tier1", "tier2"]`
-— the OQ-4 ranking mechanism), and `compulsory_activities` (activity names
-everyone must attend, empty by default per OQ-5).
+`tier0_weights` (severity weights for the demand-driven Class 2 rules —
+`missing_priority`, `family_safety`, `family_split`, `under_minimum`,
+`compulsory`), `objective_order` (must be a permutation of `["tier0",
+"tier1", "tier2"]` — the OQ-4 ranking mechanism), and
+`compulsory_activities` (activity names everyone must attend, empty by
+default per OQ-5).
+
+### Family splits (FR-17/FR-24)
+
+Splitting a family across several sessions of the same activity is
+unpopular, so both solvers treat it as a last resort, not a routine
+outcome: a split only happens when there's no way to accommodate the
+family's requested activities otherwise (e.g. session capacity forces
+it), ranked in the objective above satisfying an extra optional request
+but below the hard/demand-driven constraints in REQUIREMENTS.md §4.1. A
+split is reported (`Class2Report.family_splits`) but is *not* itself a
+violation — it doesn't affect `Feasible: True/False`.
+
+When a split does happen, every one of its sessions must have both an
+adult (18+) *and* a child from the family present — no session may be
+adults-only or children-only — with one exception: a children-only
+session is fine if some adult in the family has no assignment overlapping
+that session's time, and so is free to informally accompany them without
+formally taking part. There's no equivalent exception for an adults-only
+session. This *is* a real violation when unmet
+(`Class2Report.unsupervised_splits`, each tagged `reason="lone_adult"` or
+`"unaccompanied_child"`) — see `validation/class2.py`'s module docstring
+for the exact rule, including why a (family, activity) pair is exempted
+entirely when no child in the family ever requested that activity (the
+rule would otherwise be permanently unfixable in that case).
 
 ## Architecture
 

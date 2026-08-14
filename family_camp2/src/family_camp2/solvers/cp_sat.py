@@ -170,6 +170,7 @@ class Class2Vars:
     missing_priority: list[cp_model.IntVar] = field(default_factory=list)
     family_conflict: list[cp_model.IntVar] = field(default_factory=list)
     unsupervised_split: list[cp_model.IntVar] = field(default_factory=list)
+    family_split: list[cp_model.IntVar] = field(default_factory=list)
     under_minimum: list[cp_model.IntVar] = field(default_factory=list)
     unmet_compulsory: list[cp_model.IntVar] = field(default_factory=list)
 
@@ -220,6 +221,36 @@ def _reify_under_minimum(model: cp_model.CpModel, occ_expr, min_occupancy: int, 
     model.AddBoolAnd([nonzero, below_min]).OnlyEnforceIf(under)
     model.AddBoolOr([nonzero.Not(), below_min.Not()]).OnlyEnforceIf(under.Not())
     return under
+
+
+def _idle_during(
+    model: cp_model.CpModel,
+    var_index: VarIndex,
+    camper: Camper,
+    session: Session,
+    cache: dict[tuple[Camper, Session], cp_model.IntVar],
+) -> cp_model.IntVar:
+    """A BoolVar equal to 1 iff camper has no assignment overlapping
+    session's time - i.e. they're free to informally accompany a family
+    member there without formally attending themselves (FR-17's
+    idle-adult exception). Memoised per (camper, session): the same pair
+    can come up while checking splits across several different activities."""
+    key = (camper, session)
+    if key in cache:
+        return cache[key]
+
+    overlapping_vars = [
+        var_index.by_pair[(camper, s)] for s in var_index.by_camper.get(camper, []) if sessions_overlap(s, session)
+    ]
+    idle = model.NewBoolVar(f"idle[{camper.name}|{session.activity.name}|{session.label}]")
+    if not overlapping_vars:
+        model.Add(idle == 1)
+    else:
+        total = sum(overlapping_vars)
+        model.Add(total == 0).OnlyEnforceIf(idle)
+        model.Add(total >= 1).OnlyEnforceIf(idle.Not())
+    cache[key] = idle
+    return idle
 
 
 def _family_present_vars(
@@ -299,42 +330,79 @@ def add_class2_indicators(
             )
         )
 
-    # OQ-7: unsupervised family splits - restricted to activities that are a
-    # priority for the specific family members involved, per the shared
-    # validator's definition (class2.find_unsupervised_family_splits).
-    priority_activities_by_family: dict[str, set[Activity]] = defaultdict(set)
+    # FR-17/FR-24: family splits across sessions of the same activity - all
+    # requested activities now, not just priorities (the motivating
+    # real-world case was two optional-activity splits), with each split
+    # session required to be jointly attended by an adult AND a child
+    # (idle-adult exception for children-only sessions), and every split
+    # occurrence (however well supervised) counted towards a
+    # last-resort-only objective. Mirrors the shared validator's definition
+    # exactly (class2.find_unsupervised_family_splits/find_family_splits)
+    # so the solver's objective and the independent validator agree.
+    activities_by_family: dict[str, set[Activity]] = defaultdict(set)
     for c in campers:
-        for a in c.priorities:
-            priority_activities_by_family[c.family_id].add(a)
+        activities_by_family[c.family_id].update(c.priorities)
+        activities_by_family[c.family_id].update(c.optional)
+
+    idle_cache: dict[tuple[Camper, Session], cp_model.IntVar] = {}
 
     for family_id, members in campers_by_family.items():
-        for activity in priority_activities_by_family[family_id]:
-            priority_members = [c for c in members if activity in c.priorities]
+        family_adults = [c for c in members if c.is_adult]
+        for activity in activities_by_family[family_id]:
+            requesting_members = [c for c in members if activity in c.priorities or activity in c.optional]
             activity_sessions = [s for s in sessions if s.activity == activity]
-            priority_present = _family_present_vars(
-                model, {family_id: priority_members}, var_index, activity_sessions
-            )
-            relevant_sessions = [s for s in activity_sessions if (family_id, s) in priority_present]
+            present = _family_present_vars(model, {family_id: requesting_members}, var_index, activity_sessions)
+            relevant_sessions = [s for s in activity_sessions if (family_id, s) in present]
             if len(relevant_sessions) < 2:
                 continue  # can't be "split" across fewer than 2 sessions
 
-            sum_present = sum(priority_present[(family_id, s)] for s in relevant_sessions)
+            sum_present = sum(present[(family_id, s)] for s in relevant_sessions)
             is_split = model.NewBoolVar(f"split[{family_id}|{activity.name}]")
             model.Add(sum_present >= 2).OnlyEnforceIf(is_split)
             model.Add(sum_present <= 1).OnlyEnforceIf(is_split.Not())
+            result.family_split.append(is_split)
 
-            adult_members = [c for c in priority_members if c.is_adult]
+            child_members = [c for c in requesting_members if not c.is_adult]
+            if not child_members:
+                # No non-adult family member ever requested this activity,
+                # so "a child attends" can never happen for it regardless
+                # of the solver's choices - flagging every split session
+                # would be a permanent, unfixable penalty, not a signal.
+                continue
+
+            adult_members = [c for c in requesting_members if c.is_adult]
             for session in relevant_sessions:
-                p = priority_present[(family_id, session)]
+                p = present[(family_id, session)]
                 adult_vars = [var_index.by_pair[(c, session)] for c in adult_members if (c, session) in var_index]
+                child_vars = [var_index.by_pair[(c, session)] for c in child_members if (c, session) in var_index]
                 adult_present = _reify_at_least_one(
                     model, adult_vars, f"adult_present[{family_id}|{activity.name}|{session.label}]"
                 )
+                child_present = _reify_at_least_one(
+                    model, child_vars, f"child_present[{family_id}|{activity.name}|{session.label}]"
+                )
 
-                unsupervised = model.NewBoolVar(f"unsupervised[{family_id}|{activity.name}|{session.label}]")
-                model.AddBoolAnd([p, is_split, adult_present.Not()]).OnlyEnforceIf(unsupervised)
-                model.AddBoolOr([p.Not(), is_split.Not(), adult_present]).OnlyEnforceIf(unsupervised.Not())
-                result.unsupervised_split.append(unsupervised)
+                lone_adult = model.NewBoolVar(f"lone_adult[{family_id}|{activity.name}|{session.label}]")
+                model.AddBoolAnd([p, is_split, adult_present, child_present.Not()]).OnlyEnforceIf(lone_adult)
+                model.AddBoolOr(
+                    [p.Not(), is_split.Not(), adult_present.Not(), child_present]
+                ).OnlyEnforceIf(lone_adult.Not())
+                result.unsupervised_split.append(lone_adult)
+
+                idle_vars = [_idle_during(model, var_index, adult, session, idle_cache) for adult in family_adults]
+                any_adult_idle = _reify_at_least_one(
+                    model, idle_vars, f"any_adult_idle[{family_id}|{activity.name}|{session.label}]"
+                )
+                unaccompanied_child = model.NewBoolVar(
+                    f"unaccompanied_child[{family_id}|{activity.name}|{session.label}]"
+                )
+                model.AddBoolAnd(
+                    [p, is_split, adult_present.Not(), any_adult_idle.Not()]
+                ).OnlyEnforceIf(unaccompanied_child)
+                model.AddBoolOr(
+                    [p.Not(), is_split.Not(), adult_present, any_adult_idle]
+                ).OnlyEnforceIf(unaccompanied_child.Not())
+                result.unsupervised_split.append(unaccompanied_child)
 
     return result
 
@@ -346,6 +414,7 @@ def tier0_expr(class2_vars: Class2Vars, weights: Tier0Weights = Tier0Weights()):
     return (
         sum(class2_vars.missing_priority) * weights.missing_priority
         + (sum(class2_vars.family_conflict) + sum(class2_vars.unsupervised_split)) * weights.family_safety
+        + sum(class2_vars.family_split) * weights.family_split
         + sum(class2_vars.under_minimum) * weights.under_minimum
         + sum(class2_vars.unmet_compulsory) * weights.compulsory
     )

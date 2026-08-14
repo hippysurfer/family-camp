@@ -16,7 +16,9 @@ from family_camp2.validation.class2 import Tier0Weights
 __all__ = ["EngineConfig", "ConfigError", "load_config"]
 
 VALID_TIERS = frozenset({"tier0", "tier1", "tier2"})
-_TIER0_WEIGHT_FIELDS = frozenset({"missing_priority", "family_safety", "under_minimum", "compulsory"})
+_TIER0_WEIGHT_FIELDS = frozenset(
+    {"missing_priority", "family_safety", "family_split", "under_minimum", "compulsory"}
+)
 _TOP_LEVEL_FIELDS = frozenset({"tier0_weights", "objective_order", "compulsory_activities"})
 
 

@@ -78,8 +78,13 @@ def render_text(report: ValidationReport) -> str:
                 f"{v.camper_b.name} in {v.session_b.activity.name}/{v.session_b.label}"
             )
         for v in c2.unsupervised_splits:
+            detail = (
+                "an adult attended without any child from the family"
+                if v.reason == "lone_adult"
+                else "no adult present, and no family adult was free to accompany"
+            )
             lines.append(
-                f"  - Unsupervised family split ({v.family_id}): no adult in "
+                f"  - Poorly supervised family split ({v.family_id}): {detail} in "
                 f"{v.activity.name}/{v.session.label}"
             )
         for v in c2.under_minimum_sessions:
@@ -95,6 +100,10 @@ def render_text(report: ValidationReport) -> str:
     lines.append(
         f"Idle: {idle_occurrences} camper-timeslot idle occurrence(s) "
         f"across {len(report.idle.buckets)} active time bucket(s)."
+    )
+    lines.append(
+        f"Family splits: {len(c2.family_splits)} family/activity pair(s) spread across "
+        "multiple sessions (FR-24 - not itself a violation, but avoided as a last resort)."
     )
 
     return "\n".join(lines)

@@ -23,6 +23,7 @@ from family_camp2.progress import NullProgressReporter, ProgressEvent, ProgressR
 from family_camp2.solvers.annealing.moves import (
     State,
     assign_family,
+    fix_lone_adult_split,
     fix_unsupervised_split,
     move_family,
     remove_family,
@@ -37,7 +38,7 @@ from family_camp2.validation.validator import validate
 
 __all__ = ["CoolingSchedule", "run_chain", "run_restarts", "AnnealingParams", "AnnealingSolver"]
 
-_MOVE_KINDS = ("assign", "move", "swap", "remove", "fix_split")
+_MOVE_KINDS = ("assign", "move", "swap", "remove", "fix_split", "fix_lone_adult")
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,11 @@ def _propose_move(
         family_id = rng.choice(families)
         session = rng.choice(sessions)
         return fix_unsupervised_split(state, family_id, session, campers_by_family)
+
+    if kind == "fix_lone_adult":
+        family_id = rng.choice(families)
+        session = rng.choice(sessions)
+        return fix_lone_adult_split(state, family_id, session, campers_by_family)
 
     return None  # pragma: no cover - _MOVE_KINDS is exhaustive
 

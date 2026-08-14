@@ -29,6 +29,16 @@ def test_valid_json_overrides_specific_fields(tmp_path):
     assert config.tier0_weights.family_safety == EngineConfig().tier0_weights.family_safety
 
 
+def test_family_split_weight_is_a_valid_override(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"tier0_weights": {"family_split": 7}}))
+
+    config = load_config(path)
+
+    assert config.tier0_weights.family_split == 7
+    assert config.tier0_weights.family_safety == EngineConfig().tier0_weights.family_safety
+
+
 def test_unknown_top_level_key_raises_naming_the_key(tmp_path):
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"tierzero_weights": {}}))

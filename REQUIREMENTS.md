@@ -139,6 +139,20 @@ in-memory objects) is a design decision, not a requirement.
   compulsory, every camper is assigned to exactly one session of each.
   (Currently no activities are so designated, but the engine must support
   the concept.)
+- **FR-17 (Supervised family splits)**: This tightens and supersedes
+  OQ-7's original answer. When a family is split across more than one
+  session of the *same* activity (whether it's a priority or an optional
+  request for whoever's attending — OQ-7's answer only covered
+  priorities), every one of those sessions must be jointly attended by at
+  least one adult (18+) AND at least one non-adult member of the family —
+  no session may contain only adults, and no session may contain only
+  children, WITH ONE exception: a children-only session is still
+  acceptable if at least one adult member of the family has no assignment
+  overlapping that session's time (they are then free to informally
+  accompany/supervise even though not formally taking part in the
+  activity themselves). There is no equivalent exception for an
+  adults-only session — the family being split is popular, so this is
+  meant to be a real constraint, not one either side can route around.
 
 ### 4.2 Soft objectives — a good schedule SHOULD optimise for these
 
@@ -160,6 +174,16 @@ adjust the trade-off (see NFR-4).
 - **FR-23 (Engagement / idle time — optional, see OQ-3)**: Prefer schedules
   that minimise stretches where a camper (or family) has no assigned
   activity, where this doesn't conflict with higher-priority objectives.
+- **FR-24 (Minimise family splits)**: Splitting a family across several
+  sessions of the same activity (FR-17) is unpopular with families and
+  should be a last resort. The engine SHOULD first attempt a schedule that
+  keeps every family together in a single session per activity, and only
+  split a family when there is no way to accommodate its members'
+  requested activities otherwise (e.g. session capacity forces it). This
+  ranks above FR-20/21/22/23 — the engine should prefer keeping a family
+  together over satisfying an extra optional request — but below the
+  hard/demand-driven constraints in §4.1 (including FR-17's supervision
+  requirement, which is never traded away to reduce a split).
 
 ### 4.3 Feasibility and best-effort behaviour
 
@@ -424,6 +448,8 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
 
   [Answer: it is acceptable to split a family across non-overlapping sessions of the same priority activity, only if all sessions have at least one adult (over 18) from the family included.]
 
+  [Superseded/tightened by OQ-13 below — see FR-17/FR-24.]
+
 - **OQ-8 (Age-based constraints)**: Camper age/age-group is captured in the
   input (§3.3) but no age-based eligibility rule exists in the current
   system. Should the rewrite support restricting an activity to an age
@@ -460,3 +486,21 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   overall winner.
   
   [Answer: single best answer is sufficient]
+
+- **OQ-13 (Tightening family-split supervision, FR-17/FR-24)**: Raised
+  after reviewing the generated schedule against real 2026 data and
+  finding families split across optional (not just priority) activities
+  with unbalanced adult/child groupings. The user's verbatim answer:
+  "Splitting a family in this way is very unpopular and should be a last
+  resort. I would like to tighten the condition in the following ways:
+  1 - if a family must be split, at least one adult and at least one
+  child must attend each session, i.e. no lone adults or unaccompanied
+  children (it is acceptable to have an unaccompanied child if at least
+  one adult in the family is not allocated to any activity at the same
+  time — this allows the adult to accompany the child, even though they
+  are not taking part). 2 - the solver should first attempt to solve the
+  schedule without splitting families, it should only attempt to split
+  them if absolutely necessary (this could also be expressed as a desire
+  to minimise the number [of] split families if this is better for the
+  solver)." Implemented as FR-17 (supervision) and FR-24 (minimisation,
+  ranked above FR-20-23 but below §4.1's hard/demand-driven constraints).

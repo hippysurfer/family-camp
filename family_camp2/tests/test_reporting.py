@@ -106,6 +106,30 @@ def test_unmet_optional_report_empty_when_nothing_missed():
     assert render_unmet_optional_report([]) == "Total unmet optional requests: 0\n"
 
 
+def test_unmet_optional_report_marks_overdemanding_campers():
+    craft = Activity("Craft", timedelta(minutes=45), min_occupancy=1, max_occupancy=2)
+    canoeing = Activity("Canoeing", timedelta(minutes=60), min_occupancy=1, max_occupancy=4)
+    overdemanded_kid = Camper(name="Kid One", family_id="001/One", age=10, age_group="Cub", optional=(craft,))
+    plain_kid = Camper(name="Kid Two", family_id="002/Two", age=10, age_group="Cub", optional=(canoeing,))
+
+    unmet = [UnmetOptionalRequest(overdemanded_kid, craft), UnmetOptionalRequest(plain_kid, canoeing)]
+    overdemand = [CamperOverdemand(overdemanded_kid, requested_count=3, available_timeslots=2)]
+
+    text = render_unmet_optional_report(unmet, overdemand)
+
+    assert "Kid One (001/One) [over demand]" in text
+    assert "Kid Two (002/Two)\n" in text  # not marked - not in the overdemand list
+
+
+def test_unmet_optional_report_defaults_to_no_overdemand_markers():
+    craft = Activity("Craft", timedelta(minutes=45), min_occupancy=1, max_occupancy=2)
+    kid = Camper(name="Kid One", family_id="001/One", age=10, age_group="Cub", optional=(craft,))
+
+    text = render_unmet_optional_report([UnmetOptionalRequest(kid, craft)])
+
+    assert "[over demand]" not in text
+
+
 def test_unfeasible_families_report_groups_by_family():
     craft = Activity("Craft", timedelta(minutes=60), min_occupancy=1, max_occupancy=2)
     canoeing = Activity("Canoeing", timedelta(minutes=60), min_occupancy=1, max_occupancy=2)

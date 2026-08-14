@@ -141,7 +141,9 @@ def main(argv: list[str] | None = None) -> int:
         (args.report_dir / "family_itinerary.txt").write_text(render_family_itinerary(result.timetable, campers))
         (args.report_dir / "activity_roster.txt").write_text(render_activity_roster(result.timetable, sessions))
         (args.report_dir / "idle_report.txt").write_text(render_idle_report(idle_report))
-        (args.report_dir / "unmet_optional_report.txt").write_text(render_unmet_optional_report(unmet_optional))
+        (args.report_dir / "unmet_optional_report.txt").write_text(
+            render_unmet_optional_report(unmet_optional, overdemand)
+        )
         (args.report_dir / "unfeasible_families_report.txt").write_text(
             render_unfeasible_families_report(overdemand)
         )

@@ -105,10 +105,20 @@ def render_idle_report(idle_report: IdleReport) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def render_unmet_optional_report(unmet: list[UnmetOptionalRequest]) -> str:
+def render_unmet_optional_report(
+    unmet: list[UnmetOptionalRequest], overdemand: list[CamperOverdemand] = ()
+) -> str:
     """FR-76: unmet optional-activity requests, grouped by activity (most
     campers missed first), so an organiser can see at a glance where
-    demand for optional activities went unsatisfied."""
+    demand for optional activities went unsatisfied.
+
+    Campers who also appear in ``overdemand`` (FR-77 - structurally asked
+    for more distinct activities than they could ever fit into
+    non-overlapping slots) are marked ``[over demand]``, so a reader can
+    tell "there wasn't enough time for this camper regardless of
+    capacity" apart from a plain capacity/allocation shortfall."""
+
+    overdemanding_campers = {entry.camper for entry in overdemand}
 
     by_activity: dict[str, list[UnmetOptionalRequest]] = defaultdict(list)
     for request in unmet:
@@ -119,7 +129,8 @@ def render_unmet_optional_report(unmet: list[UnmetOptionalRequest]) -> str:
         requests = by_activity[name]
         lines.append(f"{name}: {len(requests)} camper(s) missed it")
         for request in sorted(requests, key=lambda r: (r.camper.family_id, r.camper.name)):
-            lines.append(f"  - {request.camper.name} ({request.camper.family_id})")
+            marker = " [over demand]" if request.camper in overdemanding_campers else ""
+            lines.append(f"  - {request.camper.name} ({request.camper.family_id}){marker}")
         lines.append("")
 
     return "\n".join(lines).rstrip("\n") + "\n"

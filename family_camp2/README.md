@@ -85,7 +85,7 @@ scoring/violation report - as **both** `PATH.csv` and `PATH.json` (any
 extension typed on `PATH` is stripped first). Re-importable via
 `family_camp2.io.schedule_export.load_schedule_csv`/`load_schedule_json`.
 
-**Operational reports** (`--report-dir PATH`): writes three text files
+**Operational reports** (`--report-dir PATH`): writes five text files
 into `PATH` (created if needed):
 - `family_itinerary.txt` - each family's assigned sessions, in time order.
 - `activity_roster.txt` - each session's assigned campers, with occupancy
@@ -94,6 +94,17 @@ into `PATH` (created if needed):
   scheduled and which adults specifically are idle (two distinct views,
   matching the old system - a family with nobody scheduled is a different
   signal from "this specific adult happens to be free to help").
+- `unmet_optional_report.txt` (FR-76) - optional (non-priority) activity
+  requests that weren't met in the generated timetable, grouped by
+  activity - the per-request breakdown behind the aggregate Tier 1 score.
+- `unfeasible_families_report.txt` (FR-77) - families with a member who
+  requested more distinct activities than the maximum number of
+  non-overlapping session slots they could ever occupy across the whole
+  camp, regardless of capacity (see `validation/feasibility.py`'s module
+  docstring for exactly what this ceiling does and doesn't prove - it's a
+  necessary-infeasibility check, not a full solver). Useful for telling
+  "not enough capacity" apart from "not enough time" as the reason an
+  optional request went unmet.
 
 Not implemented: exporting more than one candidate schedule when a solver
 has several (e.g. annealing's other restart chains) - REQUIREMENTS.md
@@ -176,10 +187,10 @@ everyone must attend, empty by default per OQ-5).
 
 ```
 domain.py            Activity / Session / Camper / Timetable
-validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time incl. family/adult views, the FR-40/41 report)
+validation/          solver-independent rules (Class 1/2, Tier 1/2, idle-time incl. family/adult views, structural overdemand, the FR-40/41 report)
 config.py            EngineConfig (NFR-4)
 progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
-reporting.py         per-family/per-activity/idle text reports, from a Timetable (FR-72/73/74)
+reporting.py         per-family/per-activity/idle/unmet-optional/overdemand text reports, from a Timetable (FR-72/73/74/76/77)
 io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements

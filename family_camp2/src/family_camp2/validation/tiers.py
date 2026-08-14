@@ -7,11 +7,12 @@ here - per OQ-3 it is reporting-only (see idle.py), not an objective.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from statistics import pvariance
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
 
-__all__ = ["score_tier1", "score_tier2"]
+__all__ = ["score_tier1", "score_tier2", "UnmetOptionalRequest", "find_unmet_optional_requests"]
 
 
 def score_tier1(timetable: Timetable, campers: list[Camper]) -> float:
@@ -65,3 +66,26 @@ def score_tier2(timetable: Timetable, sessions: list[Session]) -> float:
     if not variances:
         return 0.0
     return sum(variances) / len(variances)
+
+
+@dataclass(frozen=True)
+class UnmetOptionalRequest:
+    camper: Camper
+    activity: Activity
+
+
+def find_unmet_optional_requests(timetable: Timetable, campers: list[Camper]) -> list[UnmetOptionalRequest]:
+    """FR-76: the per-request breakdown behind ``score_tier1`` - which
+    specific optional requests were not met, and by whom. Unlike Class 2's
+    ``find_missing_priorities``, this is not a violation (optional
+    requests are explicitly best-effort, not required for feasibility) -
+    it exists purely to let an organiser see where demand for optional
+    activities went unsatisfied."""
+
+    unmet: list[UnmetOptionalRequest] = []
+    for camper in campers:
+        assigned = {s.activity for s in timetable.sessions_of(camper)}
+        for activity in camper.optional:
+            if activity not in assigned:
+                unmet.append(UnmetOptionalRequest(camper, activity))
+    return unmet

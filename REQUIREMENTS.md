@@ -286,6 +286,25 @@ information and laying it out on a page.
   has one canonical best answer (e.g. a provably lexicographically
   optimal one) is not deficient for not manufacturing artificial
   alternatives.
+- **FR-76**: The engine MUST be able to produce a human-readable report of
+  unmet optional (non-priority) activity requests from a given timetable:
+  for each optional activity that was requested but not obtained, which
+  campers missed out. This is the per-request breakdown behind the
+  aggregate Tier 1 score (FR-21) — useful to an organiser deciding where
+  to add capacity or sessions.
+- **FR-77**: The engine MUST be able to produce a human-readable report,
+  derived from the input activities/sessions/campers alone (not from any
+  particular timetable), of families where a member has requested more
+  distinct activities than the maximum number of non-overlapping session
+  slots that member could ever occupy across the whole camp — i.e. a
+  structural, time-based ceiling that no solver could work around
+  regardless of available capacity. This is a necessary-infeasibility
+  check only (requesting fewer activities than this ceiling does not
+  guarantee everything fits — sessions of the specific requested
+  activities may still clash with each other even when the camp overall
+  has plenty of free time elsewhere), and exists to help an organiser
+  distinguish "not enough capacity" from "not enough time" as the reason
+  an optional request went unmet.
 
 ## 5. Non-functional requirements
 

@@ -93,7 +93,7 @@ def test_cli_export_schedule_writes_both_csv_and_json(tmp_path):
     assert len(csv_timetable) > 0
 
 
-def test_cli_report_dir_writes_the_three_operational_reports(tmp_path):
+def test_cli_report_dir_writes_the_operational_reports(tmp_path):
     report_dir = tmp_path / "reports"
     exit_code = cli.main([
         "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
@@ -101,7 +101,13 @@ def test_cli_report_dir_writes_the_three_operational_reports(tmp_path):
     ])
 
     assert exit_code == 0
-    for name in ("family_itinerary.txt", "activity_roster.txt", "idle_report.txt"):
+    for name in (
+        "family_itinerary.txt",
+        "activity_roster.txt",
+        "idle_report.txt",
+        "unmet_optional_report.txt",
+        "unfeasible_families_report.txt",
+    ):
         path = report_dir / name
         assert path.exists()
         assert path.read_text().strip() != ""

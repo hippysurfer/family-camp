@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.validation.tiers import score_tier1, score_tier2
+from family_camp2.validation.tiers import UnmetOptionalRequest, find_unmet_optional_requests, score_tier1, score_tier2
 
 DAY = datetime(2026, 8, 1)
 
@@ -78,3 +78,30 @@ def test_tier2_even_spread_scores_lower_than_uneven_spread():
 
     assert score_tier2(even, [s1, s2]) < score_tier2(uneven, [s1, s2])
     assert score_tier2(even, [s1, s2]) == 0.0
+
+
+def test_find_unmet_optional_requests_reports_the_missing_camper_activity_pairs():
+    craft = activity("Craft")
+    canoeing = activity("Canoeing")
+    c = camper("Kid", optional=(craft, canoeing))
+    tt = Timetable().with_assignment(c, session(craft, "A", 10))
+
+    unmet = find_unmet_optional_requests(tt, [c])
+
+    assert unmet == [UnmetOptionalRequest(c, canoeing)]
+
+
+def test_find_unmet_optional_requests_empty_when_fully_satisfied():
+    craft = activity("Craft")
+    c = camper("Kid", optional=(craft,))
+    tt = Timetable().with_assignment(c, session(craft, "A", 10))
+
+    assert find_unmet_optional_requests(tt, [c]) == []
+
+
+def test_find_unmet_optional_requests_ignores_priorities():
+    craft = activity("Craft")
+    c = camper("Kid", priorities=(craft,))  # never assigned, but it's a priority not optional
+    tt = Timetable()
+
+    assert find_unmet_optional_requests(tt, [c]) == []

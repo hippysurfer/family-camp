@@ -12,10 +12,18 @@ from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
 from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json
 from family_camp2.progress import PrintProgressReporter
-from family_camp2.reporting import render_activity_roster, render_family_itinerary, render_idle_report
+from family_camp2.reporting import (
+    render_activity_roster,
+    render_family_itinerary,
+    render_idle_report,
+    render_unfeasible_families_report,
+    render_unmet_optional_report,
+)
 from family_camp2.solvers.registry import get_solver
+from family_camp2.validation.feasibility import find_overdemanding_campers
 from family_camp2.validation.idle import find_idle_slots
 from family_camp2.validation.report import render_text
+from family_camp2.validation.tiers import find_unmet_optional_requests
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -128,8 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.report_dir is not None:
         args.report_dir.mkdir(parents=True, exist_ok=True)
         idle_report = find_idle_slots(result.timetable, campers, sessions)
+        unmet_optional = find_unmet_optional_requests(result.timetable, campers)
+        overdemand = find_overdemanding_campers(sessions, campers)
         (args.report_dir / "family_itinerary.txt").write_text(render_family_itinerary(result.timetable, campers))
         (args.report_dir / "activity_roster.txt").write_text(render_activity_roster(result.timetable, sessions))
         (args.report_dir / "idle_report.txt").write_text(render_idle_report(idle_report))
+        (args.report_dir / "unmet_optional_report.txt").write_text(render_unmet_optional_report(unmet_optional))
+        (args.report_dir / "unfeasible_families_report.txt").write_text(
+            render_unfeasible_families_report(overdemand)
+        )
 
     return 0

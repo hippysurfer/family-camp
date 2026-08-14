@@ -1166,6 +1166,35 @@ future reader doesn't wonder why annealing's other chains aren't surfaced.
 
 ---
 
+### - [x] Step 33: Unmet-optional and structural-overdemand reports (FR-76/77)
+
+**Goal**: two more `--report-dir` reports, added after real use of the
+3-hour CP-SAT run surfaced a direct question ("which optional activities
+went unmet?") that the existing reports couldn't answer, plus a follow-up
+("why, when there's plenty of capacity?") that motivated a second,
+input-only diagnostic.
+
+- `validation/tiers.py`: `UnmetOptionalRequest`/`find_unmet_optional_requests`
+  - the per-request breakdown behind `score_tier1`, from a `Timetable`.
+- `validation/feasibility.py` (new): `CamperOverdemand`/
+  `find_overdemanding_campers`/`max_non_overlapping_sessions` - derived
+  from `activities`/`sessions`/`campers` alone, not a `Timetable`, since
+  it's a property of demand vs. the shape of the schedule, not of any
+  particular solve. Uses the standard interval-scheduling-maximisation
+  greedy to find the true ceiling on non-overlapping sessions a camper
+  could ever occupy; documented as a necessary-, not sufficient-,
+  infeasibility check (module docstring).
+- `reporting.py`: `render_unmet_optional_report`/
+  `render_unfeasible_families_report`, both pure presentation over the
+  above (NFR-10).
+- `cli.py`: both wired into the existing `--report-dir` block as
+  `unmet_optional_report.txt`/`unfeasible_families_report.txt`.
+- `REQUIREMENTS.md`: FR-76/FR-77 added to §4.7.
+
+**Commit message**: `family_camp2 step 33: unmet-optional and structural-overdemand reports (FR-76/77)`
+
+---
+
 ## 4. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this

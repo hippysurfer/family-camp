@@ -1925,7 +1925,334 @@ and nothing else.
 
 ---
 
-## 6. After this plan
+## 6. Schedule status report (Steps 48–54)
+
+### Context
+
+Implements REQUIREMENTS.md §4.11 (FR-97-109): a single A4 PDF the
+organiser gets at the end of every `solve`/`revalidate` run, bringing
+together front matter, activity/session loading, camper/family
+fulfilment, and solver diagnostics - distinct from the audience-specific
+reports in §4.7-4.9 (a family's own itinerary, a session's roster, who's
+free right now) and from the plain violation report (FR-40/41): this is
+a one-stop analysis document for the organiser reviewing a run, not a
+document handed to a camper or a session leader.
+
+**REQUIREMENTS.md OQ-23-28 are now answered**; each step below
+implements that answer directly:
+
+- **OQ-23 (charting)**: `reportlab.graphics.charts` (native bar/stacked
+  bar) - no new dependency, stays consistent with the rest of
+  `pdf_reports.py`.
+- **OQ-24 (chart scale)**: every camper and every family gets a bar,
+  paginated across as many pages as needed - not an anomalies-only or
+  aggregate-only view.
+- **OQ-25 (trigger)**: generated unconditionally on every `solve`/
+  `revalidate` run - no opt-in flag, unlike every other export/report
+  output this codebase has built so far.
+- **OQ-26 (ideal session size)**: `max_occupancy` - a fully-booked
+  session is "ideal".
+- **OQ-27 (output location)**: alongside `--export-schedule` when given
+  (`<stem>_status_report.pdf`), else `./status_report.pdf`; overridable
+  with a new `--status-report PATH` flag.
+- **OQ-28 (`reportlab` dependency)**: becomes a core install dependency,
+  not the optional `pdf` extra - every run needs it now.
+
+Architecturally, this follows the same split the rest of the validation
+layer already uses (NFR-6): a new `status_report.py` module's *data*
+functions (front-matter facts, per-session/per-camper/per-family
+loading rows, pagination) are plain functions over
+`Activity`/`Session`/`Camper`/`Timetable`/`ValidationReport` with no
+`reportlab` involvement, independently unit-testable; a separate set of
+*render* functions turn that data into `reportlab` flowables
+(`Paragraph`/`Table`/`Drawing`-wrapped charts) assembled into one
+`BaseDocTemplate`, mirroring `pdf_reports.py`'s `_build_doc` pattern.
+Camper/family fulfilment data is computed by **reusing** the existing
+`find_missing_priorities` (`class2.py`), `find_unmet_optional_requests`
+(`tiers.py`), and `find_overdemanding_families` (`feasibility.py`) -
+no new fulfilment computation, only new aggregation/presentation over
+what the validator already produces.
+
+### Step list
+
+### - [x] Step 48: Make `reportlab` a core dependency (OQ-28)
+
+**Goal**: land the dependency change on its own, independent of any new
+report content, so it's separately reviewable and doesn't block on
+Steps 49-53's chart work.
+
+**Change** `pyproject.toml`: move `reportlab` from the `pdf` optional
+extra into `[project].dependencies`; remove the now-empty `pdf` extra
+(or leave it present-but-empty only if removing it would break an
+existing documented install instruction - check README.md's `pip
+install -e ".[pdf]"` references either way, since FR-108 already
+requires updating them regardless).
+
+**Change** `cli.py`: `_write_outputs`'s `--pdf-dir` block currently
+does a deferred `from family_camp2.pdf_reports import ...` inside a
+`try/except ImportError`, specifically because `reportlab` used to be
+optional. With it now a core dependency, move that import to module
+level (top of `cli.py`, alongside the other imports) and delete the
+`try/except`/friendly-error-message code - it's now unreachable dead
+code, not defensive programming, since `reportlab` is guaranteed
+installed alongside `family_camp2` itself.
+
+**Change** `README.md`: drop the "Requires the 'pdf' extra" /
+`pip install -e ".[pdf]"` callouts for the four existing PDFs
+(FR-80/81/84/85) - they're no longer conditional.
+
+**Tests**: existing `test_pdf_reports.py`/`test_cli.py` PDF tests drop
+their `pytest.importorskip("reportlab")` guards (no longer meaningful -
+every test environment has it now, since `pip install -e ".[dev]"`
+pulls in core dependencies transitively). Full suite green.
+
+**Commit message**: `family_camp2 step 48: make reportlab a core dependency (OQ-28)`
+
+---
+
+### - [ ] Step 49: Front matter + camp activity information (FR-100/101)
+
+**Goal**: the first two report sections - the ones needing no
+`ValidationReport`/solver output at all, only `activities`/`sessions`/
+`campers` and (for the compulsory-activity flag) `config`.
+
+**Add** `src/family_camp2/status_report.py`:
+- `_camp_date_range(sessions) -> tuple[datetime, datetime]`: earliest
+  session start to latest session end (FR-100) - derived, never assumed,
+  matching FR-3.
+- `_distinct_camp_days(sessions) -> list[date]`: sorted distinct
+  calendar dates present in the session data - reuses the same concept
+  `constraints/rules.py::_day_number` already established for
+  `no_activities_on_day`, but exposed here as its own helper since this
+  module needs the full list, not just one session's position in it.
+- `_front_matter_summary(activities, sessions, campers, generated_at) ->
+  FrontMatterSummary` (new small dataclass): generation timestamp, camp
+  date range, duration, and headline counts (activities/sessions/
+  campers/families - the last via `len({c.family_id for c in campers})`).
+- `_activity_table_rows(activities, sessions, compulsory) -> list[...]`:
+  per activity, name/session-count/min-max occupancy/compulsory flag
+  (FR-101's table).
+- `_activity_timetable_blocks(activities, sessions) -> list[DayBlock] |
+  None`: `None` when `len(_distinct_camp_days(sessions)) != 2` (FR-101's
+  explicit fallback trigger); otherwise, per day, per activity, a list
+  of (session, start-offset-minutes-into-day, duration-minutes) tuples
+  for the graphical timetable to draw.
+- Render-side (uses `reportlab`): `_render_front_matter`,
+  `_render_activity_table`, `_render_activity_timetable_drawing` (the
+  2-day grid - one `Drawing` with a day-column per distinct date, a
+  time axis, and a rectangle per session positioned/sized from its
+  `DayBlock`) and `_render_activity_timetable_fallback` (plain table:
+  date, activity, session label, start-end) for the non-2-day case.
+
+**Tests** (`tests/test_status_report.py`, new file): `_camp_date_range`/
+`_distinct_camp_days` against hand-built sessions spanning known dates;
+`_activity_table_rows` counts/occupancy against a small fixture;
+`_activity_timetable_blocks` returns blocks for a genuine 2-day fixture
+and `None` for a 1-day and a 3-day fixture; a thin
+`render_status_report_pdf` smoke-checkpoint isn't wired yet (Step 53) -
+this step's render functions are exercised by directly building a
+`Drawing`/`Table` and asserting on the returned flowable's structure
+(e.g. row count, drawing element count) rather than rendering a full PDF
+yet.
+
+**Commit message**: `family_camp2 step 49: status report front matter and camp activity info (FR-100/101)`
+
+---
+
+### - [ ] Step 50: Activity session loading (FR-102)
+
+**Goal**: the third section - how full each session ran, camp-wide.
+
+**Add** to `status_report.py`:
+- `SessionLoadingRow` (dataclass): session, activity name, occupancy,
+  capacity (`max_occupancy`), spare, `under_minimum: bool` (cross-
+  referencing `Class2Report.under_minimum_sessions`, not recomputed).
+- `_session_loading_rows(timetable, sessions, class2_report) ->
+  list[SessionLoadingRow]`.
+- `_session_loading_stats(rows) -> SessionLoadingStats` (dataclass):
+  mean and population stdev of spare capacity (`statistics.mean`/
+  `statistics.pstdev` - stdlib, no new dependency), count of
+  `under_minimum` sessions. "Ideal" = `max_occupancy` (OQ-26) - spare
+  capacity *is* the deviation-from-ideal statistic, nothing extra to
+  compute.
+- `_render_session_loading_chart(rows) -> list[Drawing]`: one
+  `reportlab.graphics.charts.barcharts.HorizontalBarChart` per page's
+  worth of sessions (paginated - OQ-24's "paginate everyone" principle
+  applied consistently to this section too, even though OQ-24 was asked
+  about campers/families specifically), two stacked series (used/spare)
+  per session row, `under_minimum` sessions visually distinguished (e.g.
+  a distinct bar colour) per FR-102.
+- `_paginate(rows, per_page: int) -> list[list[T]]`: shared pagination
+  helper, reused by Steps 51/52 too.
+
+**Tests**: `_session_loading_rows`/`_session_loading_stats` against a
+hand-built timetable with a known mix of full/under-minimum/spare
+sessions - exact numeric assertions, not just "doesn't crash";
+`_paginate` behaviour (even split, remainder page, empty input).
+
+**Commit message**: `family_camp2 step 50: activity session loading section (FR-102)`
+
+---
+
+### - [ ] Step 51: Camper activity loading (FR-103)
+
+**Goal**: the fourth section, camper granularity - one paginated
+stacked-bar chart per page, every camper included.
+
+**Add** to `status_report.py`:
+- `CamperLoadingRow` (dataclass): camper, priorities-met count,
+  priorities-unmet count, optional-met count, optional-unmet count,
+  `has_unmet_priority: bool` (FR-105's anomaly flag).
+- `_camper_loading_rows(campers, timetable, class2_report,
+  unmet_optional) -> list[CamperLoadingRow]`: derives met/unmet counts
+  by comparing each camper's `priorities`/`optional` against
+  `class2_report.missing_priorities` (already-computed, `class2.py`) and
+  the `unmet_optional` list (already-computed,
+  `tiers.find_unmet_optional_requests`) - no new fulfilment logic,
+  pure aggregation. Sorted by `(family_id, name)` per FR-103's
+  family-adjacency requirement.
+- `_render_camper_loading_charts(rows, per_page) -> list[Drawing]`: one
+  `HorizontalBarChart` per page (`_paginate` from Step 50), four
+  stacked series (priorities met/unmet, optional met/unmet), rows with
+  `has_unmet_priority` visually distinguished (FR-105).
+
+**Tests**: `_camper_loading_rows` against a small fixture with a mix of
+fully-satisfied/partially-satisfied/unmet-priority campers - exact
+counts per camper, and family-adjacent sort order confirmed.
+
+**Commit message**: `family_camp2 step 51: camper activity loading section (FR-103)`
+
+---
+
+### - [ ] Step 52: Family activity loading + anomaly callouts (FR-104/105)
+
+**Goal**: the family-granularity mirror of Step 51, plus the
+structural-overdemand callout FR-105 requires.
+
+**Add** to `status_report.py`:
+- `FamilyLoadingRow` (dataclass): family_id, summed priorities-met/
+  unmet, optional-met/unmet, `has_unmet_priority: bool` (true if *any*
+  member does).
+- `_family_loading_rows(camper_rows: list[CamperLoadingRow]) ->
+  list[FamilyLoadingRow]`: aggregates Step 51's per-camper rows by
+  `family_id` - built *from* `_camper_loading_rows`'s output, not a
+  second independent pass over `campers`/`timetable`, so the two
+  sections can never disagree with each other on the underlying counts.
+- `_render_family_loading_charts(rows, per_page) -> list[Drawing]`: same
+  shape as Step 51's camper charts.
+- `_render_overdemand_callout(overdemand: list[FamilyOverdemand]) ->
+  Table | None`: renders `validation.feasibility.find_overdemanding_families`'s
+  result as a small table (family, requested count, structural ceiling)
+  - `None`/omitted when the list is empty, not an empty table.
+
+**Tests**: `_family_loading_rows` aggregation against Step 51's fixture
+(sums match manual per-family totals); `_render_overdemand_callout`
+returns `None` for a clean fixture and a populated table for one with a
+genuinely overdemanding family (reusing a fixture shape similar to
+`test_feasibility.py`'s existing overdemand tests).
+
+**Commit message**: `family_camp2 step 52: family activity loading and overdemand callout (FR-104/105)`
+
+---
+
+### - [ ] Step 53: Solver information + document assembly (FR-106)
+
+**Goal**: the fifth section, and wiring every prior step's pieces into
+one actual PDF via `render_status_report_pdf`.
+
+**Change** `solvers/base.py`/`cli.py`: capture wall-clock solve duration.
+Simplest point to measure it is in `cli.py`'s `_run_solve`, wrapping the
+existing `solver.solve(...)` call with `time.monotonic()` before/after -
+solver-agnostic, no change needed to either solver module or the
+`Solver` protocol itself, avoiding duplicating timing code in both
+`cp_sat.py` and `annealing/solver.py`.
+
+**Add** to `status_report.py`:
+- `SolverInfo` (dataclass, all fields optional/`None`-able):
+  `solver_name`, `duration_seconds`, `diagnostics: dict`. `None` values
+  throughout represent the `revalidate` case (FR-106's "N/A" wording).
+- `_custom_constraint_summary(config, class2_report) ->
+  CustomConstraintSummary` (dataclass): hard count, soft count, and
+  `len({v.constraint for v in class2_report.custom_constraint_violations})`
+  for "how many soft ones had at least one violation" - a set
+  comprehension over already-computed violations, not a new check.
+- `_render_solver_info(report, solver_info, custom_constraint_summary) ->
+  list[Flowable]`: Tier 0/1/2 scores, every `Class2Report` violation
+  category's count (table), the custom-constraint summary, and either
+  the solver name/duration/diagnostics or an explicit "N/A - re-validated
+  from an edited schedule" (FR-106).
+- `render_status_report_pdf(activities, sessions, campers, timetable,
+  report, config, solver_info, output_path, generated_at=None) -> None`:
+  the actual entry point - builds one A4-portrait `BaseDocTemplate`
+  (reusing `pdf_reports._build_doc`'s pattern, or a local equivalent
+  fixed to A4/portrait per FR-97 rather than accepting `PageSpec`, since
+  this document's paper size/orientation isn't organiser-configurable)
+  and assembles every prior step's flowables/`Drawing`s into one story
+  in FR-99's section order.
+
+**Tests**: `_custom_constraint_summary` against a fixture with a mix of
+hard/soft/violated/clean constraints; `render_status_report_pdf` end-to-
+end against a small hand-built scenario, asserting a valid PDF is
+produced (`_assert_valid_pdf`-style, matching `test_pdf_reports.py`'s
+existing convention) for both a `solver_info` with real values and one
+with every field `None` (the revalidate case) - and for both a
+genuine-2-day and a non-2-day session fixture (exercises Step 49's
+fallback path end-to-end).
+
+**Commit message**: `family_camp2 step 53: solver information section and document assembly (FR-106)`
+
+---
+
+### - [ ] Step 54: CLI wiring - unconditional generation (FR-98/107)
+
+**Goal**: make every `solve`/`revalidate` run actually produce the
+status report, at the right default location, matching OQ-25/OQ-27.
+
+**Change** `cli.py`:
+- `_add_output_args`: new `--status-report` flag, `type=Path`,
+  `default=None` (distinct from every other output flag - this one
+  isn't "off when absent", the report generates regardless; absent just
+  means "use the default location").
+- New helper `_status_report_path(args) -> Path`: `args.status_report`
+  if given; else, if `args.export_schedule` is given,
+  `<export_schedule-stem>_status_report.pdf`; else
+  `Path("status_report.pdf")` (FR-107).
+- `_write_outputs` (or a new function called unconditionally by both
+  `_run_solve` and `_run_revalidate`, *not* gated by any `if args.x is
+  not None` the way every other block in `_write_outputs` is): calls
+  `render_status_report_pdf(...)` with the resolved path, passing
+  `SolverInfo(solver_name=args.solver, duration_seconds=..., diagnostics=
+  result.diagnostics)` from `_run_solve` (using Step 53's duration
+  capture) or `SolverInfo(None, None, {})` from `_run_revalidate`.
+
+**Change** existing CLI tests (`test_cli.py`) that invoke `_run_solve`/
+`_run_revalidate`/`main(["solve", ...])`/`main(["revalidate", ...])`:
+every one of them will now write a status-report PDF as a side effect.
+Update them to pass `--status-report <tmp_path>/...` (or run with a
+`monkeypatch.chdir(tmp_path)`) so no test run leaves a stray
+`status_report.pdf` in the repo working directory - this is the main
+practical consequence of OQ-25's "unconditional" answer and needs
+auditing carefully across the whole file, not just the tests that
+already touch `--pdf-dir`.
+
+**Update** `README.md`: new "Schedule status report" section - what it
+contains (mirroring FR-99's five sections), that it's generated
+automatically (not opt-in, unlike every other output), the default
+filename/location rule, and `--status-report` as the override.
+
+**Final check**: full test suite green; a real run against Willesley
+2026 data (`fetched_data/willesley_2026.fetched.json`, matching the
+methodology already used in Steps 34/45) to sanity-check page counts and
+that the 283-camper/~100-family paginated charts render in a reasonable
+number of pages - recorded as a deviation note here, not a committed
+test (real camper data stays local-only per this project's standing
+PII rule).
+
+**Commit message**: `family_camp2 step 54: generate the status report unconditionally on every run (FR-98/107)`
+
+---
+
+## 7. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:
@@ -1953,3 +2280,13 @@ one is complete and in real use:
 - Retiring `family_camp/schedule/{deep,generate_schedule,check_schedule}.py`
   and `timetable_cps.py` once `family_camp2` is validated against a real
   camp's data and trusted as a replacement.
+- A configurable page-orientation/paper-size for the status report
+  (§4.11/FR-97 fixed it to A4 portrait deliberately, since it's a single
+  fixed kind of document rather than an audience-specific print-out like
+  FR-80/81/84/85) - revisit if a >2-day camp's non-2-day timetable
+  fallback (FR-101) turns out to want landscape room in practice.
+- A real >2-day (or 1-day) camp to exercise FR-101's tabular timetable
+  fallback against actual data, not just a synthetic test fixture -
+  Willesley 2026 (the only real dataset currently available) is exactly
+  2 days, so the fallback path stays test-only until a differently-shaped
+  camp's data is available.

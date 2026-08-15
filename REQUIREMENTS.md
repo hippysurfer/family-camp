@@ -38,13 +38,17 @@ later design documents can reference them directly.
   as a **prerequisite** — a solved problem supplied by an existing or future
   upstream process. This document does not specify how that data arrives.
 - **Printing/rendering** (PDF/text output, pagination, page layout, per-family
-  info packs). *Partially reopened by §4.8*: two specific PDF reports
-  (activity roster, per-family itinerary) were added at the user's
+  info packs). *Partially reopened by §4.8 and §4.11*: four
+  audience-specific PDF reports (activity roster, per-family itinerary,
+  available adults, available families) were added at the user's
   explicit request after reviewing the old system's PDF output — a
   narrow, presentation-only addition over the same data §4.7's text
   reports already produce, not a general printing/layout framework (no
-  manual editing, no per-family "packs" beyond the itinerary PDF, no
-  other page/document types).
+  manual editing, no per-family "packs" beyond the itinerary PDF). §4.11
+  adds one further, distinct document — a single overview/analysis PDF
+  aimed at the organiser rather than any one audience, generated
+  unconditionally rather than opt-in — still not a general
+  printing/layout framework.
 - **Manual editing workflow** (hand-tweaking a generated schedule in a
   spreadsheet/CSV and re-importing it, diffing against a previous run, etc.).
   *Partially reopened by §4.9*: re-validating and re-reporting a hand-edited
@@ -498,6 +502,120 @@ architecture, not part of this phase (OQ-22).
   activity excluded outright regardless of the camper's own
   priority/optional lists.
 
+### 4.11 Schedule Status Report
+
+A single-document overview aimed at the organiser, distinct from
+everything else in §4.7-§4.9: not "what is the schedule" (FR-70-74/
+FR-80-85, audience-specific: staff running a session, a family finding
+their day, a volunteer coordinator) and not "is this schedule valid"
+alone (FR-40/41's violation report), but a one-stop analysis document
+bringing together front matter, activity/session loading, camper/family
+fulfilment, and solver diagnostics, so an organiser can sanity-check a
+run without cross-referencing several separate outputs. Unlike every
+other report in this document, it is generated **unconditionally** —
+see FR-98/FR-107 — not behind an opt-in export flag.
+
+The subsections below (FR-100-106) elaborate the five content areas
+originally sketched in FR-99, and resolve the design decisions the user
+made when this requirement was reviewed (chart library, pagination,
+trigger mechanism, output location, and the `reportlab` dependency).
+
+- **FR-97**: The status report MUST be generated as an A4 PDF document,
+  portrait orientation, fixed (not organiser-configurable per-run like
+  FR-82's `--pdf-paper`/`--pdf-orientation`, since unlike FR-80/81/84/85
+  this isn't a per-audience print-out — it's always the same kind of
+  read).
+- **FR-98**: The status report MUST be generated at the end of every
+  `solve` run and every `revalidate` run, unconditionally — no opt-in
+  flag gates it, unlike every other export/report output in this
+  document (FR-70, `--report-dir`, `--pdf-dir` are all still opt-in).
+  See FR-107 for where it's written.
+- **FR-99**: The status report MUST contain, at minimum, five sections:
+  front matter (FR-100), camp activity information (FR-101), activity
+  session loading (FR-102), camper/family activity loading (FR-103/104),
+  and solver information (FR-106).
+- **FR-100 (Front matter)**: The report MUST open with: the date/time
+  the report was generated; the camp's date range and duration, derived
+  from the actual session data (earliest session start to latest session
+  end, per FR-3 — never assumed or hardcoded); and headline counts
+  (number of activities, sessions, campers, and families).
+- **FR-101 (Camp activity information)**: The report MUST include a
+  table of every activity (name, number of scheduled sessions, min/max
+  occupancy, whether it's a configured compulsory activity per
+  FR-16/OQ-5), and a graphical activity timetable showing, per activity,
+  when its sessions run. As explicitly scoped by the user, this
+  graphical timetable MAY assume the camp spans exactly 2 distinct
+  calendar days — narrower than FR-3's general no-fixed-length rule,
+  and justified only because it's a single specific visualisation, not a
+  computation. If the session data's actual distinct dates don't number
+  exactly 2, the graphical timetable MUST degrade to a clearly-labelled
+  tabular fallback (session start/end per activity, grouped by actual
+  date) rather than crash or mislabel days that don't exist — consistent
+  with this document's established "never crash, report clearly" pattern
+  (e.g. FR-1, FR-94).
+- **FR-102 (Activity session loading)**: The report MUST show, for
+  every session, occupancy against its activity's capacity (e.g. a
+  stacked bar of filled vs. spare seats), and summary statistics
+  including the mean and spread of spare capacity across all sessions.
+  "Ideal" session size for this deviation statistic is a session's
+  `max_occupancy` (a fully-booked session is ideal; deviation measures
+  how far below full each session ran) — chosen over a min/max midpoint
+  or a new configurable target because it reuses a concept
+  (`max_occupancy`) the engine already has, needing no new config
+  surface. Sessions already flagged `under_minimum` (Class 2,
+  FR-30/31/§4.10) SHOULD be visually distinguished, not just implied by
+  a low bar.
+- **FR-103 (Camper activity loading)**: The report MUST show, for every
+  camper, a stacked bar comparing requested (priority + optional)
+  activities against allocated ones — distinguishing at least priorities
+  met, optional activities met, and unmet requests of each kind, so a
+  camper with everything satisfied looks visibly different from one who
+  didn't. Every camper MUST appear (not a sample or an "anomalies only"
+  subset) — with hundreds of campers this needs pagination across
+  multiple pages, sorted by family so a family's members stay adjacent
+  and easy to cross-check against §4.11's family-level view (FR-104).
+- **FR-104 (Family activity loading)**: As FR-103, aggregated to family
+  granularity — one stacked bar per family, summing its members'
+  requested vs. allocated activities. Every family MUST appear, paginated
+  as needed, in a consistent family order with FR-103.
+- **FR-105 (Anomaly visibility)**: Campers/families with at least one
+  *unmet priority* (the most severe shortfall a camper can have, per
+  FR-13) MUST be visually distinguished within FR-103/104's charts (e.g.
+  colour), so they don't require reading every bar to find. The report
+  MUST also include the existing structural-overdemand finding (FR-77 —
+  families who could never fit their requests regardless of capacity,
+  a time-based ceiling no solver could work around) as a callout list,
+  reusing `find_overdemanding_families` rather than a new computation.
+- **FR-106 (Solver information)**: The report MUST state which solver
+  produced the schedule and how long it took (wall-clock), the full
+  Tier 0/1/2 score breakdown, every Class 2 violation category's count
+  (including custom-constraint violations, §4.10), and a summary of
+  custom constraints in effect (how many hard, how many soft, and how
+  many soft ones had at least one violation). When the report is
+  produced via `revalidate` (no solver was run), this section MUST say
+  so explicitly (e.g. "N/A — re-validated from an edited schedule") —
+  never fabricate solver information that doesn't exist, consistent with
+  FR-88's "don't treat re-validated input as inherently trustworthy".
+- **FR-107 (Output location)**: With no opt-in flag to hang a path off
+  (FR-98), the default output path is: alongside `--export-schedule`
+  when given (`<stem>_status_report.pdf`, matching how that flag already
+  derives `<stem>.csv`/`<stem>.json`); otherwise `./status_report.pdf` in
+  the current working directory. An explicit `--status-report PATH` flag
+  MAY override either default.
+- **FR-108 (`reportlab` dependency)**: Since generation is unconditional
+  (FR-98), `reportlab` MUST move from the optional `pdf` extra
+  (`pip install -e ".[pdf]"`) into family_camp2's core install
+  dependencies — every `solve`/`revalidate` run now needs it, so there's
+  no longer a meaningful "optional" case to guard with the existing
+  `ImportError`-catching pattern (`_write_outputs`'s `--pdf-dir` block).
+  The four existing audience-specific PDFs (FR-80/81/84/85, still behind
+  `--pdf-dir`) benefit incidentally — `reportlab` is now guaranteed
+  present for them too.
+- **FR-109 (Charting approach)**: Charts (FR-102/103/104) MUST be built
+  with `reportlab.graphics.charts` (native bar/stacked-bar support), not
+  a new charting dependency (e.g. matplotlib) — consistent with NFR-6
+  and every other visual element `pdf_reports.py` already produces.
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an
@@ -761,3 +879,55 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   rather than deferred?
 
   [Answer: Tier A sufficient for this phase]
+
+- **OQ-23 (Charting library, FR-109)**: Should the status report's
+  charts use `reportlab.graphics.charts` (no new dependency, stays
+  inside the existing `pdf` extra) or `matplotlib` (nicer/easier charts,
+  but a new dependency, rendered to an image and embedded)?
+
+  [Answer: reportlab native charts]
+
+- **OQ-24 (Camper/family chart scale, FR-103/104)**: With hundreds of
+  campers and around a hundred families, should the per-camper/per-family
+  "requested vs. allocated" charts show everyone (paginated across as
+  many pages as needed), only anomalies (unmet requests) plus one
+  aggregate summary, or an aggregate-only camp-wide view with no
+  per-camper/per-family detail at all?
+
+  [Answer: paginate everyone]
+
+- **OQ-25 (Trigger mechanism, FR-98)**: Should the status report be
+  generated unconditionally on every `solve`/`revalidate` run (matching
+  FR-98's literal wording), or gated behind a new opt-in flag like every
+  other export/report output in this document?
+
+  [Answer: generated unconditionally, no opt-in flag]
+
+- **OQ-26 (Ideal session size, FR-102)**: What should "ideal" mean for
+  the session-loading deviation statistic — a session's `max_occupancy`
+  (fully booked = ideal), the midpoint of `min_occupancy`/`max_occupancy`,
+  or a new organiser-configurable target occupancy fraction?
+
+  [Answer: max_occupancy]
+
+- **OQ-27 (Default output location, FR-107)**: With generation
+  unconditional (OQ-25) and no guaranteed flag to hang a path off, where
+  should the report be written by default — a new flag with its own
+  default filename, alongside `--export-schedule` when given, or always
+  a fixed filename in the current directory?
+
+  [Answer: alongside `--export-schedule` when given (`<stem>_status_report.pdf`);
+  falls back to `./status_report.pdf` when `--export-schedule` isn't given
+  — the fallback wasn't asked verbatim but follows directly from OQ-25's
+  "unconditional" answer needing *some* location even when
+  `--export-schedule` is absent, and was applied as the natural default
+  rather than looping back for a third round of questions.]
+
+- **OQ-28 (`reportlab` dependency, FR-108)**: Since generation is now
+  unconditional, should the engine skip the report with a warning when
+  `reportlab` isn't installed (keeps `reportlab` optional, matches this
+  document's "never crash, report clearly" pattern), or should `reportlab`
+  become a hard install dependency (simpler code, no optional-import
+  path, but a heavier mandatory install)?
+
+  [Answer: reportlab becomes a hard dependency]

@@ -21,6 +21,13 @@ from family_camp2.domain import Camper, Session, Timetable
 from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
 from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json, load_schedule_csv, load_schedule_json
+from family_camp2.pdf_reports import (
+    PageSpec,
+    render_activities_pdf,
+    render_available_adults_pdf,
+    render_available_families_pdf,
+    render_campers_pdf,
+)
 from family_camp2.progress import PrintProgressReporter
 from family_camp2.reporting import (
     render_activity_roster,
@@ -64,7 +71,7 @@ def _add_output_args(parser: argparse.ArgumentParser) -> None:
         "--pdf-dir", type=Path, default=None, dest="pdf_dir",
         help="If given, write activities.pdf, campers.pdf, available_adults.pdf, and "
         "available_families.pdf into this directory (created if needed) "
-        "(FR-80/FR-81/FR-84/FR-85). Requires the 'pdf' extra (pip install -e \".[pdf]\").",
+        "(FR-80/FR-81/FR-84/FR-85).",
     )
     parser.add_argument(
         "--pdf-paper", choices=["a4", "a3"], default="a4", dest="pdf_paper",
@@ -201,19 +208,6 @@ def _write_outputs(
         )
 
     if args.pdf_dir is not None:
-        try:
-            from family_camp2.pdf_reports import (
-                PageSpec,
-                render_activities_pdf,
-                render_available_adults_pdf,
-                render_available_families_pdf,
-                render_campers_pdf,
-            )
-        except ImportError as exc:  # pragma: no cover - exercised only when reportlab isn't installed
-            raise ImportError(
-                "reportlab is required for --pdf-dir. Install it with: pip install -e \".[pdf]\""
-            ) from exc
-
         args.pdf_dir.mkdir(parents=True, exist_ok=True)
         page_spec = PageSpec(paper_size=args.pdf_paper, orientation=args.pdf_orientation)
         render_activities_pdf(timetable, sessions, args.pdf_dir / "activities.pdf", page_spec)

@@ -7,16 +7,17 @@ name = "family_camp2"
 version = "0.1.0"
 description = "Family Camp scheduling engine (CP-SAT and simulated-annealing solvers)"
 requires-python = ">=3.11"
-dependencies = ["ortools"]
+# reportlab: pure-Python PDF generation (no external binaries/subprocesses).
+# Used to be the optional 'pdf' extra, gating only --pdf-dir - now core,
+# since the status report (REQUIREMENTS.md §4.11/FR-108) is generated
+# unconditionally on every solve/revalidate run, not opt-in.
+dependencies = ["ortools", "reportlab"]
 
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis"]
 # Only needed for fetch_cli.py (downloading input data from Google Sheets) -
 # not required to run or test the scheduling engine itself.
 google = ["gspread"]
-# Only needed for pdf_reports.py (--pdf-dir). reportlab is a pure-Python PDF
-# generation library - no external binaries/subprocesses involved.
-pdf = ["reportlab"]
 
 [project.scripts]
 family_camp2-fetch = "family_camp2.fetch_cli:main"

@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 
 import pytest
 
-pytest.importorskip("reportlab")  # pdf_reports.py is only usable with the optional 'pdf' extra installed
-
 from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.pdf_reports import (
     PageSpec,

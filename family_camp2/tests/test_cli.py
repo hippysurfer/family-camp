@@ -133,7 +133,6 @@ def test_cli_report_dir_writes_the_operational_reports(tmp_path):
 
 
 def test_cli_pdf_dir_writes_all_four_pdfs(tmp_path):
-    pytest.importorskip("reportlab")
     pdf_dir = tmp_path / "pdfs"
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),

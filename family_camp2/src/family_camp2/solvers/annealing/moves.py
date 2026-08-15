@@ -13,6 +13,7 @@ neighbourhood, not merely discouraged.
 
 from __future__ import annotations
 
+from family_camp2.constraints.base import ConstraintInstance, hard_rules_by_camper
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable, sessions_overlap
 
 __all__ = [
@@ -29,9 +30,16 @@ __all__ = [
 class State:
     """A mutable candidate assignment, with incrementally-maintained indexes."""
 
-    def __init__(self, campers: list[Camper], sessions: list[Session]):
+    def __init__(
+        self,
+        campers: list[Camper],
+        sessions: list[Session],
+        constraints: list[ConstraintInstance] = (),
+    ):
         self.campers = campers
         self.sessions = sessions
+        self.constraints = constraints
+        self.hard_rules_by_camper = hard_rules_by_camper(constraints)
         self.assigned: dict[Session, set[Camper]] = {s: set() for s in sessions}
         self.assigned_sessions: dict[Camper, set[Session]] = {c: set() for c in campers}
 
@@ -50,7 +58,7 @@ class State:
         self.assigned_sessions[camper].discard(session)
 
     def copy(self) -> "State":
-        new = State(self.campers, self.sessions)
+        new = State(self.campers, self.sessions, self.constraints)
         for session, campers in self.assigned.items():
             new.assigned[session] = set(campers)
         for camper, sessions in self.assigned_sessions.items():
@@ -64,13 +72,16 @@ class State:
         return Timetable(frozenset(assignments))
 
 
-def _is_eligible(camper: Camper, session: Session) -> bool:
+def _is_eligible(camper: Camper, session: Session, state: State) -> bool:
     activity = session.activity
     requested = activity in camper.priorities or activity in camper.optional
     if not requested:
         return False
     if activity.min_age is not None and camper.age < activity.min_age:
         return False
+    for rule in state.hard_rules_by_camper.get(camper, ()):
+        if rule.forbids(camper, session, state.sessions):
+            return False
     return True
 
 
@@ -99,7 +110,7 @@ def assign_family(
     eligible = [
         c
         for c in members
-        if _is_eligible(c, session)
+        if _is_eligible(c, session, state)
         and not state.is_assigned(c, session)
         and not _has_activity(state, c, session.activity)
         and not _has_overlap(state, c, session)
@@ -171,9 +182,9 @@ def swap_families(
     if not members_a or not members_b:
         return None
 
-    if not all(_is_eligible(c, session_b) for c in members_a):
+    if not all(_is_eligible(c, session_b, state) for c in members_a):
         return None
-    if not all(_is_eligible(c, session_a) for c in members_b):
+    if not all(_is_eligible(c, session_a, state) for c in members_b):
         return None
 
     # room_x = how much space will be free in session_x once its current
@@ -233,7 +244,7 @@ def fix_unsupervised_split(
         c
         for c in members
         if c.is_adult
-        and _is_eligible(c, session)
+        and _is_eligible(c, session, state)
         and not state.is_assigned(c, session)
         and not _has_activity(state, c, session.activity)
         and not _has_overlap(state, c, session)
@@ -261,7 +272,7 @@ def fix_lone_adult_split(
         c
         for c in members
         if not c.is_adult
-        and _is_eligible(c, session)
+        and _is_eligible(c, session, state)
         and not state.is_assigned(c, session)
         and not _has_activity(state, c, session.activity)
         and not _has_overlap(state, c, session)

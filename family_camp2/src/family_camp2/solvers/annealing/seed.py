@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import random
 
+from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.domain import Activity, Camper, Session
 from family_camp2.solvers.annealing.moves import State, assign_family
 
@@ -28,8 +29,9 @@ def greedy_seed(
     campers: list[Camper],
     campers_by_family: dict[str, list[Camper]],
     rng: random.Random,
+    constraints: list[ConstraintInstance] = (),
 ) -> State:
-    state = State(campers, sessions)
+    state = State(campers, sessions, constraints)
     families = sorted(campers_by_family)
 
     for session in sessions:

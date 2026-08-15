@@ -1719,7 +1719,7 @@ already being changed for `load_json`.
 
 ---
 
-### - [ ] Step 44: Hard-constraint enforcement in both solvers (FR-94)
+### - [x] Step 44: Hard-constraint enforcement in both solvers (FR-94)
 
 **Goal**: A hard constraint becomes structurally impossible to violate,
 in both solvers, using only the existing eligibility mechanism - no new
@@ -1733,13 +1733,33 @@ modeling concept.
 gets the same check; `run_chain`/`run_restarts`/`AnnealingSolver.solve`
 thread `constraints` through to it.
 
-**Tests**: a hard `NoActivityBefore` constraint means neither solver ever
-assigns that camper to an early session (checked directly against the
-resulting `Timetable`, both solvers); when that early session was the
-camper's *only* eligible option for a priority activity, confirm this
-surfaces as an ordinary `missing_priority` violation (FR-94) rather than
-a crash or a silently-dropped priority - mirrors the existing "no
-eligible session at all" handling in `_reify_activity_missing`.
+**Tests** (`tests/test_constraints_enforcement.py`): a hard
+`NoActivityBefore` constraint means neither solver ever assigns that
+camper to an early session (checked directly against the resulting
+`Timetable`, both solvers, real `CpSatSolver`/`AnnealingSolver.solve()`
+calls, not internal-function unit tests); when that early session was
+the camper's *only* eligible option for a priority activity, confirms
+this surfaces as an ordinary `missing_priority` violation (FR-94) rather
+than a crash - mirrors the existing "no eligible session at all"
+handling in `_reify_activity_missing`; an untargeted camper in the same
+scenario is unaffected (the restriction is scoped correctly); a
+family-level target (§3.5's blank `camper_name`) forbids the session for
+every member, not just one. All three passed on the first run.
+
+**Deviation found during implementation**: `_hard_rules_by_camper`
+(indexes hard rules per camper, once, rather than scanning the full
+constraint list per (camper, session) pair) is identical logic in both
+solvers, so it moved to `constraints/base.py` as `hard_rules_by_camper`
+and both solvers import the shared version rather than each keeping
+their own copy. For annealing specifically, threading turned out
+narrower than the plan assumed: `run_chain` itself needed no signature
+change at all - a `State` now carries its own `constraints` and
+precomputed `hard_rules_by_camper` (set once in `__init__`, preserved
+through `.copy()`), so every move function's existing `_is_eligible(c,
+session, state)` call already sees them for free. Only `State.__init__`,
+`greedy_seed` (to build the *initial* state with constraints applied),
+and the plumbing down to it (`_run_single_chain_from_seed`,
+`run_restarts`, `AnnealingSolver.solve`) needed the new parameter.
 
 **Commit message**: `family_camp2 step 44: hard custom-constraint enforcement via eligibility filtering (FR-94)`
 

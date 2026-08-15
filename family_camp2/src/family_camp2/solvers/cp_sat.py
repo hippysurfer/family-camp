@@ -19,6 +19,7 @@ from math import gcd
 from ortools.sat.python import cp_model
 
 from family_camp2.config import EngineConfig
+from family_camp2.constraints.base import ConstraintInstance, hard_rules_by_camper
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable, sessions_overlap
 from family_camp2.progress import NullProgressReporter, PeriodicHeartbeat, ProgressEvent, ProgressReporter
 from family_camp2.solvers.base import SolveResult
@@ -75,20 +76,32 @@ class VarIndex:
         return pair in self.by_pair
 
 
-def _is_eligible(camper: Camper, session: Session) -> bool:
+def _is_eligible(
+    camper: Camper,
+    session: Session,
+    all_sessions: list[Session],
+    hard_rules_by_camper: dict[Camper, list],
+) -> bool:
     activity = session.activity
     requested = activity in camper.priorities or activity in camper.optional
     if not requested:
         return False
     if activity.min_age is not None and camper.age < activity.min_age:
         return False
+    for rule in hard_rules_by_camper.get(camper, ()):
+        if rule.forbids(camper, session, all_sessions):
+            return False
     return True
 
 
 def build_model(
-    activities: list[Activity], sessions: list[Session], campers: list[Camper]
+    activities: list[Activity],
+    sessions: list[Session],
+    campers: list[Camper],
+    constraints: list[ConstraintInstance] = (),
 ) -> tuple[cp_model.CpModel, VarIndex]:
     model = cp_model.CpModel()
+    hard_rules = hard_rules_by_camper(constraints)
 
     by_pair: dict[tuple[Camper, Session], cp_model.IntVar] = {}
     by_camper: dict[Camper, list[Session]] = {c: [] for c in campers}
@@ -96,7 +109,7 @@ def build_model(
 
     for camper in campers:
         for session in sessions:
-            if _is_eligible(camper, session):
+            if _is_eligible(camper, session, sessions, hard_rules):
                 var = model.NewBoolVar(f"x[{camper.name}|{session.activity.name}|{session.label}]")
                 by_pair[(camper, session)] = var
                 by_camper[camper].append(session)
@@ -741,7 +754,7 @@ class CpSatSolver:
         campers: list[Camper],
         config: EngineConfig,
     ) -> SolveResult:
-        model, var_index = build_model(activities, sessions, campers)
+        model, var_index = build_model(activities, sessions, campers, config.constraints)
         compulsory = frozenset(a for a in activities if a.name in config.compulsory_activities)
         class2_vars = add_class2_indicators(model, var_index, campers, sessions, compulsory)
 

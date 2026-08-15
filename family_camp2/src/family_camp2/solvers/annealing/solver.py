@@ -18,6 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from family_camp2.config import EngineConfig
+from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.domain import Activity, Camper, Session
 from family_camp2.progress import NullProgressReporter, ProgressEvent, ProgressReporter
 from family_camp2.solvers.annealing.moves import (
@@ -175,10 +176,11 @@ def _run_single_chain_from_seed(
     seed: int,
     iterations: int,
     deadline: float | None,
+    constraints: list[ConstraintInstance] = (),
 ) -> State:
     """Module-level (picklable) helper so multiprocessing.Pool can call it."""
     rng = random.Random(seed)
-    initial = greedy_seed(activities, sessions, campers, campers_by_family, rng)
+    initial = greedy_seed(activities, sessions, campers, campers_by_family, rng, constraints)
     return run_chain(
         initial, campers, sessions, campers_by_family, tier0_weights, compulsory, cooling, seed, iterations, deadline
     )
@@ -244,6 +246,7 @@ def run_restarts(
     deadline: float | None = None,
     use_multiprocessing: bool = True,
     progress_reporter: ProgressReporter = NullProgressReporter(),
+    constraints: list[ConstraintInstance] = (),
 ) -> tuple[State, list[Score]]:
     """Run one independently-seeded chain per entry in `seeds` (each
     starting from its own greedy_seed construction), optionally in
@@ -252,7 +255,10 @@ def run_restarts(
 
     start_time = time.monotonic()
     call_args = [
-        (activities, sessions, campers, campers_by_family, tier0_weights, compulsory, cooling, seed, iterations, deadline)
+        (
+            activities, sessions, campers, campers_by_family, tier0_weights, compulsory, cooling, seed,
+            iterations, deadline, constraints,
+        )
         for seed in seeds
     ]
 
@@ -363,6 +369,7 @@ class AnnealingSolver:
             self.params.iterations_per_chain,
             deadline=deadline,
             progress_reporter=self.params.progress_reporter,
+            constraints=config.constraints,
         )
 
         timetable = best_state.to_timetable()

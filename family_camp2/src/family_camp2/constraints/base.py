@@ -19,12 +19,13 @@ nothing here helps enforce it automatically the way Tier A rules are.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from family_camp2.domain import Camper, Session
 
-__all__ = ["ConstraintRule", "ConstraintInstance", "Severity"]
+__all__ = ["ConstraintRule", "ConstraintInstance", "Severity", "hard_rules_by_camper"]
 
 Severity = Literal["hard", "soft"]
 
@@ -60,3 +61,17 @@ class ConstraintInstance:
     rule: ConstraintRule
     severity: Severity
     note: str = ""
+
+
+def hard_rules_by_camper(constraints: list[ConstraintInstance]) -> dict[Camper, list[ConstraintRule]]:
+    """Every hard-severity rule (FR-94) that applies to each targeted
+    camper, indexed once rather than scanning the full constraint list
+    per (camper, session) pair - shared by both solvers'
+    ``_is_eligible`` (``solvers/cp_sat.py``/``solvers/annealing/moves.py``)."""
+    result: dict[Camper, list[ConstraintRule]] = defaultdict(list)
+    for instance in constraints:
+        if instance.severity != "hard":
+            continue
+        for camper in instance.targets:
+            result[camper].append(instance.rule)
+    return result

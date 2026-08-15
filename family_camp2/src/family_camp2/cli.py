@@ -14,10 +14,11 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import time
 from pathlib import Path
 
-from family_camp2.config import load_config
-from family_camp2.domain import Camper, Session, Timetable
+from family_camp2.config import EngineConfig, load_config
+from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
 from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json, load_schedule_csv, load_schedule_json
@@ -37,6 +38,7 @@ from family_camp2.reporting import (
     render_unmet_optional_report,
 )
 from family_camp2.solvers.registry import get_solver
+from family_camp2.status_report import SolverInfo, render_status_report_pdf
 from family_camp2.validation.feasibility import find_overdemanding_families
 from family_camp2.validation.idle import find_idle_slots
 from family_camp2.validation.report import ValidationReport, render_text
@@ -80,6 +82,13 @@ def _add_output_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--pdf-orientation", choices=["portrait", "landscape"], default="portrait", dest="pdf_orientation",
         help="Orientation for --pdf-dir output (default portrait).",
+    )
+    parser.add_argument(
+        "--status-report", type=Path, default=None, dest="status_report",
+        help="Where to write the schedule status report PDF (FR-97-109/§4.11). Unlike every "
+        "other output here, this is generated unconditionally, not opt-in - this flag only "
+        "overrides its location. Defaults to <export-schedule-stem>_status_report.pdf if "
+        "--export-schedule is given, else ./status_report.pdf.",
     )
 
 
@@ -173,16 +182,39 @@ def _load_data(args: argparse.Namespace):
     return activities, sessions, campers, []
 
 
+def _status_report_path(args: argparse.Namespace) -> Path:
+    """FR-107: an explicit ``--status-report`` always wins; otherwise
+    alongside ``--export-schedule`` when given (matching how that flag's
+    stem already derives ``.csv``/``.json``), else a fixed filename in
+    the current directory."""
+    if args.status_report is not None:
+        return args.status_report
+    if args.export_schedule is not None:
+        stem = args.export_schedule.with_suffix("")
+        return stem.with_name(stem.name + "_status_report.pdf")
+    return Path("status_report.pdf")
+
+
 def _write_outputs(
+    activities: list[Activity],
     timetable: Timetable,
     report: ValidationReport,
     campers: list[Camper],
     sessions: list[Session],
+    config: EngineConfig,
+    solver_info: SolverInfo,
     args: argparse.Namespace,
 ) -> None:
     """Everything that can happen to a (Timetable, ValidationReport) pair
     after it exists, shared verbatim between ``solve`` and ``revalidate``
-    (FR-89) so the two entry points can never write reports differently."""
+    (FR-89) so the two entry points can never write reports differently.
+
+    The status report (FR-98) is generated unconditionally, unlike every
+    block below it - it isn't gated by an ``if args.x is not None`` check."""
+
+    render_status_report_pdf(
+        activities, sessions, campers, timetable, report, config, solver_info, _status_report_path(args)
+    )
 
     if args.out is not None:
         args.out.write_text(_report_to_json(report))
@@ -224,12 +256,15 @@ def _run_solve(args: argparse.Namespace) -> int:
     progress_reporter = PrintProgressReporter(args.progress_output)
     try:
         solver = get_solver(args.solver, **_solver_kwargs(args, progress_reporter))
+        start = time.monotonic()
         result = solver.solve(activities, sessions, campers, config)
+        duration_seconds = time.monotonic() - start
     finally:
         progress_reporter.close()
 
     print(render_text(result.report))
-    _write_outputs(result.timetable, result.report, campers, sessions, args)
+    solver_info = SolverInfo(solver_name=args.solver, duration_seconds=duration_seconds, diagnostics=result.diagnostics)
+    _write_outputs(activities, result.timetable, result.report, campers, sessions, config, solver_info, args)
     return 0
 
 
@@ -253,7 +288,7 @@ def _run_revalidate(args: argparse.Namespace) -> int:
     )
 
     print(render_text(report))
-    _write_outputs(timetable, report, campers, sessions, args)
+    _write_outputs(activities, timetable, report, campers, sessions, config, SolverInfo(), args)
     return 0
 
 

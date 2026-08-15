@@ -2260,7 +2260,7 @@ cut-off text.
 
 ---
 
-### - [ ] Step 54: CLI wiring - unconditional generation (FR-98/107)
+### - [x] Step 54: CLI wiring - unconditional generation (FR-98/107)
 
 **Goal**: make every `solve`/`revalidate` run actually produce the
 status report, at the right default location, matching OQ-25/OQ-27.
@@ -2306,6 +2306,34 @@ test (real camper data stays local-only per this project's standing
 PII rule).
 
 **Commit message**: `family_camp2 step 54: generate the status report unconditionally on every run (FR-98/107)`
+
+**Deviation found during implementation**: solve-duration capture (moved
+here from Step 53, see that step's deviation note) landed as a plain
+`time.monotonic()` wrap around `solver.solve(...)` inside `_run_solve` -
+no `solvers/base.py` change needed. The test-file audit found the
+unconditional generation's real practical cost immediately: a first full
+suite run silently wrote a stray `status_report.pdf` into
+`family_camp2/`'s working directory (confirmed via `git status`, not
+caught by the tests themselves, since none of them asserted its
+*absence* anywhere) - not just in `test_cli.py` as expected, but also
+`test_cp_sat_cli.py`/`test_annealing_cli.py`, which the plan's own step
+description hadn't named. Fixed by adding `--status-report
+<tmp_path>/...` to every `cli.main([...])` call across all three files
+that reaches `_write_outputs` (the ones that fail during argparse
+validation, before a solver ever runs, needed no change). Added two new
+`test_cli.py` cases specifically for FR-107's default-path logic
+(`monkeypatch.chdir(tmp_path)`, no `--status-report` given): one with no
+other output flags at all (`./status_report.pdf`), one with
+`--export-schedule` (`<stem>_status_report.pdf`) - the plan's existing
+test list hadn't called these out explicitly either. Re-verified against
+real Willesley 2026 data via `revalidate` (reusing an already-solved
+schedule from a previous run rather than re-solving from scratch, since
+Step 34/45's precedent full solves take hours and this only needed to
+exercise rendering at real scale): 13 pages for 283 campers/84 families,
+visually spot-checked via `pdftoppm` - correct family-adjacent sorting,
+correct unmet-request colouring, correct "Solver: N/A - re-validated
+from an edited schedule" line, correct overdemand callout, no layout
+defects.
 
 ---
 

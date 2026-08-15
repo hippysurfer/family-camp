@@ -8,8 +8,11 @@ from family_camp2.io.schedule_export import dump_schedule_csv, load_schedule_csv
 from fixtures import SMALL_CAMP_JSON
 
 
-def test_cli_runs_end_to_end_with_json_data(capsys):
-    exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON)])
+def test_cli_runs_end_to_end_with_json_data(tmp_path, capsys):
+    exit_code = cli.main([
+        "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
+        "--status-report", str(tmp_path / "status_report.pdf"),
+    ])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -37,9 +40,10 @@ def test_cli_rejects_both_data_sources_at_once(tmp_path):
 
 def test_cli_out_writes_round_trippable_json_report(tmp_path):
     out_path = tmp_path / "report.json"
-    exit_code = cli.main(
-        ["solve", "--solver", "annealing", "--data", str(SMALL_CAMP_JSON), "--out", str(out_path)]
-    )
+    exit_code = cli.main([
+        "solve", "--solver", "annealing", "--data", str(SMALL_CAMP_JSON), "--out", str(out_path),
+        "--status-report", str(tmp_path / "status_report.pdf"),
+    ])
 
     assert exit_code == 0
     data = json.loads(out_path.read_text())
@@ -60,15 +64,19 @@ def test_cli_solve_loads_custom_constraints_from_data_without_error(tmp_path):
     data_path = tmp_path / "with_constraints.json"
     data_path.write_text(json.dumps(data))
 
-    exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(data_path)])
+    exit_code = cli.main([
+        "solve", "--solver", "cp_sat", "--data", str(data_path),
+        "--status-report", str(tmp_path / "status_report.pdf"),
+    ])
 
     assert exit_code == 0
 
 
-def test_cli_progress_defaults_to_stdout_interleaved_with_the_final_report(capsys):
-    exit_code = cli.main(
-        ["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--progress-interval", "60"]
-    )
+def test_cli_progress_defaults_to_stdout_interleaved_with_the_final_report(tmp_path, capsys):
+    exit_code = cli.main([
+        "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--progress-interval", "60",
+        "--status-report", str(tmp_path / "status_report.pdf"),
+    ])
 
     assert exit_code == 0
     out = capsys.readouterr().out
@@ -81,6 +89,7 @@ def test_cli_progress_output_can_be_redirected_to_a_file(tmp_path, capsys):
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
         "--progress-output", str(progress_path),
+        "--status-report", str(tmp_path / "status_report.pdf"),
     ])
 
     assert exit_code == 0
@@ -97,6 +106,7 @@ def test_cli_export_schedule_writes_both_csv_and_json(tmp_path):
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
         "--export-schedule", str(export_path),
+        "--status-report", str(tmp_path / "status_report.pdf"),
     ])
 
     assert exit_code == 0
@@ -117,6 +127,7 @@ def test_cli_report_dir_writes_the_operational_reports(tmp_path):
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
         "--report-dir", str(report_dir),
+        "--status-report", str(tmp_path / "status_report.pdf"),
     ])
 
     assert exit_code == 0
@@ -137,6 +148,7 @@ def test_cli_pdf_dir_writes_all_four_pdfs(tmp_path):
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
         "--pdf-dir", str(pdf_dir), "--pdf-paper", "a3", "--pdf-orientation", "landscape",
+        "--status-report", str(tmp_path / "status_report.pdf"),
     ])
 
     assert exit_code == 0
@@ -144,6 +156,37 @@ def test_cli_pdf_dir_writes_all_four_pdfs(tmp_path):
         path = pdf_dir / name
         assert path.exists()
         assert path.read_bytes().startswith(b"%PDF-")
+
+
+def test_cli_status_report_is_generated_unconditionally_with_no_flags_at_all(tmp_path, monkeypatch):
+    """FR-98/FR-107: unlike every other output, the status report needs no
+    opt-in flag at all - it defaults to ./status_report.pdf, so this test
+    isolates the current directory (rather than passing --status-report)
+    to prove that default actually fires, without littering the repo."""
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON)])
+
+    assert exit_code == 0
+    status_report_path = tmp_path / "status_report.pdf"
+    assert status_report_path.exists()
+    assert status_report_path.read_bytes().startswith(b"%PDF-")
+
+
+def test_cli_status_report_defaults_alongside_export_schedule(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    export_path = tmp_path / "schedule"
+
+    exit_code = cli.main([
+        "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
+        "--export-schedule", str(export_path),
+    ])
+
+    assert exit_code == 0
+    status_report_path = tmp_path / "schedule_status_report.pdf"
+    assert status_report_path.exists()
+    assert status_report_path.read_bytes().startswith(b"%PDF-")
+    assert not (tmp_path / "status_report.pdf").exists()  # the plain fallback name, not used here
 
 
 # --- revalidate ---
@@ -158,6 +201,7 @@ def test_revalidate_matches_solve_on_the_schedule_it_exported(tmp_path, capsys):
     export_path = tmp_path / "schedule"
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--export-schedule", str(export_path),
+        "--status-report", str(tmp_path / "solve_status_report.pdf"),
     ])
     assert exit_code == 0
     solve_report = capsys.readouterr().out
@@ -165,6 +209,7 @@ def test_revalidate_matches_solve_on_the_schedule_it_exported(tmp_path, capsys):
 
     exit_code = cli.main([
         "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(export_path.with_suffix(".csv")),
+        "--status-report", str(tmp_path / "revalidate_status_report.pdf"),
     ])
     assert exit_code == 0
     revalidate_report = capsys.readouterr().out
@@ -177,11 +222,13 @@ def test_revalidate_accepts_json_schedule_by_extension(tmp_path, capsys):
     export_path = tmp_path / "schedule"
     cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--export-schedule", str(export_path),
+        "--status-report", str(tmp_path / "solve_status_report.pdf"),
     ])
     capsys.readouterr()
 
     exit_code = cli.main([
         "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(export_path.with_suffix(".json")),
+        "--status-report", str(tmp_path / "revalidate_status_report.pdf"),
     ])
 
     assert exit_code == 0
@@ -206,7 +253,10 @@ def test_revalidate_surfaces_a_hand_introduced_class1_violation(tmp_path, capsys
     schedule_path = tmp_path / "bad_schedule.csv"
     dump_schedule_csv(bad_timetable, schedule_path)
 
-    exit_code = cli.main(["revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path)])
+    exit_code = cli.main([
+        "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path),
+        "--status-report", str(tmp_path / "status_report.pdf"),
+    ])
 
     assert exit_code == 0  # revalidate succeeds - it *reports* the violation, doesn't crash on it
     out = capsys.readouterr().out
@@ -233,6 +283,7 @@ def test_revalidate_supports_the_same_output_flags_as_solve(tmp_path, capsys):
     export_path = tmp_path / "schedule"
     cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--export-schedule", str(export_path),
+        "--status-report", str(tmp_path / "solve_status_report.pdf"),
     ])
     capsys.readouterr()
 
@@ -243,6 +294,7 @@ def test_revalidate_supports_the_same_output_flags_as_solve(tmp_path, capsys):
         "--schedule", str(export_path.with_suffix(".csv")),
         "--out", str(out_path),
         "--report-dir", str(report_dir),
+        "--status-report", str(tmp_path / "revalidate_status_report.pdf"),
     ])
 
     assert exit_code == 0

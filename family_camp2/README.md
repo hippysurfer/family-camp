@@ -161,6 +161,68 @@ logic. `available_families.pdf` narrows this further to adults whose
 adult themselves) - a stronger availability signal, since they won't
 need to break away to rejoin a family member who's mid-activity.
 
+## Schedule status report
+
+REQUIREMENTS.md §4.11 (FR-97-109): a single A4-portrait PDF bringing
+together front matter, activity/session loading, camper/family
+fulfilment, and solver diagnostics - a one-stop overview for the
+organiser reviewing a run, distinct from the audience-specific reports
+above and from the plain violation report (FR-40/41) alone.
+
+Unlike every other output in this document, it's generated
+**unconditionally** on every `solve`/`revalidate` run - there's no
+opt-in flag to switch it off. Its output location defaults to
+`<export-schedule-stem>_status_report.pdf` when `--export-schedule` is
+given, else `./status_report.pdf`; `--status-report PATH` overrides
+either default:
+
+```sh
+python -m family_camp2 solve --solver cp_sat --data data.json
+# -> ./status_report.pdf
+
+python -m family_camp2 solve --solver cp_sat --data data.json --export-schedule out/schedule
+# -> out/schedule_status_report.pdf
+
+python -m family_camp2 solve --solver cp_sat --data data.json --status-report reports/status.pdf
+# -> reports/status.pdf
+```
+
+Five sections, in order:
+
+1. **Front matter** - generation timestamp, camp date range/duration
+   (derived from the session data, never assumed), headline counts.
+2. **Camp activity information** - a per-activity table (sessions,
+   min/max occupancy, compulsory flag) and a graphical activity
+   timetable. The timetable is a two-day Gantt-style grid when the camp
+   spans exactly 2 distinct calendar days (an explicit, narrow exception
+   to this engine's usual no-fixed-length rule, scoped to this one
+   visualisation); for any other camp length it falls back to a plain
+   date/activity/session table instead of guessing at a shape that
+   doesn't fit.
+3. **Activity session loading** - occupancy vs. capacity per session
+   (stacked bar: used vs. spare), with sessions below their activity's
+   minimum occupancy visually distinguished, plus mean/spread statistics
+   ("ideal" session size is its own `max_occupancy` - a fully-booked
+   session is ideal).
+4. **Camper/family activity loading** - one stacked bar per camper and
+   per family (priorities met/unmet, optional met/unmet), every one
+   included and paginated across as many pages as needed rather than
+   sampled - sorted so a family's members stay adjacent to its own
+   family-level bar. Campers/families with an unmet priority are
+   doubly distinguished (their own bar segment and a coloured label).
+   Families that could never fit their requests regardless of capacity
+   (the same structural check as `unfeasible_families_report.txt` above)
+   are called out separately.
+5. **Solver information** - which solver ran and how long it took (or
+   an explicit "N/A" when the report came from `revalidate`, not a real
+   solve), the Tier 0/1/2 score breakdown, every violation category's
+   count, and a summary of custom constraints in effect (§4.10 - how
+   many hard, how many soft, how many soft ones had a violation).
+
+See `family_camp2.status_report`'s module docstring for the
+data/render split (NFR-6) this follows - the same pattern already used
+throughout `validation/`.
+
 ## Manual editing and re-validation
 
 Implements REQUIREMENTS.md §4.9 (FR-86-89) - partially reopens §1.2's

@@ -7,10 +7,11 @@ from family_camp2.validation.class1 import check_class1
 from fixtures import SMALL_CAMP_JSON, generate_medium_instance
 
 
-def test_cli_solves_small_camp_fully_feasibly_with_annealing(capsys):
+def test_cli_solves_small_camp_fully_feasibly_with_annealing(tmp_path, capsys):
     exit_code = cli.main([
         "solve", "--solver", "annealing", "--data", str(SMALL_CAMP_JSON),
         "--num-chains", "4", "--iterations-per-chain", "500", "--seed", "1",
+        "--status-report", str(tmp_path / "status_report.pdf"),
     ])
 
     assert exit_code == 0

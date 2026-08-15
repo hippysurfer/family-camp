@@ -358,8 +358,6 @@ location" above) comes from the spreadsheet's own title, so there's no
 separate `--camp-name` flag either.
 
 ```sh
-pip install -e ".[google]"   # pulls in gspread, only needed for this subcommand
-
 family_camp2 fetch <SHEET_URL_OR_ID>
 # Wrote 12 activities, 91 sessions, 283 campers, 0 constraints for 'Willesley 2026' to fetched_data/camp.json
 

@@ -1,5 +1,3 @@
-import sys
-
 import pytest
 
 from family_camp2.io.google_sheets import (
@@ -11,7 +9,6 @@ from family_camp2.io.google_sheets import (
     _extract_table,
     _parse_age,
     fetch_schedule_data,
-    get_client,
     open_spreadsheet,
 )
 
@@ -338,10 +335,3 @@ def test_fetch_schedule_data_fetches_a_custom_named_constraints_tab_automaticall
     _, _, _, _, constraints = fetch_schedule_data(client, "abc123", constraints_worksheet="MyConstraints")
 
     assert len(constraints) == 2
-
-
-def test_get_client_raises_a_clear_error_when_gspread_is_missing(monkeypatch):
-    monkeypatch.setitem(sys.modules, "gspread", None)
-
-    with pytest.raises(ImportError, match=r"pip install -e '\.\[google\]'"):
-        get_client()

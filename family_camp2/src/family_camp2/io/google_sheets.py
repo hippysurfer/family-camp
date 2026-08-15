@@ -36,6 +36,9 @@ from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Protocol
 
+import gspread
+import gspread.auth
+
 from family_camp2.domain import Activity, Camper, Session
 from family_camp2.io.legacy_cache_loader import _parse_duration
 
@@ -99,15 +102,6 @@ def get_client(
     Requires a real browser and network access - not exercised by the test
     suite, which injects a fake client into ``fetch_schedule_data`` instead.
     """
-    try:
-        import gspread
-        import gspread.auth
-    except ImportError as exc:  # pragma: no cover - exercised only when gspread isn't installed
-        raise ImportError(
-            "gspread is required to fetch data from Google Sheets. "
-            "Install it with: pip install -e '.[google]'"
-        ) from exc
-
     kwargs = {"scopes": gspread.auth.READONLY_SCOPES}
     if credentials_path is not None:
         kwargs["credentials_filename"] = Path(credentials_path)

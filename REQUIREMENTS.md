@@ -123,6 +123,20 @@ in-memory objects) is a design decision, not a requirement.
   activities in the input (no requirement that a camp is exactly two days
   long, has exactly N activities, etc.).
 
+### 3.5 Custom constraint record (optional, §4.10)
+
+A fourth, optional input collection alongside Activity/Session/Camper —
+each record is one organiser-authored, parameterised constraint applying
+to a specific camper or family, distinct from a camper's own
+priority/optional lists.
+
+| Field | Meaning |
+|---|---|
+| Target | A family identifier (applies to every member), or a specific camper within a family. |
+| Constraint | A named, parameterised rule (e.g. "no activities on day 2") — see §4.10 for the rule vocabulary and expression syntax. |
+| Severity | Whether this is a hard requirement or a soft/best-effort preference. |
+| Note | Free text for the organiser's own reference; never interpreted by the engine. |
+
 ## 4. Functional requirements
 
 ### 4.1 Hard constraints — a valid schedule MUST satisfy all of these
@@ -425,6 +439,65 @@ straight from an edited schedule file to validation and reporting.
   re-validated schedule can itself be re-exported and edited again,
   supporting multiple rounds of hand-tweaking.
 
+### 4.10 Per-camper/family custom constraints
+
+Raised by the user wanting to express requirements the engine has no
+other way to capture — e.g. "022/Glen must not have any activities on
+the 2nd day" or "Emma Glen (022/Glen) must not have any activity before
+11:00" — parameterised per §3.5's new input collection, editable by an
+organiser without a code change.
+
+The central design idea: nearly every useful constraint of this kind
+reduces to a per-(camper, session) predicate — "is this camper allowed
+to be in this session at all?" — which is exactly the mechanism that
+already makes Class 1 (FR-10-16) structurally guaranteed in both
+solvers (`_is_eligible` in `cp_sat.py`/`annealing/moves.py`). A
+constraint expressible this way (called **Tier A** below) gets hard
+*and* soft enforcement in both solvers for free, with zero
+solver-specific code needed per new rule. A constraint that isn't
+expressible this way (**Tier B** — e.g. "no more than 2 activities per
+day," which depends on a camper's *other* assignments, not a fixed
+session set) needs bespoke validator logic and, if hard, bespoke solver
+modeling, case by case. This document only requires Tier A support;
+Tier B is an explicitly acknowledged future extension of the same
+architecture, not part of this phase (OQ-22).
+
+- **FR-90**: The engine MUST support a general, extensible architecture
+  for named, parameterised per-camper/family constraint rules — adding a
+  new rule type MUST NOT require changes to the solvers themselves for
+  the common (Tier A) case, only a new rule class.
+- **FR-91**: Each constraint record (§3.5) MUST resolve its target to one
+  or more campers: a family identifier resolves to every member; a
+  family+camper pair resolves to that one camper. An unresolvable target
+  (unknown family/camper) MUST be reported, not silently skipped —
+  consistent with FR-87's requirement for schedule re-import.
+- **FR-92**: The constraint expression (§3.5's "Constraint" field) MUST
+  be parsed safely — it MUST NOT be evaluated as arbitrary code (this is
+  organiser-edited spreadsheet data, not trusted source code). An
+  unparseable expression or unknown rule name MUST be reported clearly,
+  naming the row and the problem.
+- **FR-93**: As with FR-87/OQ-16's precedent for schedule re-import, the
+  engine MUST collect and report every invalid constraint record (bad
+  target, bad expression, unknown rule) together, not stop at the first.
+- **FR-94**: A **hard** constraint MUST be enforced exactly like a Class
+  1 rule: the engine must never produce a timetable that violates it, in
+  either solver. If a hard constraint makes one of that camper's own
+  priorities structurally unreachable, this MUST surface as a normal
+  `missing_priority` violation (FR-13/FR-31) — no special-case handling,
+  the same graceful behaviour already used for e.g. an age-restricted
+  activity a camper can never reach.
+- **FR-95**: A **soft** constraint MUST be treated as an optimisation
+  target: penalised in the same weighted-severity mechanism Class 2
+  already uses (FR-30/31), reported when unmet, but not treated as
+  making the schedule infeasible on its own.
+- **FR-96**: The engine MUST implement at least the following Tier A
+  rules: activities excluded by camp day number (day 1, 2, ... - derived
+  from the distinct calendar dates present in the session data, not a
+  fixed date, per FR-3); activities excluded before/after a time of day;
+  activities excluded within a given date/time range; a specific
+  activity excluded outright regardless of the camper's own
+  priority/optional lists.
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an
@@ -638,3 +711,53 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   narrower version out of scope for now?
 
   [Answer: out of scope for now]
+
+- **OQ-18 (Constraint syntax, FR-90)**: Should the "Constraint" field
+  (§3.5) be a function-call-like expression (e.g.
+  `no_activities_on_day(2)`, parsed via Python's `ast` module in
+  restricted/safe mode — never `eval()`), or an English-phrase syntax
+  matched against a small fixed vocabulary of sentence templates owned
+  per rule class, or something else? Free-form NLP-style parsing is
+  explicitly not being considered — too fragile for something that fails
+  silently wrong rather than loudly wrong if misparsed.
+
+  [Answer: function-call-like expression]
+
+- **OQ-19 (Data flow into solve(), FR-90)**: Should resolved constraints
+  reach the solver via a new field on `EngineConfig` (no change to the
+  `Solver` protocol; conceptually similar to the existing
+  `compulsory_activities` field), or via a new explicit parameter on
+  `Solver.solve(...)` (touches the protocol, both solvers, and
+  `validate()`'s signature, but keeps `EngineConfig` purely about
+  solver-tuning weights rather than camp-specific per-camper data)?
+
+  [Answer: EngineConfig]
+
+- **OQ-20 (Soft-constraint weighting, FR-95)**: Should every soft custom
+  constraint share one `Tier0Weights` severity band (simplest - all
+  custom constraints weighted equally against each other), or does each
+  constraint record need its own weight/priority (§3.5 would need an
+  extra column)?
+
+  [Answer: share one Tier0Weights]
+
+- **OQ-21 (Severity ranking, FR-95)**: Where should the soft
+  custom-constraint band rank relative to the existing Tier 0 severity
+  order (`missing_priority` > `family_safety` > `family_split` >
+  `under_minimum` > `compulsory`)? Note for whoever implements this:
+  inserting a sixth band by simply extending the established 1,000x-ratio
+  pattern would push the top band back up towards the range that caused
+  real `MODEL_INVALID` overflow in CP-SAT (see IMPLEMENTATION_PLAN.md
+  Step 34's deviation note) - the actual weight values will need
+  re-deriving carefully, not just extending the existing pattern by one
+  more step.
+
+  [Answer: `custom-constraint` > `missing_priority` > `family_safety` > `family_split` >
+  `under_minimum` > `compulsory`]
+
+- **OQ-22 (Tier B scope, FR-90)**: Is Tier A sufficient for this phase
+  (as FR-96 specifies), or is there a specific Tier B rule (e.g.
+  "must always be scheduled with camper X") that's actually needed now
+  rather than deferred?
+
+  [Answer: Tier A sufficient for this phase]

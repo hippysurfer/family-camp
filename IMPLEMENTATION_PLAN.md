@@ -1554,10 +1554,278 @@ naming both (OQ-16, exercised through the CLI as well as directly in
 
 ---
 
-## 5. After this plan
+## 5. Per-camper/family custom constraints (Steps 41–47)
+
+### Context
+
+Raised by the user wanting to express requirements the engine has no
+other way to capture, e.g. "022/Glen must not have any activities on the
+2nd day" or "Emma Glen (022/Glen) must not have any activity before
+11:00" - parameterised by rows on a new Google Sheet tab, editable by an
+organiser without a code change. Implements REQUIREMENTS.md §3.5/§4.10
+(FR-90-96).
+
+The central design idea, from the design discussion this phase is based
+on: nearly every useful constraint of this kind reduces to a
+per-(camper, session) predicate - "is this camper allowed in this
+session at all?" - exactly the mechanism that already makes Class 1
+structurally guaranteed in both solvers (`_is_eligible` in
+`cp_sat.py`/`annealing/moves.py`). A constraint expressible this way
+(**Tier A** - covers both worked examples, and everything in FR-96) gets
+hard *and* soft enforcement in both solvers essentially for free. A
+constraint that isn't (**Tier B** - e.g. "must always be with camper X")
+needs bespoke work per rule and is explicitly out of scope for this
+phase (FR-90/OQ-22).
+
+**REQUIREMENTS.md OQ-18–OQ-22 are now answered**; each step below
+implements that answer directly:
+
+- **OQ-18 (syntax)**: function-call-like expression, parsed via Python's
+  `ast` module in restricted/safe mode (never `eval()`).
+- **OQ-19 (data flow)**: a new `EngineConfig.constraints` field - no
+  change to the `Solver` protocol.
+- **OQ-20 (soft weighting)**: one shared `Tier0Weights.custom_constraint`
+  band, not a per-record weight.
+- **OQ-21 (severity ranking)**: **`custom_constraint` ranks above
+  `missing_priority`** - the single most severe band, above even
+  priorities. Notably different from this plan's original draft
+  assumption (which guessed it would rank below `family_split`). The
+  exact weight *value* is still deliberately left to Step 45, which
+  re-derives the whole six-band scale from scratch (see that step's
+  note on the Step 34 `MODEL_INVALID` lesson) rather than only inserting
+  a new top band above the existing five numbers.
+- **OQ-22 (Tier B scope)**: Tier A only, per FR-96 - confirmed sufficient
+  for this phase.
+
+### Step list
+
+### - [x] Step 41: Constraint domain model + registry
+
+**Goal**: The pure-Python foundation - a rule protocol and a
+name-to-class registry, independent of parsing, data loading, or either
+solver, mirroring `solvers/registry.py`'s existing pattern exactly
+(FR-90).
+
+**Add** `src/family_camp2/constraints/base.py`:
+- `ConstraintRule` (`Protocol`): the Tier A contract is one method,
+  `forbids(camper: Camper, session: Session) -> bool` - true if this
+  session would violate the rule for this camper. (Implementation note:
+  a rule like "day 2" needs the full session list to know which
+  calendar date *is* day 2 - work out during implementation whether that
+  context is resolved once at construction time or passed per-call;
+  don't let this detail block Step 41's own tests, which can use small
+  fixed session lists either way.)
+- `ConstraintInstance` (frozen dataclass): `targets: tuple[Camper, ...]`
+  (already resolved - see Step 42), `rule: ConstraintRule`,
+  `severity: Literal["hard", "soft"]`, `note: str`.
+
+**Add** `src/family_camp2/constraints/registry.py`: `@register("name")`
+class decorator + `get_constraint_class(name) -> type[ConstraintRule]`,
+structurally identical to `solvers/registry.py`.
+
+**Add** `src/family_camp2/constraints/rules.py` — the FR-96 Tier A set:
+`NoActivitiesOnDay(day: int)`, `NoActivityBefore(time: str)`,
+`NoActivityAfter(time: str)`, `NoActivitiesBetween(start: str, end:
+str)`, `NotOnActivity(activity: str)`.
+
+**Tests** (`tests/test_constraints_rules.py`): each rule's `forbids()`
+against hand-built camper/session fixtures - both a session it should
+forbid and one it shouldn't, per rule; the registry round-trips
+`register`/`get_constraint_class`, and raises a clear error for an
+unknown name.
+
+**Commit message**: `family_camp2 step 41: constraint domain model and registry (FR-90)`
+
+---
+
+### - [ ] Step 42: Safe expression parser + target resolution (FR-91/92/93)
+
+**Goal**: Turn one raw constraint record (family_id, camper_name,
+constraint expression string, severity, note) into a `ConstraintInstance`
+or a clear, collected error - never `eval()` (FR-92), never stop at the
+first bad record (FR-93, same shape as OQ-16/Step 39's precedent for
+schedule re-import).
+
+**Add** `src/family_camp2/constraints/parser.py`:
+- `parse_expression(expr: str) -> tuple[str, list, dict]`: `ast.parse(expr,
+  mode="eval")`, walks the tree, accepts *only* a single `Call` node with
+  a bare `Name` and `Constant`/`List`/negative-number-`UnaryOp` arguments
+  - anything else raises `ConstraintParseError` naming the problem.
+- `resolve_target(family_id, camper_name, campers) -> tuple[Camper, ...]`:
+  same `(family_id, camper.name)`/`family_id`-only lookup convention
+  `io/schedule_export.py` already established (FR-91) - blank
+  `camper_name` resolves to every member of the family.
+- `build_constraint_instances(records, campers) -> list[ConstraintInstance]`:
+  resolves every record, collecting `(record index, error)` pairs for
+  anything that fails (unknown target, unparseable expression, unknown
+  rule name, wrong argument count/types for that rule) and raising one
+  combined error only if there's at least one, mirroring
+  `schedule_export._resolve_rows`'s Step 39 shape exactly.
+
+**Tests** (`tests/test_constraints_parser.py`): valid expressions for
+each Step 41 rule parse correctly; malformed expressions (not a call,
+disallowed node type, e.g. an attribute access or a nested call) are
+rejected with a clear message; an unresolvable family/camper is reported;
+multiple simultaneously-bad records in one batch are all named in a
+single raised error, not just the first.
+
+**Commit message**: `family_camp2 step 42: safe constraint expression parser and target resolution (FR-91/92/93)`
+
+---
+
+### - [ ] Step 43: Data loading and `EngineConfig` wiring (OQ-19)
+
+**Goal**: Get constraints from an input file into `solve()`. Assumes
+OQ-19 answered "`EngineConfig` field."
+
+**Change** `io/json_loader.py`: `load_json` gains an optional
+`"constraints"` array in the JSON schema (§3.5's fields: `family_id`,
+`camper_name` nullable, `constraint`, `severity`, `note` optional),
+defaulting to `[]` when absent; returns constraints as a fourth element
+alongside `activities`/`sessions`/`campers` (every existing call site -
+`cli.py`, `fixtures.py`, tests - updated for the new return shape).
+
+**Change** `config.py`: `EngineConfig` gains
+`constraints: tuple[ConstraintInstance, ...] = ()`.
+
+**Change** `cli.py`: after loading data and config separately (as today),
+merge the loaded constraints into the `EngineConfig` actually used
+(`dataclasses.replace(config, constraints=...)`) before calling
+`solver.solve(...)` (in `_run_solve`) or `validate(...)` (in
+`_run_revalidate` - a hand-edited schedule should be checked against the
+same custom constraints the original solve used).
+
+**Tests**: JSON round-trip with a non-empty `"constraints"` array
+produces the expected `ConstraintInstance` list; `EngineConfig` carries
+them through; a small end-to-end CLI test with a hand-authored
+constraints array (not yet enforced by either solver until Steps 44/45 -
+this step only proves the data reaches `config.constraints`).
+
+**Commit message**: `family_camp2 step 43: load custom constraints from --data and wire into EngineConfig (OQ-19)`
+
+---
+
+### - [ ] Step 44: Hard-constraint enforcement in both solvers (FR-94)
+
+**Goal**: A hard constraint becomes structurally impossible to violate,
+in both solvers, using only the existing eligibility mechanism - no new
+modeling concept.
+
+**Change** `solvers/cp_sat.py`: `_is_eligible(camper, session)` (and
+`build_model`'s signature) also checks that no *hard* constraint in
+`config.constraints` forbids the pair.
+
+**Change** `solvers/annealing/moves.py`: the equivalent `_is_eligible`
+gets the same check; `run_chain`/`run_restarts`/`AnnealingSolver.solve`
+thread `constraints` through to it.
+
+**Tests**: a hard `NoActivityBefore` constraint means neither solver ever
+assigns that camper to an early session (checked directly against the
+resulting `Timetable`, both solvers); when that early session was the
+camper's *only* eligible option for a priority activity, confirm this
+surfaces as an ordinary `missing_priority` violation (FR-94) rather than
+a crash or a silently-dropped priority - mirrors the existing "no
+eligible session at all" handling in `_reify_activity_missing`.
+
+**Commit message**: `family_camp2 step 44: hard custom-constraint enforcement via eligibility filtering (FR-94)`
+
+---
+
+### - [ ] Step 45: Soft-constraint scoring (FR-95)
+
+**Goal**: A soft constraint is penalised, not enforced - the same
+demand-driven, best-effort treatment Class 2 already gives
+`missing_priority`/`family_split`/etc.
+
+**Add** `find_custom_constraint_violations(timetable, config.constraints)`
+(new module or folded into `validation/class2.py`), mirroring
+`find_missing_priorities`'s shape: for each soft `ConstraintInstance`,
+for each target camper actually assigned to a session their rule
+forbids, one violation record.
+
+**Change** `validation/class2.py`: `Tier0Weights` gains a
+`custom_constraint` field; `Class2Report`/`check_class2`/`score_tier0`
+include it. **Re-derive the weight scale carefully here** (OQ-21) -
+Step 34's deviation note recorded that naively extending the established
+1,000x-ratio pattern by one more band pushed `missing_priority` back
+into the range that caused a real `MODEL_INVALID` overflow in CP-SAT
+against real ~283-camper data; don't repeat that mistake by just
+tacking a sixth band onto the existing five numbers.
+
+**Change** `solvers/cp_sat.py`: `add_class2_indicators`/`tier0_expr`
+gain reified indicators for soft-forbidden (camper, session)
+assignments, mirroring the existing Class 2 indicator pattern exactly.
+No equivalent annealing change needed beyond Step 43's threading of
+`constraints` through to `config` - annealing's scoring already calls
+the shared validator machinery, so this falls out for free (the design's
+core payoff) - verify with a cross-solver-agreement test rather than
+assuming it.
+
+**Tests**: a soft constraint's violation is reported and contributes to
+`tier0_score` without affecting `Feasible: True`; CP-SAT's own internal
+objective value agrees with the independent validator's score on a hand-
+verified small instance (mirroring `test_cp_sat_family_split.py`'s
+pattern); annealing's best-found score reflects a soft violation too.
+
+**Commit message**: `family_camp2 step 45: soft custom-constraint scoring (FR-95)`
+
+---
+
+### - [ ] Step 46: Google Sheets fetch integration
+
+**Goal**: The real-world input path - a new "Constraints for schedule"
+worksheet, fetched the same way the other three already are.
+
+**Change** `io/google_sheets.py`: `DEFAULT_CONSTRAINTS_WORKSHEET`
+constant; parse the new sheet via the same header-name-driven
+`_extract_table` pattern already used for Activities/Sessions/Campers,
+producing raw records fed through Step 42's `build_constraint_instances`.
+
+**Change** `fetch_cli.py`: `--constraints-worksheet` override flag,
+matching the existing `--activities-worksheet`/`--sessions-worksheet`/
+`--campers-worksheet`; fetched constraints included in the JSON this
+tool writes (Step 43's `"constraints"` array).
+
+**Tests** (`tests/test_google_sheets.py`): a raw worksheet-row fixture
+for the new tab (preamble/header/blank-row messiness, matching the
+existing fixtures' realism) parses to the expected `ConstraintInstance`
+list.
+
+**Commit message**: `family_camp2 step 46: fetch custom constraints from a new Google Sheets tab`
+
+---
+
+### - [ ] Step 47: Documentation
+
+**Goal**: Everything this phase added is discoverable without reading
+source.
+
+**Update** `README.md`: a new "Custom constraints" section - the §3.5
+record schema, the expression syntax with both of the user's original
+worked examples, the FR-96 Tier A rule list, hard vs. soft, and an
+explicit note that Tier B (relational/aggregate rules) is an
+acknowledged extension point for the same architecture, not built by
+this phase.
+
+**Final check**: full test suite green from a fresh `pip install -e
+".[dev]"` in a new venv, same as previous phases' final steps.
+
+**Commit message**: `family_camp2 step 47: document custom constraints`
+
+---
+
+## 6. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:
+
+- Tier B custom constraint rules (relational, e.g. "must always be with
+  camper X"; aggregate, e.g. "no more than 2 activities per day") -
+  the architecture (Step 41's registry) accommodates them, but each one
+  needs bespoke validator logic and, if hard, bespoke solver modeling,
+  unlike Tier A's uniform eligibility-filtering treatment.
+- Per-constraint-record soft weighting (OQ-20, if a single shared band
+  turns out to be too coarse in practice).
 
 - OQ-17: a diff summary (assignments added/removed/moved) when
   re-validating an edited schedule against the one it was edited from -

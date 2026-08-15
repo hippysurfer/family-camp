@@ -65,6 +65,15 @@ class FakeWorksheet:
         return self._rows
 
 
+class _FakeWorksheetHandle:
+    """A lightweight stand-in for the ``Worksheet`` objects
+    ``gspread.Spreadsheet.worksheets()`` returns - only ``.title`` is
+    needed by ``_worksheet_titles``."""
+
+    def __init__(self, title: str):
+        self.title = title
+
+
 class FakeSpreadsheet:
     def __init__(self, worksheets: dict[str, FakeWorksheet], title: str = "Test Camp 2026"):
         self._worksheets = worksheets
@@ -74,6 +83,9 @@ class FakeSpreadsheet:
     def worksheet(self, name):
         self.requested_names.append(name)
         return self._worksheets[name]
+
+    def worksheets(self):
+        return [_FakeWorksheetHandle(name) for name in self._worksheets]
 
 
 class FakeClient:
@@ -180,7 +192,7 @@ def test_fetch_schedule_data_parses_the_three_worksheets():
     blank_age_adult = next(c for c in campers if c.name == "Alex Two")
     assert blank_age_adult.age == 18  # blank Age column, falls back via "18?" column
 
-    assert constraints == []  # constraints_worksheet not given - not fetched at all
+    assert constraints == []  # no tab named DEFAULT_CONSTRAINTS_WORKSHEET present - silently skipped
 
 
 def test_fetch_schedule_data_uses_extra_column_not_other_column_for_optional():
@@ -249,10 +261,11 @@ def test_fetch_schedule_data_accepts_custom_worksheet_names():
     assert len(constraints) == 2
 
 
-def test_fetch_schedule_data_does_not_touch_the_constraints_tab_by_default():
-    """§3.5's constraints tab is optional - unlike the other three, most
-    spreadsheets won't have it, so fetch_schedule_data must not even try to
-    open it unless a worksheet name is explicitly given."""
+def test_fetch_schedule_data_does_not_touch_a_constraints_tab_that_does_not_exist():
+    """§3.5's constraints tab is optional - unlike the other three, a
+    spreadsheet without one must not error, and fetch_schedule_data
+    shouldn't even try to open a tab it already knows (via
+    ``worksheets()``) isn't there."""
     spreadsheet = _real_shaped_spreadsheet()
     client = FakeClient(spreadsheet)
 
@@ -261,7 +274,7 @@ def test_fetch_schedule_data_does_not_touch_the_constraints_tab_by_default():
     assert DEFAULT_CONSTRAINTS_WORKSHEET not in spreadsheet.requested_names
 
 
-def test_fetch_schedule_data_parses_the_constraints_worksheet_into_raw_records():
+def test_fetch_schedule_data_skips_constraints_entirely_when_the_argument_is_none():
     spreadsheet = FakeSpreadsheet(
         {
             DEFAULT_ACTIVITIES_WORKSHEET: FakeWorksheet(ACTIVITIES_ROWS),
@@ -272,9 +285,26 @@ def test_fetch_schedule_data_parses_the_constraints_worksheet_into_raw_records()
     )
     client = FakeClient(spreadsheet)
 
-    _, _, _, _, constraints = fetch_schedule_data(
-        client, "abc123", constraints_worksheet=DEFAULT_CONSTRAINTS_WORKSHEET
+    _, _, _, _, constraints = fetch_schedule_data(client, "abc123", constraints_worksheet=None)
+
+    assert constraints == []
+    assert DEFAULT_CONSTRAINTS_WORKSHEET not in spreadsheet.requested_names
+
+
+def test_fetch_schedule_data_fetches_the_constraints_tab_automatically_when_present():
+    """The headline behaviour: no --constraints-worksheet flag needed at
+    all - if a tab with the default name exists, it's fetched."""
+    spreadsheet = FakeSpreadsheet(
+        {
+            DEFAULT_ACTIVITIES_WORKSHEET: FakeWorksheet(ACTIVITIES_ROWS),
+            DEFAULT_SESSIONS_WORKSHEET: FakeWorksheet(SESSIONS_ROWS),
+            DEFAULT_CAMPERS_WORKSHEET: FakeWorksheet(CAMPERS_ROWS),
+            DEFAULT_CONSTRAINTS_WORKSHEET: FakeWorksheet(CONSTRAINTS_ROWS),
+        }
     )
+    client = FakeClient(spreadsheet)
+
+    _, _, _, _, constraints = fetch_schedule_data(client, "abc123")
 
     assert constraints == [
         {
@@ -292,6 +322,22 @@ def test_fetch_schedule_data_parses_the_constraints_worksheet_into_raw_records()
             "note": "",
         },
     ]
+
+
+def test_fetch_schedule_data_fetches_a_custom_named_constraints_tab_automatically():
+    spreadsheet = FakeSpreadsheet(
+        {
+            DEFAULT_ACTIVITIES_WORKSHEET: FakeWorksheet(ACTIVITIES_ROWS),
+            DEFAULT_SESSIONS_WORKSHEET: FakeWorksheet(SESSIONS_ROWS),
+            DEFAULT_CAMPERS_WORKSHEET: FakeWorksheet(CAMPERS_ROWS),
+            "MyConstraints": FakeWorksheet(CONSTRAINTS_ROWS),
+        }
+    )
+    client = FakeClient(spreadsheet)
+
+    _, _, _, _, constraints = fetch_schedule_data(client, "abc123", constraints_worksheet="MyConstraints")
+
+    assert len(constraints) == 2
 
 
 def test_get_client_raises_a_clear_error_when_gspread_is_missing(monkeypatch):

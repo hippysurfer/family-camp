@@ -139,11 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Worksheet tab name for camper registrations (default: {DEFAULT_CAMPERS_WORKSHEET!r}).",
     )
     fetch_parser.add_argument(
-        "--constraints-worksheet", nargs="?", const=DEFAULT_CONSTRAINTS_WORKSHEET, default=None,
+        "--constraints-worksheet", default=DEFAULT_CONSTRAINTS_WORKSHEET,
         help=(
-            "Worksheet tab name for custom constraints (REQUIREMENTS.md "
-            f"§3.5) - optional, not fetched unless given; pass with no "
-            f"value to use the default ({DEFAULT_CONSTRAINTS_WORKSHEET!r})."
+            "Worksheet tab name for custom constraints (REQUIREMENTS.md §3.5, "
+            f"default: {DEFAULT_CONSTRAINTS_WORKSHEET!r}) - fetched automatically "
+            "whenever a tab with this name exists, whether or not this flag is "
+            "given; silently skipped (no error) if it doesn't."
         ),
     )
     fetch_parser.add_argument(

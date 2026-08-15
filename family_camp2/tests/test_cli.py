@@ -87,6 +87,28 @@ def test_fetch_passes_through_worksheet_overrides(monkeypatch, tmp_path):
     assert seen["args"] == ("abc123", "MyActs", "MySessions", "MyCampers", "MyConstraints")
 
 
+def test_fetch_defaults_constraints_worksheet_without_needing_the_flag(monkeypatch, tmp_path):
+    from family_camp2.io.google_sheets import DEFAULT_CONSTRAINTS_WORKSHEET
+
+    monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    seen = {}
+
+    def fake_fetch(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
+        seen["constraints_worksheet"] = constraints_worksheet
+        return _canned_fetch_data()
+
+    monkeypatch.setattr(cli, "fetch_schedule_data", fake_fetch)
+
+    cli.main(["fetch", "abc123", "--out-dir", str(tmp_path)])
+
+    # No --constraints-worksheet flag given, but the default name is still
+    # passed through - fetch_schedule_data decides whether it exists, the
+    # organiser doesn't need to ask for it explicitly.
+    assert seen["constraints_worksheet"] == DEFAULT_CONSTRAINTS_WORKSHEET
+
+
 def test_fetch_creates_out_dir_if_it_does_not_exist(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
     monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data())

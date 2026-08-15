@@ -725,6 +725,16 @@ rather than only through documentation.
   reproducibility stays available via an explicit --seed, but isn't
   forced on by default.]
 
+- **FR-120 (Automatic constraints-tab detection)**: `fetch` MUST fetch
+  the custom-constraints worksheet (§3.5/§4.10) whenever a tab named
+  `--constraints-worksheet` (default `DEFAULT_CONSTRAINTS_WORKSHEET`)
+  actually exists on the spreadsheet, regardless of whether that flag
+  was explicitly given — *superseding* FR-90-96's original "opt-in,
+  not implicit probe" design (the tab either exists or it doesn't; the
+  organiser shouldn't need to separately declare that it does). A
+  spreadsheet with no such tab MUST NOT error — silently yields no
+  constraint records, exactly as before.
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an

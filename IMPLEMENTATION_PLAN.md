@@ -2591,7 +2591,62 @@ compose correctly together, not just individually.
 
 ---
 
-## 10. After this plan
+## 10. Automatic constraints-tab detection (Step 58)
+
+### Context
+
+Implements REQUIREMENTS.md FR-120, superseding FR-90-96's original
+"opt-in, not implicit probe" design for the constraints worksheet
+(§3.5/§4.10). The user asked for `--constraints-worksheet` to fetch the
+tab whenever it's actually present, whether or not the flag is passed -
+removing the last remaining "you have to know to ask for this" corner
+of `fetch`, consistent with Step 57's "every option has a sensible
+default" pass just before it.
+
+### Step list
+
+### - [x] Step 58: Probe for the constraints tab instead of requiring opt-in (FR-120)
+
+**Goal**: presence, not an explicit flag, decides whether the
+constraints tab gets fetched.
+
+**Change** `io/google_sheets.py`: new `_worksheet_titles(spreadsheet) ->
+set[str]` (via `spreadsheet.worksheets()`, the same interface real
+`gspread.Spreadsheet` and the test double both already exposed).
+`fetch_schedule_data`'s `constraints_worksheet` parameter default
+changes from `None` (don't fetch) to `DEFAULT_CONSTRAINTS_WORKSHEET`
+(probe for it); the fetch itself is now gated on
+`constraints_worksheet in _worksheet_titles(spreadsheet)` rather than
+just `constraints_worksheet is not None` - `None` is kept as an explicit
+"don't even look" escape hatch for programmatic callers, just no longer
+reachable from the CLI.
+
+**Change** `cli.py`: `--constraints-worksheet`'s `nargs="?"`/`const=...`
+special-casing (needed when "omitted" and "given with no value" meant
+different things) is no longer needed now that both cases mean the same
+thing - simplified to a plain `default=DEFAULT_CONSTRAINTS_WORKSHEET`.
+
+**Tests**: `test_google_sheets.py`'s `FakeSpreadsheet` gains a
+`worksheets()` method (returning lightweight `_FakeWorksheetHandle`
+objects exposing just `.title`, mirroring real `gspread.Worksheet`'s
+relevant surface). `test_fetch_schedule_data_does_not_touch_the_constraints_tab_by_default`
+(premise now inverted) replaced with
+`test_fetch_schedule_data_does_not_touch_a_constraints_tab_that_does_not_exist`
+(same assertion, accurate reasoning) plus three new cases: fetched
+automatically when present under the default name, fetched
+automatically under a custom name, and explicitly skipped via
+`constraints_worksheet=None`. `test_cli.py` gains
+`test_fetch_defaults_constraints_worksheet_without_needing_the_flag`,
+confirming the CLI itself passes the default name through even when the
+flag is never given.
+
+**Deviation found during implementation**: none.
+
+**Commit message**: `family_camp2 step 58: fetch the constraints worksheet automatically when present (FR-120)`
+
+---
+
+## 11. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:

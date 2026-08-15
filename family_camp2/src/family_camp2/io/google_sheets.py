@@ -315,13 +315,17 @@ def _parse_constraints(rows: list[list[str]]) -> list[dict]:
     return records
 
 
+def _worksheet_titles(spreadsheet) -> set[str]:
+    return {ws.title for ws in spreadsheet.worksheets()}
+
+
 def fetch_schedule_data(
     client: GoogleSheetsClient,
     sheet_id_or_url: str,
     activities_worksheet: str = DEFAULT_ACTIVITIES_WORKSHEET,
     sessions_worksheet: str = DEFAULT_SESSIONS_WORKSHEET,
     campers_worksheet: str = DEFAULT_CAMPERS_WORKSHEET,
-    constraints_worksheet: str | None = None,
+    constraints_worksheet: str | None = DEFAULT_CONSTRAINTS_WORKSHEET,
 ) -> tuple[str, list[Activity], list[Session], list[Camper], list[dict]]:
     """Fetch the schedule worksheets from an already-open spreadsheet and
     parse them into domain objects.
@@ -330,16 +334,19 @@ def fetch_schedule_data(
     the OAuth dance and the fetch-and-parse logic can be tested
     independently - this function itself needs no real network access if
     ``client`` is a test double exposing the same
-    open_by_key/open_by_url/worksheet/get_all_values/title interface as
-    ``gspread.Client``/``gspread.Spreadsheet``.
+    open_by_key/open_by_url/worksheet/worksheets/get_all_values/title
+    interface as ``gspread.Client``/``gspread.Spreadsheet``.
 
-    ``constraints_worksheet`` defaults to ``None`` - unlike the other three
-    tabs, the constraints tab (§3.5) is an optional addition most existing
-    spreadsheets won't have, so it's only fetched when a name is explicitly
-    given (e.g. via ``--constraints-worksheet``, which itself defaults to
-    ``DEFAULT_CONSTRAINTS_WORKSHEET`` - an explicit opt-in, not an implicit
-    probe that would otherwise need to silently swallow a "tab not found"
-    error from whatever the client library raises).
+    Unlike the other three (required) tabs, the constraints tab (§3.5) is
+    an optional addition many spreadsheets won't have, so it's fetched
+    only when actually present: ``constraints_worksheet`` (a name to look
+    for, defaulting to ``DEFAULT_CONSTRAINTS_WORKSHEET``) is checked
+    against ``spreadsheet.worksheets()`` first, and silently skipped
+    (empty ``constraint_records``, no error) if no tab with that name
+    exists - the organiser doesn't need to say "yes, fetch it" any more
+    than they say that for a properly-populated Extra/Priority column;
+    the tab either exists or it doesn't. Pass ``constraints_worksheet=None``
+    to skip looking for it entirely.
 
     The returned ``title`` (the spreadsheet's own name, e.g. "Willesley
     2026") is what ``cli.py``'s ``fetch`` subcommand stores as the
@@ -366,7 +373,7 @@ def fetch_schedule_data(
         )
 
     constraint_records: list[dict] = []
-    if constraints_worksheet is not None:
+    if constraints_worksheet is not None and constraints_worksheet in _worksheet_titles(spreadsheet):
         constraint_rows = spreadsheet.worksheet(constraints_worksheet).get_all_values()
         constraint_records = _parse_constraints(constraint_rows)
 

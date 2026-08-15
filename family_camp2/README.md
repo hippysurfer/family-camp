@@ -395,10 +395,12 @@ if you hit its rate limits), and `--authorized-user PATH` to control where
 the cached token is stored. If your spreadsheet uses different tab names,
 override them with `--activities-worksheet`/`--sessions-worksheet`/`--campers-worksheet`.
 
-[Custom constraints](#custom-constraints) live on a fourth, optional tab.
-Unlike the other three, it's not fetched unless you ask for it —
-`--constraints-worksheet` with no value uses the default tab name
-("Constraints for schedule"); give it a value to use a different tab name.
+[Custom constraints](#custom-constraints) live on a fourth, optional tab
+("Constraints for schedule") - fetched automatically whenever a tab with
+that name exists, with no flag needed; if your spreadsheet uses a
+different name for it, override with `--constraints-worksheet`. A
+spreadsheet with no such tab at all is fine too - it's silently skipped,
+not an error.
 
 Fetching a different camp into the same `--out-dir` overwrites
 `camp.json` - only one camp's data is cached per `--out-dir` at a time;

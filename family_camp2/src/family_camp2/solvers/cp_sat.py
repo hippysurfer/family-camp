@@ -186,6 +186,7 @@ class Class2Vars:
     family_split: list[cp_model.IntVar] = field(default_factory=list)
     under_minimum: list[cp_model.IntVar] = field(default_factory=list)
     unmet_compulsory: list[cp_model.IntVar] = field(default_factory=list)
+    custom_constraint: list[cp_model.IntVar] = field(default_factory=list)
 
 
 def _reify_at_least_one(model: cp_model.CpModel, member_vars: list[cp_model.IntVar], name: str) -> cp_model.IntVar:
@@ -291,11 +292,24 @@ def add_class2_indicators(
     campers: list[Camper],
     sessions: list[Session],
     compulsory: frozenset[Activity] = frozenset(),
+    constraints: list[ConstraintInstance] = (),
 ) -> Class2Vars:
     result = Class2Vars()
     campers_by_family: dict[str, list[Camper]] = defaultdict(list)
     for c in campers:
         campers_by_family[c.family_id].append(c)
+
+    # FR-95: soft custom constraints. The assignment variable itself is
+    # already 1 exactly when the camper is in the forbidden session, so it
+    # serves as its own violation indicator - no new reified BoolVar needed,
+    # mirroring validation.custom_constraints.find_custom_constraint_violations.
+    for instance in constraints:
+        if instance.severity != "soft":
+            continue
+        for camper in instance.targets:
+            for session in var_index.by_camper.get(camper, ()):
+                if instance.rule.forbids(camper, session, sessions):
+                    result.custom_constraint.append(var_index.by_pair[(camper, session)])
 
     # FR-13: missing priorities.
     for c in campers:
@@ -425,7 +439,8 @@ def tier0_expr(class2_vars: Class2Vars, weights: Tier0Weights = Tier0Weights()):
     indicators, mirroring validation.class2.score_tier0 exactly so the
     solver's own objective and the independent validator agree."""
     return (
-        sum(class2_vars.missing_priority) * weights.missing_priority
+        sum(class2_vars.custom_constraint) * weights.custom_constraint
+        + sum(class2_vars.missing_priority) * weights.missing_priority
         + (sum(class2_vars.family_conflict) + sum(class2_vars.unsupervised_split)) * weights.family_safety
         + sum(class2_vars.family_split) * weights.family_split
         + sum(class2_vars.under_minimum) * weights.under_minimum
@@ -756,7 +771,7 @@ class CpSatSolver:
     ) -> SolveResult:
         model, var_index = build_model(activities, sessions, campers, config.constraints)
         compulsory = frozenset(a for a in activities if a.name in config.compulsory_activities)
-        class2_vars = add_class2_indicators(model, var_index, campers, sessions, compulsory)
+        class2_vars = add_class2_indicators(model, var_index, campers, sessions, compulsory, config.constraints)
 
         t0 = tier0_expr(class2_vars, config.tier0_weights)
         t1 = tier1_expr(var_index, campers)
@@ -788,7 +803,10 @@ class CpSatSolver:
             phase3_status = "SKIPPED (found no solution in time; used Phase 2's result instead)"
 
         timetable = extract_timetable(final_solver, var_index)
-        report = validate(timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory)
+        report = validate(
+            timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory,
+            constraints=config.constraints,
+        )
 
         diagnostics = {
             "solver": "cp_sat",

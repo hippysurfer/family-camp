@@ -15,7 +15,9 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.domain import Activity, Camper, Session, Timetable, sessions_overlap
+from family_camp2.validation.custom_constraints import CustomConstraintViolation, find_custom_constraint_violations
 
 __all__ = [
     "MissingPriority",
@@ -94,6 +96,13 @@ class Class2Report:
     # something that's ever wrong to have happened - so it's deliberately
     # excluded from is_clean below, even though score_tier0 penalises it.
     family_splits: list[FamilySplitOccurrence] = field(default_factory=list)
+    # FR-95: soft custom-constraint violations (REQUIREMENTS.md §4.10).
+    # Excluded from is_clean for the same reason family_splits is: the
+    # organiser explicitly marked these "soft" (best-effort), so failing
+    # to honour one shouldn't flip Feasible to False - it's still scored
+    # via score_tier0, and at a higher severity than missing_priority
+    # (OQ-21).
+    custom_constraint_violations: list[CustomConstraintViolation] = field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
@@ -108,27 +117,51 @@ class Class2Report:
 
 @dataclass(frozen=True)
 class Tier0Weights:
-    """Severity ordering, most severe first: priority > family safety
-    (time conflicts / poorly supervised splits) > family split occurrence
-    (FR-24 - avoided as a last resort, even when properly supervised) >
-    min occupancy > compulsory.
+    """Severity ordering, most severe first: **custom constraint**
+    (FR-95/OQ-21 - an organiser-authored soft constraint outranks even a
+    missing priority) > priority > family safety (time conflicts /
+    poorly supervised splits) > family split occurrence (FR-24 - avoided
+    as a last resort, even when properly supervised) > min occupancy >
+    compulsory.
 
     The ratios between these defaults are chosen to be large (1,000x)
     relative to the scale in REQUIREMENTS.md NFR-1 (upper bound: 500
     campers), so that no plausible number of lower-severity violations can
     numerically outweigh a single higher-severity one in the weighted sum -
     this is what makes ``score_tier0`` behave as a severity ranking rather
-    than an arbitrary trade-off. ``missing_priority`` is deliberately kept
-    at the same absolute value this had before FR-24 introduced the
-    ``family_split`` band (rather than scaling every band up to preserve a
-    bigger 10,000x ratio): CP-SAT's own solver rejects a model as
-    MODEL_INVALID once the objective's coefficients get large enough to
-    risk integer overflow internally, which a 10,000x ratio across five
-    bands at real-camp scale (~283 campers) actually triggered - 1,000x
-    is comfortably clear of both that ceiling and NFR-1's 500-camper
-    floor. Configurable per NFR-4.
+    than an arbitrary trade-off.
+
+    ``missing_priority`` through ``compulsory`` are unchanged from before
+    ``custom_constraint`` was added - proven safe against real ~283-camper
+    data across several earlier phases. ``custom_constraint`` was added
+    as one further 1,000x step *above* that existing, unchanged scale,
+    not by scaling every band up to preserve a bigger ratio at the *same*
+    top value: Step 34 found that CP-SAT rejects a model as MODEL_INVALID
+    once the objective's coefficients get large enough to risk integer
+    overflow internally, so moving ``missing_priority`` itself upward to
+    make room for a new band above it (rather than leaving it alone and
+    only extending the ceiling) is exactly the mistake that triggered
+    that failure previously.
+
+    Re-verified against the same real ~283-camper data (IMPLEMENTATION_PLAN.md
+    Step 45) with a realistic set of custom constraints - several separate
+    soft rules, each targeting a single camper or a small family, matching
+    the FR-90 per-camper/family use case - which stays well clear of
+    MODEL_INVALID. Unlike the other five bands, ``custom_constraint``'s
+    term count is *not* intrinsically bounded to a small number by the camp's
+    structure (one term per family/activity pair, one per session, etc.) -
+    it is one term per (camper, session) pair that some soft constraint
+    forbids, so a single constraint row that broadly targets most of the
+    camp with a rule matching most sessions can in principle still push the
+    objective towards overflow (empirically, above roughly 9,000 such terms
+    against this data). This is considered out of scope for the per-camper/
+    per-family constraints this feature is designed for (FR-90); a rule
+    intended to apply camp-wide belongs in the core scheduling model (e.g.
+    ``Activity.min_age``, compulsory activities), not this extension point.
+    Configurable per NFR-4.
     """
 
+    custom_constraint: int = 10**15
     missing_priority: int = 10**12
     family_safety: int = 10**9
     family_split: int = 10**6
@@ -283,6 +316,8 @@ def check_class2(
     timetable: Timetable,
     campers: list[Camper],
     compulsory: frozenset[Activity] = frozenset(),
+    sessions: list[Session] = (),
+    constraints: list[ConstraintInstance] = (),
 ) -> Class2Report:
     return Class2Report(
         missing_priorities=find_missing_priorities(timetable, campers),
@@ -291,12 +326,14 @@ def check_class2(
         under_minimum_sessions=find_under_minimum_sessions(timetable),
         unmet_compulsory=find_unmet_compulsory_activities(timetable, campers, compulsory),
         family_splits=find_family_splits(timetable),
+        custom_constraint_violations=find_custom_constraint_violations(timetable, sessions, constraints),
     )
 
 
 def score_tier0(report: Class2Report, weights: Tier0Weights = Tier0Weights()) -> int:
     return (
-        len(report.missing_priorities) * weights.missing_priority
+        len(report.custom_constraint_violations) * weights.custom_constraint
+        + len(report.missing_priorities) * weights.missing_priority
         + (len(report.family_time_conflicts) + len(report.unsupervised_splits)) * weights.family_safety
         + len(report.family_splits) * weights.family_split
         + len(report.under_minimum_sessions) * weights.under_minimum

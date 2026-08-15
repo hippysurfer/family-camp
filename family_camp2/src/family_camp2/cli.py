@@ -249,7 +249,14 @@ def _run_revalidate(args: argparse.Namespace) -> int:
         timetable = load_schedule_csv(args.schedule, activities, sessions, campers)
 
     compulsory = frozenset(a for a in activities if a.name in config.compulsory_activities)
-    report = validate(timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory)
+    report = validate(
+        timetable,
+        campers,
+        sessions,
+        tier0_weights=config.tier0_weights,
+        compulsory=compulsory,
+        constraints=config.constraints,
+    )
 
     print(render_text(report))
     _write_outputs(timetable, report, campers, sessions, args)

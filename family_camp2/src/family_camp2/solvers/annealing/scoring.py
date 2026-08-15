@@ -38,7 +38,7 @@ def score(
     as "better" alongside the others - then tier2)."""
 
     timetable = state.to_timetable()
-    class2_report = check_class2(timetable, campers, compulsory)
+    class2_report = check_class2(timetable, campers, compulsory, sessions, state.constraints)
     return (
         score_tier0(class2_report, tier0_weights),
         -score_tier1(timetable, campers),

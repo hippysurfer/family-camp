@@ -373,7 +373,10 @@ class AnnealingSolver:
         )
 
         timetable = best_state.to_timetable()
-        report = validate(timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory)
+        report = validate(
+            timetable, campers, sessions, tier0_weights=config.tier0_weights, compulsory=compulsory,
+            constraints=config.constraints,
+        )
 
         diagnostics = {
             "solver": "annealing",

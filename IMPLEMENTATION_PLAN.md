@@ -1765,7 +1765,7 @@ and the plumbing down to it (`_run_single_chain_from_seed`,
 
 ---
 
-### - [ ] Step 45: Soft-constraint scoring (FR-95)
+### - [x] Step 45: Soft-constraint scoring (FR-95)
 
 **Goal**: A soft constraint is penalised, not enforced - the same
 demand-driven, best-effort treatment Class 2 already gives
@@ -1802,6 +1802,43 @@ verified small instance (mirroring `test_cp_sat_family_split.py`'s
 pattern); annealing's best-found score reflects a soft violation too.
 
 **Commit message**: `family_camp2 step 45: soft custom-constraint scoring (FR-95)`
+
+**Deviation found during implementation**: `find_custom_constraint_violations`
+landed in its own module (`validation/custom_constraints.py`) rather than
+folded into `class2.py`, matching how `custom_constraints.py`/`class1.py`
+are already separate modules from `class2.py` - `class2.py` just imports
+and uses it. The CP-SAT soft indicator needed no new reified `BoolVar`:
+the assignment variable itself is already 1 exactly when the camper is in
+the forbidden session, so `add_class2_indicators` appends the existing
+`var_index.by_pair[(camper, session)]` variable directly to
+`Class2Vars.custom_constraint` for each soft-forbidden pair - cheaper than
+the reification pattern used for e.g. `family_conflict`/`unsupervised_split`,
+and it still keeps CP-SAT's objective and the independent validator's
+`score_tier0` in exact agreement (verified in
+`tests/test_custom_constraints_soft.py`).
+
+Empirically re-verified the new `Tier0Weights.custom_constraint = 10**15`
+value against real ~283-camper Willesley 2026 data (`model.Validate()`,
+mirroring Step 34's methodology) with a *realistic* set of soft
+constraints - 15 separate rows, each targeting a single camper or a small
+family (2-4 members), matching the FR-90 per-camper/family motivating
+examples: clear of `MODEL_INVALID` (541 violation-eligible terms, nowhere
+near the failure threshold). However, an adversarial stress test (one rule
+blanket-targeting *all* 283 campers with a broadly-matching condition,
+12,973 terms) **did** overflow. Unlike the other five bands,
+`custom_constraint`'s term count has no small intrinsic bound from the
+camp's structure the way e.g. `family_split` (bounded by family×activity
+pairs) or `under_minimum` (bounded by session count) do - it's one term
+per (camper, session) pair any soft rule forbids, so a single row that
+targets most of the camp with a broadly-matching rule can still risk
+overflow (empirically, above roughly 9,000 such terms against this data).
+Judged out of scope to defend against: FR-90 scopes this feature to
+per-camper/per-family constraints, not camp-wide bulk rules (which belong
+in the core model - `Activity.min_age`, compulsory activities, etc.) -
+documented as a known boundary in `Tier0Weights`'s docstring rather than
+silently claimed safe. No code changes made to guard against it; revisit
+if a real use case ever needs a custom constraint to target most of the
+camp at once.
 
 ---
 

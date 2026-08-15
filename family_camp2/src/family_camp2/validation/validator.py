@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.validation.class1 import check_class1
 from family_camp2.validation.class2 import Tier0Weights, check_class2, score_tier0
@@ -25,9 +26,10 @@ def validate(
     tier0_weights: Tier0Weights = Tier0Weights(),
     compulsory: frozenset[Activity] = frozenset(),
     idle_granularity: timedelta = timedelta(hours=1),
+    constraints: list[ConstraintInstance] = (),
 ) -> ValidationReport:
     class1 = check_class1(timetable)
-    class2 = check_class2(timetable, campers, compulsory)
+    class2 = check_class2(timetable, campers, compulsory, sessions, constraints)
 
     return ValidationReport(
         class1=class1,

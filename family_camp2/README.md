@@ -7,16 +7,14 @@ validating any timetable against the rules that define a correct schedule.
 This is *not* a full replacement for the rest of the `family_camp`
 package: this package has its own PDF reports (`pdf_reports.py`, below)
 and its own hand-editing/re-validation workflow (`revalidate`, below),
-but the old package's other tooling (packs, the booking-site automation)
-is untouched. It does include its own way to fetch input data from
-Google Sheets (the `fetch` subcommand, below) — independent of the old
-`family_camp/schedule/fetch_data.py`, and producing this package's own
-JSON format rather than a pickle cache. See:
+but the rest of the old package (packs, the booking-site automation) is
+untouched. It fetches its own input data from Google Sheets (the `fetch`
+subcommand, below), producing its own JSON format rather than a pickle
+cache. See:
 
-- [`../DESIGN.md`](../DESIGN.md) — review of the original GA-based scheduler.
-- [`../REQUIREMENTS.md`](../REQUIREMENTS.md) — solver-agnostic requirements this rewrite implements (`FR-n`/`NFR-n`/`OQ-n` referenced throughout this codebase).
-- [`../DESIGN_OPTIONS.md`](../DESIGN_OPTIONS.md) — the two solver designs (CP-SAT and simulated annealing) implemented here, and why both were built.
-- [`../IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md) — the step-by-step plan this package was built from.
+- [`../REQUIREMENTS.md`](../REQUIREMENTS.md) — solver-agnostic requirements this engine implements (`FR-n`/`NFR-n` referenced throughout this codebase).
+- [`../DESIGN_OPTIONS.md`](../DESIGN_OPTIONS.md) — the two solver architectures (CP-SAT and simulated annealing) implemented here.
+- [`../DESIGN.md`](../DESIGN.md) — a review of the original GA-based scheduler this engine replaces.
 
 ## Install and test
 
@@ -105,12 +103,7 @@ only flags: `--solver {cp_sat,annealing}` (default `cp_sat`),
 
 ## Progress reporting and report generation
 
-Implements REQUIREMENTS.md §4.6/§4.7 (FR-60–75) - reverse-engineered from
-the old system's per-generation progress printing and its
-Hall-of-Fame/`check_schedule.py` reports, plus direct experience running a
-real multi-hour CP-SAT job with none of this and no way to see what was
-happening (see DESIGN_OPTIONS.md-adjacent history in
-IMPLEMENTATION_PLAN.md §3).
+Implements REQUIREMENTS.md §4.6/§4.7 (FR-60–75).
 
 **Progress** (`--progress-output`, `--progress-interval`): on by default -
 there's no separate on/off flag, redirect to a file (or `/dev/null`) to
@@ -139,9 +132,9 @@ assigned to what, distinct from `report.json`'s scoring/violation report
 - `activity_roster.txt` - each session's assigned campers, with occupancy
   against the activity's limit.
 - `idle_report.txt` - per time-bucket, which whole families have nobody
-  scheduled and which adults specifically are idle (two distinct views,
-  matching the old system - a family with nobody scheduled is a different
-  signal from "this specific adult happens to be free to help").
+  scheduled and which adults specifically are idle, as two distinct views
+  - a family with nobody scheduled is a different signal from "this
+  specific adult happens to be free to help".
 - `unmet_optional_report.txt` (FR-76) - optional (non-priority) activity
   requests that weren't met in the generated timetable, grouped by
   activity - the per-request breakdown behind the aggregate Tier 1 score.
@@ -160,32 +153,24 @@ assigned to what, distinct from `report.json`'s scoring/violation report
   "not enough time" as the reason an optional request went unmet.
 
 Not implemented: exporting more than one candidate schedule when a solver
-has several (e.g. annealing's other restart chains) - REQUIREMENTS.md
-FR-75 is a *should*, and OQ-12 confirmed a single best answer is
-sufficient for this rewrite.
+has several (e.g. annealing's other restart chains) - a single best
+answer is sufficient (FR-75).
 
 **PDF reports**: writes `activities.pdf`, `campers.pdf`,
-`available_adults.pdf`, and `available_families.pdf` -
-FR-80/81/82/84/85, added at the user's request after reviewing the old
-system's PDF output. Each is written in **both** paper size/orientation
-combinations unconditionally (`_a4_portrait.pdf` and `_a3_landscape.pdf`
-suffixes, e.g. `activities_a4_portrait.pdf` / `activities_a3_landscape.pdf`)
-rather than the organiser picking one at a time - matches how
-`fetched_data/pdfs/` was already being produced by hand (a compact
-portrait copy plus a larger landscape one) before this was automated.
-Uses `reportlab` (a pure-Python PDF library, no external binaries/
-subprocesses) - a core dependency, installed automatically alongside
-`family_camp2` itself, since these and the status report below (§4.11)
-are both generated unconditionally on every run.
+`available_adults.pdf`, and `available_families.pdf` (FR-80/81/82/84/85).
+Each is written in **both** paper size/orientation combinations
+unconditionally (`_a4_portrait.pdf` and `_a3_landscape.pdf` suffixes,
+e.g. `activities_a4_portrait.pdf` / `activities_a3_landscape.pdf`)
+rather than the organiser picking one at a time. Uses `reportlab` (a
+pure-Python PDF library, no external binaries/subprocesses) - a core
+dependency, installed automatically alongside `family_camp2` itself.
 
-Deliberately not a port of the old layout - see
-`family_camp2.pdf_reports`'s module docstring for the two changes that
-make these documents dramatically shorter for the same camp (41 pages of
-activity roster at A4 down to 6): a session's attendees are one wrapped
-table cell, not one line per camper; and nothing is force-broken onto a
-new page, so short entries pack into the adaptive multi-column layout
-(more/fewer columns depending on paper size and orientation) instead of
-each claiming a page. `campers.pdf` also uses a different shape entirely:
+See `family_camp2.pdf_reports`'s module docstring for the layout choices
+that keep these documents compact (a session's attendees are one wrapped
+table cell, not one line per camper; nothing is force-broken onto a new
+page, so short entries pack into an adaptive multi-column layout,
+more/fewer columns depending on paper size and orientation). `campers.pdf`
+uses a different shape entirely:
 one small attendance-matrix table per family (rows = sessions, columns =
 members, an "X" marks who's where) rather than one row per
 (member, session) pair, falling back to a compact list when a family has
@@ -282,13 +267,11 @@ throughout `validation/`.
 
 ## Manual editing and re-validation
 
-Implements REQUIREMENTS.md §4.9 (FR-86-89) - partially reopens §1.2's
-"manual editing workflow" exclusion, at the user's explicit request. The
-scope is narrow and specifically *not* an interactive editor: take the
-`schedule.csv`/`schedule.json` a `solve` run already wrote into its
-output folder, hand-edit the CSV (or JSON) in a spreadsheet, and get it
-back through the exact same validation and reporting `solve` would have
-run, without re-running a solver.
+Implements REQUIREMENTS.md §4.9 (FR-86-89). Not an interactive editor:
+take the `schedule.csv`/`schedule.json` a `solve` run already wrote into
+its output folder, hand-edit the CSV (or JSON) in a spreadsheet, and get
+it back through the exact same validation and reporting `solve` would
+have run, without re-running a solver.
 
 ```sh
 python -m family_camp2 solve --data data.json
@@ -297,14 +280,13 @@ python -m family_camp2 solve --data data.json
 python -m family_camp2 revalidate --data data.json fetched_data/data_20260815_130300/schedule.csv
 ```
 
-`schedule` (positional, required - no sensible default) is dispatched to `io.schedule_export.load_schedule_csv`/
-`load_schedule_json` by its extension (OQ-14 - the existing FR-70/71
-export format is reused as-is, not a new edit-oriented layout: every
-edit is just adding, removing, or changing a row). A row that doesn't
-resolve to a known camper/session (most likely a typo) raises - and
-(OQ-16) *every* bad row is collected and reported together, not just the
-first, since a hand-editing session is likely to contain more than one
-mistake.
+`schedule` (positional, required - no sensible default) is dispatched to
+`io.schedule_export.load_schedule_csv`/`load_schedule_json` by its
+extension - the FR-70/71 export format is reused as-is: every edit is
+just adding, removing, or changing a row. A row that doesn't resolve to
+a known camper/session (most likely a typo) raises - every bad row is
+collected and reported together, not just the first, since a
+hand-editing session is likely to contain more than one mistake.
 
 Unlike a solver's own output, a hand-edited schedule can genuinely fail
 Class 1 (structural) checks - double-booking, capacity overflow, a
@@ -318,7 +300,7 @@ section exactly like any other violation would.
 own fresh output folder (`--out-dir`, same as `solve` - FR-89), so a
 revalidated schedule can itself be re-exported and edited again for a
 second round. Not built: a diff summary against the schedule being
-edited (OQ-17 - deferred).
+edited.
 
 ## Input data
 
@@ -361,9 +343,9 @@ without needing any new data-fetch work.
 
 ### Fetching data from Google Sheets (`fetch`)
 
-`family_camp2 fetch` downloads the same three worksheets the old system
-reads ("Activities for schedule", "Sessions for schedule", "Activities")
-and saves them straight into this package's own JSON format, as
+`family_camp2 fetch` downloads three worksheets ("Activities for
+schedule", "Sessions for schedule", "Activities" - overridable, see
+below) and saves them straight into this package's own JSON format, as
 `<out-dir>/camp.json` - the fixed filename `solve`/`revalidate`
 auto-discover (see "CLI usage" above), so there's normally no `--data`
 flag to pass at all. `--out-dir` defaults to `./fetched_data`, the same
@@ -417,9 +399,9 @@ Optional JSON file overriding `EngineConfig` (see `family_camp2.config`):
 `tier0_weights` (severity weights for the demand-driven Class 2 rules —
 `custom_constraint`, `missing_priority`, `family_safety`, `family_split`,
 `under_minimum`, `compulsory`, most severe first), `objective_order` (must
-be a permutation of `["tier0", "tier1", "tier2"]` — the OQ-4 ranking
-mechanism), and `compulsory_activities` (activity names everyone must
-attend, empty by default per OQ-5).
+be a permutation of `["tier0", "tier1", "tier2"]` — the lexicographic
+ranking mechanism, FR-20-22), and `compulsory_activities` (activity names
+everyone must attend, empty by default).
 
 `constraints` (the per-camper/family rules below) is deliberately **not**
 one of these fields — it comes from `--data`/`--legacy-cache` alongside
@@ -508,8 +490,7 @@ A" — are built in. Rules that depend on a camper's *other* assignments
 (e.g. "no more than 2 activities per day", "must always be with camper
 X") are "Tier B": the same registry/parser architecture accommodates them,
 but each needs bespoke validator (and, if hard, solver) logic, and none
-are implemented yet — an acknowledged extension point, not part of this
-phase (REQUIREMENTS.md OQ-22).
+are implemented yet — an acknowledged extension point.
 
 ## Architecture
 
@@ -520,7 +501,7 @@ config.py            EngineConfig (NFR-4)
 progress.py          ProgressEvent/ProgressReporter/PeriodicHeartbeat (FR-60/61, NFR-9)
 reporting.py         per-family/per-activity/idle/unmet-optional/overdemand text reports, from a Timetable (FR-72/73/74/76/77)
 pdf_reports.py       activities.pdf / campers.pdf / available_adults.pdf / available_families.pdf (FR-80/81/82/83/84/85)
-status_report.py      the unconditionally-generated schedule status report (FR-97-109, §4.11)
+status_report.py     the unconditionally-generated schedule status report (FR-97-109, §4.11)
 io/                  JSON loader/writer, legacy-cache loader, Google Sheets fetch (OAuth), schedule CSV/JSON export (FR-70/71)
 solvers/
   base.py            the Solver protocol every design implements

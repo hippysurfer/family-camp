@@ -2010,7 +2010,7 @@ pulls in core dependencies transitively). Full suite green.
 
 ---
 
-### - [ ] Step 49: Front matter + camp activity information (FR-100/101)
+### - [x] Step 49: Front matter + camp activity information (FR-100/101)
 
 **Goal**: the first two report sections - the ones needing no
 `ValidationReport`/solver output at all, only `activities`/`sessions`/
@@ -2056,6 +2056,22 @@ this step's render functions are exercised by directly building a
 yet.
 
 **Commit message**: `family_camp2 step 49: status report front matter and camp activity info (FR-100/101)`
+
+**Deviation found during implementation**: the 2-day graphical timetable
+is a Gantt-style grid - one activity per row (shared vertically across
+both day panels, so the same activity lines up between days), two
+side-by-side day panels sharing one time-of-day scale computed from the
+actual min/max session times in the data (not a fixed 0-24h axis), each
+session drawn as a `Rect` positioned/sized from its `DayBlock`'s minute
+offset/duration. This is more concrete than the plan's "a Drawing with a
+day-column per distinct date, a time axis, and a rectangle per session"
+sketch, decided during implementation since the sketch left the exact
+layout open. Styling (`_styles`, `_table_style`, header/muted/grid
+colours) is imported directly from `pdf_reports.py` rather than
+duplicated, for visual consistency across every PDF this engine
+produces - the same private-helper cross-module import pattern already
+used by `io/google_sheets.py`'s import of
+`legacy_cache_loader._parse_duration`.
 
 ---
 

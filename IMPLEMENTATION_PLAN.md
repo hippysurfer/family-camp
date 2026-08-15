@@ -2196,7 +2196,7 @@ genuinely overdemanding family (reusing a fixture shape similar to
 
 ---
 
-### - [ ] Step 53: Solver information + document assembly (FR-106)
+### - [x] Step 53: Solver information + document assembly (FR-106)
 
 **Goal**: the fifth section, and wiring every prior step's pieces into
 one actual PDF via `render_status_report_pdf`.
@@ -2241,6 +2241,22 @@ genuine-2-day and a non-2-day session fixture (exercises Step 49's
 fallback path end-to-end).
 
 **Commit message**: `family_camp2 step 53: solver information section and document assembly (FR-106)`
+
+**Deviation found during implementation**: solve-duration capture was
+deferred to Step 54 rather than done here alongside `solvers/base.py`/
+`cli.py` as originally sketched - `status_report.py` doesn't need
+`cli.py` touched to build/test `render_status_report_pdf` (it accepts an
+already-built `SolverInfo`), and landing a `time.monotonic()` wrapper in
+`cli.py` with nothing yet consuming the duration would have been dead
+code until Step 54 wires it in. No change to `solvers/base.py` turned
+out to be needed at all - `SolveResult.diagnostics` already exists as a
+generic dict and `SolverInfo` is a separate dataclass built by the
+caller (`cli.py`, in Step 54), not derived from `SolveResult` directly.
+Visually spot-checked the assembled document (`pdftoppm` rendering,
+same QA approach as Step 35) against `tests/fixtures/small_camp.json`
+run through the real `CpSatSolver` - all five sections present, correctly
+stacked/coloured charts, a real two-day Gantt timetable, no overlap or
+cut-off text.
 
 ---
 

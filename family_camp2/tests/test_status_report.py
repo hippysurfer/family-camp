@@ -1,17 +1,23 @@
 from datetime import datetime, timedelta
 
+from family_camp2.config import EngineConfig
+from family_camp2.constraints.base import ConstraintInstance
+from family_camp2.constraints.rules import NoActivityBefore
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable
 from family_camp2.status_report import (
     ActivityTableRow,
     CamperLoadingRow,
+    CustomConstraintSummary,
     DayBlock,
     FamilyLoadingRow,
     FrontMatterSummary,
     SessionLoadingRow,
+    SolverInfo,
     _activity_table_rows,
     _activity_timetable_blocks,
     _camp_date_range,
     _camper_loading_rows,
+    _custom_constraint_summary,
     _distinct_camp_days,
     _family_loading_rows,
     _front_matter_summary,
@@ -24,12 +30,16 @@ from family_camp2.status_report import (
     _render_front_matter,
     _render_overdemand_callout,
     _render_session_loading_charts,
+    _render_solver_info,
     _session_loading_rows,
     _session_loading_stats,
+    render_status_report_pdf,
 )
 from family_camp2.validation.class2 import Class2Report, MissingPriority, UnderMinimumSession
+from family_camp2.validation.custom_constraints import CustomConstraintViolation
 from family_camp2.validation.feasibility import FamilyOverdemand
 from family_camp2.validation.tiers import UnmetOptionalRequest
+from family_camp2.validation.validator import validate
 
 DAY1 = datetime(2026, 8, 1, 9, 0)
 DAY2 = datetime(2026, 8, 2, 9, 0)
@@ -390,3 +400,111 @@ def test_render_overdemand_callout_returns_a_table_with_a_row_per_family():
 
     assert table is not None
     assert len(table._cellvalues) == 3  # header + 2 families
+
+
+# --- solver information + document assembly (FR-106) ---
+
+
+def test_custom_constraint_summary_counts_hard_soft_and_violated():
+    archery = activity("Archery")
+    emma = camper("Emma", priorities=(archery,))
+    hard = ConstraintInstance(targets=(emma,), rule=NoActivityBefore(time="11:00"), severity="hard")
+    soft_violated = ConstraintInstance(targets=(emma,), rule=NoActivityBefore(time="12:00"), severity="soft")
+    soft_clean = ConstraintInstance(targets=(emma,), rule=NoActivityBefore(time="08:00"), severity="soft")
+    config = EngineConfig(constraints=(hard, soft_violated, soft_clean))
+    class2_report = Class2Report(
+        custom_constraint_violations=[
+            CustomConstraintViolation(camper=emma, session=session(archery, "A", DAY1), constraint=soft_violated)
+        ]
+    )
+
+    summary = _custom_constraint_summary(config, class2_report)
+
+    assert summary.hard_count == 1
+    assert summary.soft_count == 2
+    assert summary.soft_violated_count == 1
+
+
+def test_render_solver_info_states_na_when_no_solver_was_run():
+    report = validate(Timetable(), [], [])
+    solver_info = SolverInfo()
+    summary = CustomConstraintSummary(hard_count=0, soft_count=0, soft_violated_count=0)
+
+    flowables = _render_solver_info(report, solver_info, summary)
+
+    assert "N/A" in flowables[0].text
+
+
+def test_render_solver_info_states_solver_name_and_duration_when_present():
+    report = validate(Timetable(), [], [])
+    solver_info = SolverInfo(solver_name="cp_sat", duration_seconds=12.3, diagnostics={"phase1_status": "OPTIMAL"})
+    summary = CustomConstraintSummary(hard_count=1, soft_count=2, soft_violated_count=1)
+
+    flowables = _render_solver_info(report, solver_info, summary)
+
+    assert "cp_sat" in flowables[0].text
+    assert "12.3" in flowables[0].text
+
+
+def _assert_valid_pdf(path):
+    assert path.exists()
+    data = path.read_bytes()
+    assert data.startswith(b"%PDF-")
+    assert len(data) > 500
+
+
+def _small_camp():
+    archery = activity("Archery", minutes=60, max_occ=4)
+    craft = activity("Craft", minutes=30, max_occ=2)
+    s1 = session(archery, "Morning", DAY1)
+    s2 = session(craft, "Morning", DAY2 + timedelta(hours=1))
+    emma = camper("Emma", family="F1", priorities=(archery,), optional=(craft,))
+    sam = camper("Sam", family="F2", age=9, priorities=(craft,))
+    activities = [archery, craft]
+    sessions = [s1, s2]
+    campers = [emma, sam]
+    timetable = Timetable(frozenset({Assignment(emma, s1), Assignment(sam, s2)}))
+    return activities, sessions, campers, timetable
+
+
+def test_render_status_report_pdf_end_to_end_with_a_real_solver_info(tmp_path):
+    activities, sessions, campers, timetable = _small_camp()
+    report = validate(timetable, campers, sessions)
+    config = EngineConfig()
+    solver_info = SolverInfo(solver_name="cp_sat", duration_seconds=1.5, diagnostics={"tier0_optimum": 0})
+    output_path = tmp_path / "status_report.pdf"
+
+    render_status_report_pdf(activities, sessions, campers, timetable, report, config, solver_info, output_path)
+
+    _assert_valid_pdf(output_path)
+
+
+def test_render_status_report_pdf_end_to_end_for_the_revalidate_case(tmp_path):
+    activities, sessions, campers, timetable = _small_camp()
+    report = validate(timetable, campers, sessions)
+    config = EngineConfig()
+    output_path = tmp_path / "status_report.pdf"
+
+    render_status_report_pdf(activities, sessions, campers, timetable, report, config, SolverInfo(), output_path)
+
+    _assert_valid_pdf(output_path)
+
+
+def test_render_status_report_pdf_handles_a_non_two_day_camp(tmp_path):
+    archery = activity("Archery")
+    s1 = session(archery, "A", DAY1)
+    s2 = session(archery, "B", DAY2)
+    s3 = session(archery, "C", DAY3)
+    kid = camper("Kid", priorities=(archery,))
+    activities = [archery]
+    sessions = [s1, s2, s3]
+    campers = [kid]
+    timetable = Timetable(frozenset({Assignment(kid, s1)}))
+    report = validate(timetable, campers, sessions)
+    output_path = tmp_path / "status_report.pdf"
+
+    render_status_report_pdf(
+        activities, sessions, campers, timetable, report, EngineConfig(), SolverInfo(), output_path
+    )
+
+    _assert_valid_pdf(output_path)

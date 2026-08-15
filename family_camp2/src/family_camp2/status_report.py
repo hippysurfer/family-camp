@@ -30,19 +30,24 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from functools import partial
+from pathlib import Path
 
 from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
-from reportlab.platypus import Paragraph, Table
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Table
 
+from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Camper, Session, Timetable
-from family_camp2.pdf_reports import _GRID_COLOR, _HEADER_COLOR, _MUTED_COLOR, _styles, _table_style
+from family_camp2.pdf_reports import _GRID_COLOR, _HEADER_COLOR, _MARGIN, _MUTED_COLOR, _NumberedCanvas, _TOP_MARGIN, _styles, _table_style
 from family_camp2.validation.class2 import Class2Report
-from family_camp2.validation.feasibility import FamilyOverdemand
-from family_camp2.validation.tiers import UnmetOptionalRequest
+from family_camp2.validation.feasibility import FamilyOverdemand, find_overdemanding_families
+from family_camp2.validation.report import ValidationReport
+from family_camp2.validation.tiers import UnmetOptionalRequest, find_unmet_optional_requests
 
 __all__ = [
     "FrontMatterSummary",
@@ -52,6 +57,9 @@ __all__ = [
     "SessionLoadingStats",
     "CamperLoadingRow",
     "FamilyLoadingRow",
+    "SolverInfo",
+    "CustomConstraintSummary",
+    "render_status_report_pdf",
 ]
 
 # FR-102: sessions flagged under_minimum are drawn in this colour instead
@@ -600,3 +608,167 @@ def _render_overdemand_callout(overdemand: list[FamilyOverdemand]) -> Table | No
     table = Table(rows, repeatRows=1)
     table.setStyle(_table_style())
     return table
+
+
+# --- FR-106: solver information + document assembly ---
+
+
+@dataclass(frozen=True)
+class SolverInfo:
+    """All fields ``None``/empty represents the ``revalidate`` case (FR-106) -
+    no solver was run, so there's nothing genuine to report; never
+    fabricated, always stated explicitly (see ``_render_solver_info``)."""
+
+    solver_name: str | None = None
+    duration_seconds: float | None = None
+    diagnostics: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CustomConstraintSummary:
+    hard_count: int
+    soft_count: int
+    soft_violated_count: int
+
+
+def _custom_constraint_summary(config: EngineConfig, class2_report: Class2Report) -> CustomConstraintSummary:
+    """How many hard/soft custom constraints (§4.10) were in effect, and
+    how many soft ones had at least one violation - a set comprehension
+    over the already-computed ``custom_constraint_violations``, not a new
+    check (each violation references the ``ConstraintInstance`` it came
+    from, so distinct instances with >=1 violation is a direct count)."""
+    hard_count = sum(1 for c in config.constraints if c.severity == "hard")
+    soft_count = sum(1 for c in config.constraints if c.severity == "soft")
+    soft_violated_count = len({v.constraint for v in class2_report.custom_constraint_violations})
+    return CustomConstraintSummary(hard_count=hard_count, soft_count=soft_count, soft_violated_count=soft_violated_count)
+
+
+_CLASS2_VIOLATION_LABELS = (
+    ("missing_priorities", "Missing priorities"),
+    ("family_time_conflicts", "Family time conflicts"),
+    ("unsupervised_splits", "Poorly supervised family splits"),
+    ("under_minimum_sessions", "Under-minimum sessions"),
+    ("unmet_compulsory", "Unmet compulsory activities"),
+    ("family_splits", "Family splits (any supervision)"),
+    ("custom_constraint_violations", "Soft custom-constraint violations"),
+)
+
+
+def _render_solver_info(
+    report: ValidationReport, solver_info: SolverInfo, custom_constraint_summary: CustomConstraintSummary
+) -> list:
+    flowables = []
+
+    if solver_info.solver_name is None:
+        flowables.append(Paragraph("Solver: N/A - re-validated from an edited schedule", _styles["table_cell"]))
+    else:
+        duration = (
+            f"{solver_info.duration_seconds:.1f}s" if solver_info.duration_seconds is not None else "N/A"
+        )
+        flowables.append(Paragraph(f"Solver: {solver_info.solver_name} (took {duration})", _styles["table_cell"]))
+        if solver_info.diagnostics:
+            for key, value in sorted(solver_info.diagnostics.items()):
+                flowables.append(Paragraph(f"{key}: {value}", _styles["note"]))
+
+    flowables.append(
+        Paragraph(
+            f"Tier 0 (violation) score: {report.tier0_score} &#8226; "
+            f"Tier 1 (optional-request satisfaction): {report.tier1_score:.2f} &#8226; "
+            f"Tier 2 (session spread variance): {report.tier2_score:.4f}",
+            _styles["table_cell"],
+        )
+    )
+
+    header = [Paragraph("Violation category", _styles["table_header"]), Paragraph("Count", _styles["table_header"])]
+    rows = [header]
+    for field_name, label in _CLASS2_VIOLATION_LABELS:
+        rows.append([
+            Paragraph(label, _styles["table_cell"]),
+            Paragraph(str(len(getattr(report.class2, field_name))), _styles["table_cell_center"]),
+        ])
+    table = Table(rows, repeatRows=1)
+    table.setStyle(_table_style())
+    flowables.append(table)
+
+    flowables.append(
+        Paragraph(
+            f"Custom constraints (§4.10): {custom_constraint_summary.hard_count} hard, "
+            f"{custom_constraint_summary.soft_count} soft "
+            f"({custom_constraint_summary.soft_violated_count} soft violated).",
+            _styles["table_cell"],
+        )
+    )
+    return flowables
+
+
+def _build_status_doc(output_path: Path) -> tuple[BaseDocTemplate, float]:
+    """A single full-width column, fixed A4 portrait (FR-97 - unlike
+    ``pdf_reports.py``'s audience-specific PDFs, this document's paper
+    size/orientation isn't organiser-configurable)."""
+    pagesize = A4
+    doc = BaseDocTemplate(
+        str(output_path), pagesize=pagesize,
+        leftMargin=_MARGIN, rightMargin=_MARGIN, topMargin=_TOP_MARGIN, bottomMargin=_MARGIN,
+    )
+    width = pagesize[0] - 2 * _MARGIN
+    height = pagesize[1] - _MARGIN - _TOP_MARGIN
+    frame = Frame(
+        _MARGIN, _MARGIN, width, height, id="main", leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0
+    )
+    doc.addPageTemplates([PageTemplate(id="single", frames=[frame])])
+    return doc, width
+
+
+def render_status_report_pdf(
+    activities: list[Activity],
+    sessions: list[Session],
+    campers: list[Camper],
+    timetable: Timetable,
+    report: ValidationReport,
+    config: EngineConfig,
+    solver_info: SolverInfo,
+    output_path: Path,
+    generated_at: datetime | None = None,
+) -> None:
+    """The FR-99 entry point: assembles every prior step's section into
+    one document, in FR-99's order (front matter, camp activity info,
+    session loading, camper loading, family loading + overdemand callout,
+    solver information)."""
+    generated_at = generated_at or datetime.now()
+    doc, width = _build_status_doc(output_path)
+
+    story: list = []
+    story.extend(_render_front_matter(_front_matter_summary(activities, sessions, campers, generated_at)))
+
+    compulsory = frozenset(a for a in activities if a.name in config.compulsory_activities)
+    story.append(Paragraph("Camp activity information", _styles["section_title"]))
+    story.append(_render_activity_table(_activity_table_rows(activities, sessions, compulsory)))
+    blocks = _activity_timetable_blocks(activities, sessions)
+    if blocks is not None:
+        story.append(_render_activity_timetable_drawing(blocks, activities, width))
+    else:
+        story.append(_render_activity_timetable_fallback(sessions))
+
+    story.append(Paragraph("Activity session loading", _styles["section_title"]))
+    session_rows = _session_loading_rows(timetable, sessions, report.class2)
+    story.append(_render_session_loading_stats(_session_loading_stats(session_rows)))
+    story.extend(_render_session_loading_charts(session_rows, width))
+
+    story.append(Paragraph("Camper activity loading", _styles["section_title"]))
+    unmet_optional = find_unmet_optional_requests(timetable, campers)
+    camper_rows = _camper_loading_rows(campers, report.class2, unmet_optional)
+    story.extend(_render_camper_loading_charts(camper_rows, width))
+
+    story.append(Paragraph("Family activity loading", _styles["section_title"]))
+    family_rows = _family_loading_rows(camper_rows)
+    story.extend(_render_family_loading_charts(family_rows, width))
+    overdemand_table = _render_overdemand_callout(find_overdemanding_families(sessions, campers))
+    if overdemand_table is not None:
+        story.append(Paragraph("Structurally overdemanding families", _styles["section_title"]))
+        story.append(overdemand_table)
+
+    story.append(Paragraph("Solver information", _styles["section_title"]))
+    custom_constraint_summary = _custom_constraint_summary(config, report.class2)
+    story.extend(_render_solver_info(report, solver_info, custom_constraint_summary))
+
+    doc.build(story, canvasmaker=partial(_NumberedCanvas, title="SCHEDULE STATUS REPORT", pagesize=doc.pagesize))

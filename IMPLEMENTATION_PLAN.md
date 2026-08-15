@@ -1891,7 +1891,7 @@ a value overrides that name.
 
 ---
 
-### - [ ] Step 47: Documentation
+### - [x] Step 47: Documentation
 
 **Goal**: Everything this phase added is discoverable without reading
 source.
@@ -1907,6 +1907,21 @@ this phase.
 ".[dev]"` in a new venv, same as previous phases' final steps.
 
 **Commit message**: `family_camp2 step 47: document custom constraints`
+
+**Deviation found during implementation**: also touched the "Input data"
+(new `"constraints"` key in the JSON example), "Fetching data from Google
+Sheets", and "Engine config" sections, not just adding one new standalone
+section - each already documented something this phase changed (the JSON
+schema, the fetch CLI's worksheet flags, `Tier0Weights`'s fields) and
+would have gone stale otherwise. Final check ran against a real fresh
+`pip install -e ".[dev]"` in a new venv/Python (3.14, vs the checked-out
+dev venv's version): 247 passed, 2 skipped - the skips are
+`test_pdf_reports.py`/`test_cli.py`'s existing, pre-established
+`reportlab`-not-installed guards (`pdf` is a separate optional extra per
+`pyproject.toml`, deliberately excluded from `dev`), not a regression;
+confirmed by diffing collected test IDs against the full `[dev,pdf,google]`
+venv, which found only those same 30 `test_pdf_reports.py` tests missing
+and nothing else.
 
 ---
 

@@ -220,9 +220,16 @@ in the `family_camp2.io.json_loader` module docstring:
   "campers": [
     {"name": "Kid", "family_id": "F1", "age": 10, "age_group": "Cub",
      "priorities": ["Archery"], "optional": ["Craft"]}
+  ],
+  "constraints": [
+    {"family_id": "F1", "camper_name": "Kid", "constraint": "no_activity_before(time=\"11:00\")",
+     "severity": "hard", "note": "sleeps in"}
   ]
 }
 ```
+
+`constraints` is optional (defaults to `[]`) — see
+[Custom constraints](#custom-constraints) below.
 
 See `tests/fixtures/small_camp.json` for a complete worked example.
 
@@ -262,6 +269,11 @@ if you hit its rate limits), and `--authorized-user PATH` to control where
 the cached token is stored. If your spreadsheet uses different tab names,
 override them with `--activities-worksheet`/`--sessions-worksheet`/`--campers-worksheet`.
 
+[Custom constraints](#custom-constraints) live on a fourth, optional tab.
+Unlike the other three, it's not fetched unless you ask for it —
+`--constraints-worksheet` with no value uses the default tab name
+("Constraints for schedule"); give it a value to use a different tab name.
+
 See `family_camp2.io.google_sheets` for the fetch/parse logic (it shares
 its row-parsing with `io/legacy_cache_loader.py`, since both start from
 the same raw worksheet-row shape) and `fetch_cli.py` for the full CLI.
@@ -270,11 +282,15 @@ the same raw worksheet-row shape) and `fetch_cli.py` for the full CLI.
 
 Optional JSON file overriding `EngineConfig` (see `family_camp2.config`):
 `tier0_weights` (severity weights for the demand-driven Class 2 rules —
-`missing_priority`, `family_safety`, `family_split`, `under_minimum`,
-`compulsory`), `objective_order` (must be a permutation of `["tier0",
-"tier1", "tier2"]` — the OQ-4 ranking mechanism), and
-`compulsory_activities` (activity names everyone must attend, empty by
-default per OQ-5).
+`custom_constraint`, `missing_priority`, `family_safety`, `family_split`,
+`under_minimum`, `compulsory`, most severe first), `objective_order` (must
+be a permutation of `["tier0", "tier1", "tier2"]` — the OQ-4 ranking
+mechanism), and `compulsory_activities` (activity names everyone must
+attend, empty by default per OQ-5).
+
+`constraints` (the per-camper/family rules below) is deliberately **not**
+one of these fields — it comes from `--data`/`--legacy-cache` alongside
+the campers it targets, not this separate camp-independent config file.
 
 ### Family splits (FR-17/FR-24)
 
@@ -299,6 +315,68 @@ session. This *is* a real violation when unmet
 for the exact rule, including why a (family, activity) pair is exempted
 entirely when no child in the family ever requested that activity (the
 rule would otherwise be permanently unfixable in that case).
+
+## Custom constraints
+
+A fourth, optional input collection (REQUIREMENTS.md §3.5/§4.10) for
+per-camper or per-family rules that go beyond a camper's own
+priority/optional lists — e.g. "022/Glen must not have any activities on
+day 2" or "Emma Glen (022/Glen) must not have any activity before 11:00".
+Each record has four fields:
+
+| Field | Meaning |
+|---|---|
+| Target | A family ID (applies to every member) or a specific camper within one. |
+| Constraint | A named, parameterised rule — see below. |
+| Severity | `hard` (never violated, in either solver) or `soft` (penalised if unmet, like the other Class 2 rules). |
+| Note | Free text for the organiser's own reference; never read by the engine. |
+
+In `--data` JSON this is the top-level `"constraints"` array, one object
+per record: `family_id`, `camper_name` (`null`/omitted applies to the
+whole family), `constraint`, `severity`, `note`. On a Google Sheet
+([see above](#fetching-data-from-google-sheets-fetch_clipy)) it's the
+same five fields as spreadsheet columns: `Group Ref`, `Camper Name`,
+`Constraint`, `Severity`, `Note`.
+
+### Expression syntax
+
+The `Constraint` field is a function-call-like expression, e.g.
+`no_activities_on_day(2)` or `no_activity_before(time="11:00")`. It's
+parsed with Python's `ast` module and restricted to a single call with
+literal (number/string/list) arguments — **never** `eval()` — so an
+unparseable expression or unknown rule name is reported clearly (naming
+the row) rather than executed or silently ignored (FR-92/93).
+
+Built-in rules (`family_camp2.constraints.rules`):
+
+| Expression | Forbids |
+|---|---|
+| `no_activities_on_day(day)` | Any session on the given camp day (1-indexed, derived from the distinct calendar dates actually present in the session data — FR-3, not a fixed date). |
+| `no_activity_before(time="HH:MM")` | Any session starting before that time of day. |
+| `no_activity_after(time="HH:MM")` | Any session starting after that time of day. |
+| `no_activities_between(start="HH:MM", end="HH:MM")` | Any session starting within that time-of-day range (inclusive). |
+| `not_on_activity(activity="Name")` | Any session of the named activity, regardless of the camper's own priority/optional lists. |
+
+Each corresponds one-to-one with a `forbids(camper, session, all_sessions)
+-> bool` predicate class — the same shape used internally to make Class 1
+rules (FR-10-16) structurally guaranteed in both solvers. This is what
+lets `hard` constraints be enforced "for free": a camper is simply never
+considered eligible for a session their rule forbids, in either solver,
+with no rule-specific solver code. If a hard constraint makes one of a
+camper's own priorities unreachable, that surfaces as an ordinary
+`missing_priority` violation, the same as any other unreachable priority
+(FR-94) — not a crash or a silent drop. `soft` constraints instead
+contribute to the weighted Tier 0 objective (`Tier0Weights.custom_constraint`,
+[see Engine config above](#engine-config---config)) and are reported when
+unmet, without making the schedule infeasible.
+
+Only rules expressible as that per-(camper, session) predicate — "Tier
+A" — are built in. Rules that depend on a camper's *other* assignments
+(e.g. "no more than 2 activities per day", "must always be with camper
+X") are "Tier B": the same registry/parser architecture accommodates them,
+but each needs bespoke validator (and, if hard, solver) logic, and none
+are implemented yet — an acknowledged extension point, not part of this
+phase (REQUIREMENTS.md OQ-22).
 
 ## Architecture
 

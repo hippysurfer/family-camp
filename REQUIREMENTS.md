@@ -691,6 +691,40 @@ been fetched yet.
   falling back to the input file's own name when that field is absent
   (a hand-written `--data` file, or `--legacy-cache`, which predates it).
 
+### 4.14 Sensible CLI defaults, positional-only where no default exists
+
+Raised by the user: every CLI option should have a sensible default;
+anything that genuinely cannot have one (their example: a URL) MUST be a
+positional argument instead of a flag, so the CLI itself signals "this
+one has no default, you always have to supply it" through its shape
+rather than only through documentation.
+
+- **FR-117 (Positional arguments for defaultless values)**: `fetch`'s
+  Google Sheets URL and `revalidate`'s schedule path — the two values in
+  this CLI with no sensible default — MUST be positional arguments
+  (`family_camp2 fetch <URL>`, `family_camp2 revalidate <SCHEDULE_PATH>`),
+  not `--flag VALUE` options.
+- **FR-118 (`--solver` default)**: `solve`'s `--solver` MUST default to
+  `cp_sat`, per the user's explicit instruction, rather than being
+  required with no default.
+- **FR-119 (Every remaining option keeps or gains a real default)**:
+  Every other `solve`/`revalidate`/`fetch` option MUST have an explicit,
+  documented default rather than silently requiring the organiser to
+  discover one by omission. In particular `--num-chains`/
+  `--iterations-per-chain` (previously `None`, relying on
+  `AnnealingSolver`'s own constructor defaults via a conditional
+  `kwargs` build) MUST show their real default values (8/2000) directly
+  in `--help`, not just inherit them invisibly.
+
+  [Answer, --time-limit default: no limit (current behaviour) - a real
+  camp-sized CP-SAT run has taken up to 3 hours in the past, but the
+  organiser explicitly chose to keep letting a run continue to full
+  convergence by default over an arbitrary cutoff.]
+
+  [Answer, --seed default: none/non-deterministic (current behaviour) -
+  reproducibility stays available via an explicit --seed, but isn't
+  forced on by default.]
+
 ## 5. Non-functional requirements
 
 - **NFR-1 (Scale)**: The engine must handle input sizes consistent with an

@@ -39,12 +39,20 @@ solver - see "Manual editing and re-validation" below. The everyday flow
 is just the first two, in order, with no further flags:
 
 ```sh
-family_camp2 fetch --url https://docs.google.com/spreadsheets/d/<...>
+family_camp2 fetch https://docs.google.com/spreadsheets/d/<...>
 # Wrote 12 activities, 91 sessions, 283 campers, 0 constraints for 'Willesley 2026' to fetched_data/camp.json
 
-family_camp2 solve --solver cp_sat
+family_camp2 solve
 # Reports written to fetched_data/willesley_2026_20260815_130300
 ```
+
+`fetch`'s sheet URL and `revalidate`'s schedule path are **positional**
+arguments (`family_camp2 fetch <URL>`, `family_camp2 revalidate
+<SCHEDULE_PATH>`), not flags - there's no sensible default for either,
+so unlike everything else on this page, they're always required and
+always come right after the subcommand name, with no `--name` in front.
+Every other option has a sensible default and never needs to be given
+explicitly (`--solver` defaults to `cp_sat`).
 
 `solve` (and `revalidate`) automatically use `fetched_data/camp.json` -
 the file `fetch` just wrote - with no `--data` flag needed. If nothing's
@@ -52,9 +60,9 @@ been fetched yet, they stop with a clear error rather than a bare
 `FileNotFoundError`:
 
 ```sh
-$ family_camp2 solve --solver cp_sat
+$ family_camp2 solve
 No downloaded camp data found at fetched_data/camp.json.
-Run 'family_camp2 fetch --url <GOOGLE_SHEET_URL>' first (or pass --data/--legacy-cache explicitly).
+Run 'family_camp2 fetch <GOOGLE_SHEET_URL>' first (or pass --data/--legacy-cache explicitly).
 ```
 
 `--data`/`--legacy-cache` remain available on `solve`/`revalidate` as
@@ -63,33 +71,37 @@ or a real camp's existing `.cache.pickle` (produced by the unmodified
 `family_camp/schedule/fetch_data.py` - see `io/legacy_cache_loader.py`):
 
 ```sh
-# Constraint programming (Design A) against a specific JSON camp file
-python -m family_camp2 solve --solver cp_sat --data tests/fixtures/small_camp.json
+# Constraint programming (Design A, the default) against a specific JSON camp file
+python -m family_camp2 solve --data tests/fixtures/small_camp.json
 
 # Simulated annealing (Design B), tuned, with a reproducible seed
 python -m family_camp2 solve --solver annealing --data tests/fixtures/small_camp.json \
     --num-chains 8 --iterations-per-chain 2000 --seed 1
 
-python -m family_camp2 solve --solver cp_sat --legacy-cache ../.cache.pickle
+python -m family_camp2 solve --legacy-cache ../.cache.pickle
 
 # A long CP-SAT run: progress every 60s to a log file, reports into a
 # specific directory tree instead of the default ./fetched_data
-python -m family_camp2 solve --solver cp_sat --time-limit 5400 \
+python -m family_camp2 solve --time-limit 5400 \
     --progress-output run.log --out-dir output/
 ```
 
-`fetch`-only flags: `--url` (required - a Google Sheets URL, or a bare
-sheet ID), `--activities-worksheet`/`--sessions-worksheet`/
-`--campers-worksheet`/`--constraints-worksheet`, `--credentials`/
-`--authorized-user` (all documented in "Fetching data from Google
-Sheets" below). `solve`-only flags: `--solver {cp_sat,annealing}`
-(required), `--time-limit SECONDS` (both solvers), `--seed INT` (both
-solvers), `--num-chains`/`--iterations-per-chain` (annealing only),
-`--progress-output`/`--progress-interval`. Shared between `solve`/
-`revalidate`: `--data`/`--legacy-cache` (optional, mutually exclusive -
-see above), `--config PATH` (an `EngineConfig` JSON file, see below),
-`--out-dir` (documented in the next section - shared with `fetch`,
-same default).
+`fetch`-only arguments: `url` (positional, required - a Google Sheets
+URL, or a bare sheet ID), `--activities-worksheet`/
+`--sessions-worksheet`/`--campers-worksheet`/`--constraints-worksheet`,
+`--credentials`/`--authorized-user` (all documented in "Fetching data
+from Google Sheets" below - all default sensibly, so only need
+overriding when your sheet's layout differs from the norm).
+`revalidate`-only argument: `schedule` (positional, required). `solve`-
+only flags: `--solver {cp_sat,annealing}` (default `cp_sat`),
+`--time-limit SECONDS` (both solvers, default: no limit),
+`--seed INT` (both solvers, default: none/non-deterministic),
+`--num-chains`/`--iterations-per-chain` (annealing only, default 8/2000
+- the `AnnealingSolver` class's own defaults), `--progress-output`/
+`--progress-interval`. Shared between `solve`/`revalidate`:
+`--data`/`--legacy-cache` (optional, mutually exclusive - see above),
+`--config PATH` (an `EngineConfig` JSON file, see below), `--out-dir`
+(documented in the next section - shared with `fetch`, same default).
 
 ## Progress reporting and report generation
 
@@ -206,10 +218,10 @@ case two runs start in the same second, so they never collide). Both
 done, naming the exact folder used:
 
 ```sh
-family_camp2 solve --solver cp_sat
+family_camp2 solve
 # Reports written to fetched_data/willesley_2026_20260815_130300
 
-family_camp2 solve --solver cp_sat --out-dir output/
+family_camp2 solve --out-dir output/
 # Reports written to output/willesley_2026_20260815_130300
 ```
 
@@ -279,13 +291,13 @@ back through the exact same validation and reporting `solve` would have
 run, without re-running a solver.
 
 ```sh
-python -m family_camp2 solve --solver cp_sat --data data.json
+python -m family_camp2 solve --data data.json
 # Reports written to fetched_data/data_20260815_130300
 # ...open fetched_data/data_20260815_130300/schedule.csv, tweak who's assigned where, save...
-python -m family_camp2 revalidate --data data.json --schedule fetched_data/data_20260815_130300/schedule.csv
+python -m family_camp2 revalidate --data data.json fetched_data/data_20260815_130300/schedule.csv
 ```
 
-`--schedule PATH` (required) is dispatched to `io.schedule_export.load_schedule_csv`/
+`schedule` (positional, required - no sensible default) is dispatched to `io.schedule_export.load_schedule_csv`/
 `load_schedule_json` by its extension (OQ-14 - the existing FR-70/71
 export format is reused as-is, not a new edit-oriented layout: every
 edit is just adding, removing, or changing a row). A row that doesn't
@@ -366,10 +378,10 @@ separate `--camp-name` flag either.
 ```sh
 pip install -e ".[google]"   # pulls in gspread, only needed for this subcommand
 
-family_camp2 fetch --url <SHEET_URL_OR_ID>
+family_camp2 fetch <SHEET_URL_OR_ID>
 # Wrote 12 activities, 91 sessions, 283 campers, 0 constraints for 'Willesley 2026' to fetched_data/camp.json
 
-family_camp2 solve --solver cp_sat
+family_camp2 solve
 ```
 
 Authentication is the interactive **user OAuth flow**, not the old

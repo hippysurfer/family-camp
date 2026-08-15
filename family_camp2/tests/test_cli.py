@@ -43,7 +43,7 @@ def test_fetch_writes_camp_json_into_out_dir(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
     monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data())
 
-    exit_code = cli.main(["fetch", "--url", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
+    exit_code = cli.main(["fetch", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
 
     assert exit_code == 0
     out_path = tmp_path / "camp.json"
@@ -59,7 +59,7 @@ def test_fetch_stores_the_spreadsheet_title_as_camp_name(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
     monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data(title="Willesley 2026"))
 
-    cli.main(["fetch", "--url", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
+    cli.main(["fetch", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
 
     assert peek_camp_name(tmp_path / "camp.json") == "Willesley 2026"
 
@@ -77,7 +77,7 @@ def test_fetch_passes_through_worksheet_overrides(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "fetch_schedule_data", fake_fetch)
 
     cli.main([
-        "fetch", "--url", "abc123", "--out-dir", str(tmp_path),
+        "fetch", "abc123", "--out-dir", str(tmp_path),
         "--activities-worksheet", "MyActs",
         "--sessions-worksheet", "MySessions",
         "--campers-worksheet", "MyCampers",
@@ -92,7 +92,7 @@ def test_fetch_creates_out_dir_if_it_does_not_exist(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data())
 
     out_dir = tmp_path / "does" / "not" / "exist"
-    cli.main(["fetch", "--url", "abc123", "--out-dir", str(out_dir)])
+    cli.main(["fetch", "abc123", "--out-dir", str(out_dir)])
 
     assert (out_dir / "camp.json").exists()
 
@@ -122,7 +122,7 @@ def test_solve_stops_with_a_clear_error_when_nothing_was_fetched(tmp_path):
 def test_revalidate_stops_with_a_clear_error_when_nothing_was_fetched(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         cli.main([
-            "revalidate", "--out-dir", str(tmp_path), "--schedule", str(tmp_path / "schedule.csv"),
+            "revalidate", "--out-dir", str(tmp_path), str(tmp_path / "schedule.csv"),
         ])
 
     assert "fetch" in str(excinfo.value)
@@ -364,7 +364,7 @@ def test_revalidate_matches_solve_on_the_schedule_it_exported(tmp_path, capsys):
     schedule_path = _out_dir_from_output(solve_report) / "schedule.csv"
 
     exit_code = cli.main([
-        "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path),
+        "revalidate", "--data", str(SMALL_CAMP_JSON), str(schedule_path),
         "--out-dir", str(tmp_path / "revalidate_out"),
     ])
     assert exit_code == 0
@@ -381,7 +381,7 @@ def test_revalidate_accepts_json_schedule_by_extension(tmp_path, capsys):
     schedule_path = _out_dir_from_output(capsys.readouterr().out) / "schedule.json"
 
     exit_code = cli.main([
-        "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path),
+        "revalidate", "--data", str(SMALL_CAMP_JSON), str(schedule_path),
         "--out-dir", str(tmp_path / "revalidate_out"),
     ])
 
@@ -408,7 +408,7 @@ def test_revalidate_surfaces_a_hand_introduced_class1_violation(tmp_path, capsys
     dump_schedule_csv(bad_timetable, schedule_path)
 
     exit_code = cli.main([
-        "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path),
+        "revalidate", "--data", str(SMALL_CAMP_JSON), str(schedule_path),
         "--out-dir", str(tmp_path / "out"),
     ])
 
@@ -427,7 +427,7 @@ def test_revalidate_reports_every_bad_row_not_just_the_first(tmp_path, capsys):
     )
 
     with pytest.raises(Exception) as excinfo:
-        cli.main(["revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(bad_csv)])
+        cli.main(["revalidate", "--data", str(SMALL_CAMP_JSON), str(bad_csv)])
 
     assert "Nonexistent Camper One" in str(excinfo.value)
     assert "Nonexistent Camper Two" in str(excinfo.value)
@@ -444,7 +444,7 @@ def test_revalidate_produces_the_same_report_files_as_solve(tmp_path, capsys):
     schedule_path = solve_out_dir / "schedule.csv"
 
     exit_code = cli.main([
-        "revalidate", "--data", str(SMALL_CAMP_JSON), "--schedule", str(schedule_path),
+        "revalidate", "--data", str(SMALL_CAMP_JSON), str(schedule_path),
         "--out-dir", str(tmp_path / "revalidate_out"),
     ])
     assert exit_code == 0

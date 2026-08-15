@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser = subparsers.add_parser(
         "fetch", help="Download camp data from a Google Sheet, ready for 'solve'/'revalidate'."
     )
-    fetch_parser.add_argument("--url", required=True, help="Google Sheets URL (or a bare sheet ID).")
+    fetch_parser.add_argument("url", help="Google Sheets URL (or a bare sheet ID) - no sensible default, always required.")
     fetch_parser.add_argument(
         "--out-dir", type=Path, default=Path("fetched_data"), dest="out_dir",
         help=f"Directory to write {_FETCHED_DATA_FILENAME} into (created if needed; default "
@@ -159,25 +159,28 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser = subparsers.add_parser("solve", help="Generate a schedule using a solver.")
     solve_parser.add_argument(
         "--solver",
-        required=True,
+        default="cp_sat",
         choices=["cp_sat", "annealing"],
-        help="Which solver to use to generate the schedule.",
+        help="Which solver to use to generate the schedule (default: cp_sat).",
     )
     _add_data_source_args(solve_parser)
     solve_parser.add_argument(
         "--time-limit", type=float, default=None, dest="time_limit",
-        help="Solver time limit in seconds (solver-dependent; NFR-2).",
+        help="Solver time limit in seconds (solver-dependent; NFR-2). Default: no limit - the "
+        "solver runs until it converges (can take a long time on a real camp-sized instance).",
     )
     solve_parser.add_argument(
-        "--seed", type=int, default=None, help="Random seed for reproducibility (NFR-3)."
+        "--seed", type=int, default=None,
+        help="Random seed for reproducibility (NFR-3). Default: none - each run is "
+        "non-deterministic; pass a seed explicitly to reproduce a specific prior run.",
     )
     solve_parser.add_argument(
-        "--num-chains", type=int, default=None, dest="num_chains",
-        help="Annealing only: number of independent restart chains (NFR-4).",
+        "--num-chains", type=int, default=8, dest="num_chains",
+        help="Annealing only: number of independent restart chains (NFR-4, default 8).",
     )
     solve_parser.add_argument(
-        "--iterations-per-chain", type=int, default=None, dest="iterations_per_chain",
-        help="Annealing only: iterations per chain (NFR-4).",
+        "--iterations-per-chain", type=int, default=2000, dest="iterations_per_chain",
+        help="Annealing only: iterations per chain (NFR-4, default 2000).",
     )
     solve_parser.add_argument(
         "--progress-output", type=str, default="-", dest="progress_output",
@@ -199,9 +202,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_data_source_args(revalidate_parser)
     revalidate_parser.add_argument(
-        "--schedule", type=Path, required=True,
-        help="Path to a schedule previously written by --export-schedule (.csv or .json, "
-        "dispatched by extension) - possibly hand-edited.",
+        "schedule", type=Path,
+        help="Path to a schedule previously written by 'solve' as schedule.csv/schedule.json "
+        "(dispatched by extension) - possibly hand-edited. No sensible default, always required.",
     )
     _add_output_args(revalidate_parser)
     revalidate_parser.set_defaults(func=_run_revalidate)
@@ -218,10 +221,8 @@ def _solver_kwargs(args: argparse.Namespace, progress_reporter) -> dict:
     if args.solver == "cp_sat":
         kwargs["progress_interval_seconds"] = args.progress_interval
     if args.solver == "annealing":
-        if args.num_chains is not None:
-            kwargs["num_chains"] = args.num_chains
-        if args.iterations_per_chain is not None:
-            kwargs["iterations_per_chain"] = args.iterations_per_chain
+        kwargs["num_chains"] = args.num_chains
+        kwargs["iterations_per_chain"] = args.iterations_per_chain
     return kwargs
 
 
@@ -245,7 +246,7 @@ def _resolve_data_path(args: argparse.Namespace) -> Path:
     if not default_path.exists():
         raise SystemExit(
             f"No downloaded camp data found at {default_path}.\n"
-            f"Run 'family_camp2 fetch --url <GOOGLE_SHEET_URL>' first "
+            f"Run 'family_camp2 fetch <GOOGLE_SHEET_URL>' first "
             f"(or pass --data/--legacy-cache explicitly)."
         )
     return default_path

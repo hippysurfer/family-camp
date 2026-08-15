@@ -2531,7 +2531,67 @@ itself (not just `python -m family_camp2`) resolves correctly after the
 
 ---
 
-## 9. After this plan
+## 9. Sensible CLI defaults (Step 57)
+
+### Context
+
+Implements REQUIREMENTS.md §4.14 (FR-117-119). The user asked for every
+CLI option to have a sensible default, with genuinely defaultless values
+(their example: a URL) made positional rather than left as a
+nominally-optional flag that's actually required. Two defaults were
+ambiguous enough to ask about rather than assume - both answered "keep
+current behaviour":
+
+- `--time-limit`: no limit (not a fixed timeout like 600s/1800s).
+- `--seed`: none/non-deterministic (not a fixed default like `0`).
+
+### Step list
+
+### - [x] Step 57: Positional args + explicit defaults (FR-117/118/119)
+
+**Goal**: every flag either has a real default or doesn't exist as a
+flag at all.
+
+**Change** `cli.py`:
+- `fetch`'s `--url` (`required=True`) -> positional `url`.
+- `revalidate`'s `--schedule` (`required=True`) -> positional `schedule`
+  (also fixed its help text's stale `--export-schedule` mention, dead
+  since Step 55).
+- `solve`'s `--solver` -> `default="cp_sat"`, `required=True` removed
+  (still `choices=["cp_sat", "annealing"]`).
+- `--num-chains`/`--iterations-per-chain` -> explicit `default=8`/
+  `default=2000` (matching `AnnealingSolver`'s own constructor
+  defaults) instead of `default=None` + a conditional `kwargs` build in
+  `_solver_kwargs` - same runtime behaviour, now visible in `--help`.
+- `--time-limit`/`--seed` help text updated to state their default
+  explicitly ("no limit" / "none - non-deterministic") rather than
+  leaving a bare `None` for the organiser to interpret.
+- The `_resolve_data_path` missing-data error message's example command
+  updated to drop `--url`'s now-removed flag form.
+
+**Tests**: `test_cli.py`'s `fetch`/`revalidate` tests updated to pass
+the URL/schedule path positionally. `test_cli_smoke.py`:
+`test_requires_solver_argument` replaced with
+`test_solver_defaults_to_cp_sat`; `test_revalidate_accepts_schedule_argument`
+updated to positional syntax; new `test_fetch_requires_a_url_argument`/
+`test_fetch_accepts_a_url_argument` (positional-argument behaviour is
+worth its own explicit coverage, not just incidentally exercised by
+`test_cli.py`'s fetch tests); new
+`test_annealing_tuning_flags_default_to_the_solver_classs_own_defaults`/
+`test_time_limit_and_seed_default_to_none` asserting the parsed
+`Namespace`'s actual default values directly.
+
+**Deviation found during implementation**: none - manually verified
+`family_camp2 solve` with zero flags at all (no `--solver`, relying on
+`fetch`'s auto-discovered `camp.json`) resolves and solves correctly end
+to end, confirming `--solver`'s new default and FR-114's auto-discovery
+compose correctly together, not just individually.
+
+**Commit message**: `family_camp2 step 57: give every CLI option a sensible default, positional args where none exists (FR-117/118/119)`
+
+---
+
+## 10. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:

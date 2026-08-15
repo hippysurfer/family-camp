@@ -48,6 +48,23 @@ def test_cli_out_writes_round_trippable_json_report(tmp_path):
     assert "class2" in data
 
 
+def test_cli_solve_loads_custom_constraints_from_data_without_error(tmp_path):
+    """Step 43 only proves the data reaches config.constraints - hard/soft
+    enforcement is Steps 44/45, not yet wired here, so this just confirms
+    a --data file with a "constraints" array solves without error."""
+    activities, sessions, campers = load_json(SMALL_CAMP_JSON)[:3]
+    data = json.loads(SMALL_CAMP_JSON.read_text())
+    data["constraints"] = [
+        {"family_id": "F1", "camper_name": None, "constraint": "no_activities_on_day(2)", "severity": "hard"},
+    ]
+    data_path = tmp_path / "with_constraints.json"
+    data_path.write_text(json.dumps(data))
+
+    exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(data_path)])
+
+    assert exit_code == 0
+
+
 def test_cli_progress_defaults_to_stdout_interleaved_with_the_final_report(capsys):
     exit_code = cli.main(
         ["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--progress-interval", "60"]
@@ -88,7 +105,7 @@ def test_cli_export_schedule_writes_both_csv_and_json(tmp_path):
     assert csv_path.exists()
     assert json_path.exists()
 
-    activities, sessions, campers = load_json(SMALL_CAMP_JSON)
+    activities, sessions, campers, constraints = load_json(SMALL_CAMP_JSON)
     csv_timetable = load_schedule_csv(csv_path, activities, sessions, campers)
     json_timetable = load_schedule_json(json_path, activities, sessions, campers)
     assert csv_timetable == json_timetable
@@ -179,7 +196,7 @@ def test_revalidate_surfaces_a_hand_introduced_class1_violation(tmp_path, capsys
     fixture) - and revalidate must report it, not silently accept it."""
     from family_camp2.domain import Timetable
 
-    activities, sessions, campers = load_json(SMALL_CAMP_JSON)
+    activities, sessions, campers, constraints = load_json(SMALL_CAMP_JSON)
     camper = next(c for c in campers if "Archery" in [a.name for a in c.priorities])
     archery_sessions = [s for s in sessions if s.activity.name == "Archery"]
     assert len(archery_sessions) == 2, "fixture must have two Archery sessions for this to be a duplicate"

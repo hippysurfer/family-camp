@@ -17,6 +17,10 @@ Schema::
       "campers": [
         {"name": "Kid", "family_id": "F1", "age": 10, "age_group": "Cub",
          "priorities": ["Archery"], "optional": ["Craft"]}
+      ],
+      "constraints": [
+        {"family_id": "F1", "camper_name": null, "constraint": "no_activities_on_day(2)",
+         "severity": "hard", "note": "optional free text"}
       ]
     }
 
@@ -25,6 +29,15 @@ be omitted (default to ``null``/``[]`` respectively). Per FR-1, a session or
 camper referencing an activity name that isn't in ``activities`` raises
 ``JsonLoadError`` naming the offending camper/session and the bad
 reference, rather than being silently dropped.
+
+``constraints`` (REQUIREMENTS.md §3.5) is optional, defaulting to `[]`;
+``camper_name`` blank/``null`` applies the constraint to every member of
+the family. Each record is resolved by
+``constraints.parser.build_constraint_instances`` - see that module for
+the constraint expression syntax and how invalid records are reported
+(``constraints.parser.ConstraintParseError``, not wrapped as a
+``JsonLoadError``, propagates as-is so constraint-specific problems stay
+distinguishable from JSON-shape problems).
 """
 
 from __future__ import annotations
@@ -33,6 +46,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from family_camp2.constraints.base import ConstraintInstance
+from family_camp2.constraints.parser import build_constraint_instances
 from family_camp2.domain import Activity, Camper, Session
 
 __all__ = ["JsonLoadError", "load_json", "dump_json"]
@@ -42,7 +57,9 @@ class JsonLoadError(ValueError):
     """Raised when a JSON camp file is malformed or references unknown data."""
 
 
-def load_json(path: Path | str) -> tuple[list[Activity], list[Session], list[Camper]]:
+def load_json(
+    path: Path | str,
+) -> tuple[list[Activity], list[Session], list[Camper], list[ConstraintInstance]]:
     data = json.loads(Path(path).read_text())
 
     activities_by_name: dict[str, Activity] = {}
@@ -86,15 +103,30 @@ def load_json(path: Path | str) -> tuple[list[Activity], list[Session], list[Cam
             )
         )
 
-    return list(activities_by_name.values()), sessions, campers
+    constraints = build_constraint_instances(data.get("constraints", []), campers)
+
+    return list(activities_by_name.values()), sessions, campers, constraints
 
 
 def dump_json(
-    activities: list[Activity], sessions: list[Session], campers: list[Camper], path: Path | str
+    activities: list[Activity],
+    sessions: list[Session],
+    campers: list[Camper],
+    path: Path | str,
+    constraint_records: list[dict] = (),
 ) -> None:
     """The counterpart to load_json: serialise domain objects back to this
     module's documented schema. Used by fetch_cli.py to save data fetched
-    live from Google Sheets (io/google_sheets.py) ready for --data."""
+    live from Google Sheets (io/google_sheets.py) ready for --data.
+
+    ``constraint_records`` are the *raw* per-row dicts (family_id/
+    camper_name/constraint/severity/note), not resolved
+    ``ConstraintInstance`` objects - written straight through unchanged.
+    There's no serialiser back from a resolved instance to a row: once
+    targets are resolved to actual ``Camper`` objects, a family-level vs.
+    single-camper-in-a-single-member-family record is no longer
+    distinguishable, so round-tripping only ever goes through the raw
+    row shape, exactly like the input a human would have written."""
 
     data = {
         "activities": [
@@ -121,6 +153,7 @@ def dump_json(
             }
             for c in campers
         ],
+        "constraints": list(constraint_records),
     }
     Path(path).write_text(json.dumps(data, indent=2))
 

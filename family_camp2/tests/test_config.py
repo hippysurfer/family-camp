@@ -10,6 +10,18 @@ def test_default_config_with_no_path():
     assert config == EngineConfig()
     assert config.objective_order == ("tier0", "tier1", "tier2")
     assert config.compulsory_activities == ()
+    assert config.constraints == ()
+
+
+def test_constraints_is_not_a_config_file_field(tmp_path):
+    """Constraints are camp data (OQ-19): they flow in via --data, not the
+    --config JSON file - a config file that tries to set them is rejected
+    like any other unknown key."""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"constraints": []}))
+
+    with pytest.raises(ConfigError, match="constraints"):
+        load_config(path)
 
 
 def test_valid_json_overrides_specific_fields(tmp_path):

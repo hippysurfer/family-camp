@@ -1673,7 +1673,7 @@ single raised error, not just the first.
 
 ---
 
-### - [ ] Step 43: Data loading and `EngineConfig` wiring (OQ-19)
+### - [x] Step 43: Data loading and `EngineConfig` wiring (OQ-19)
 
 **Goal**: Get constraints from an input file into `solve()`. Assumes
 OQ-19 answered "`EngineConfig` field."
@@ -1700,6 +1700,20 @@ produces the expected `ConstraintInstance` list; `EngineConfig` carries
 them through; a small end-to-end CLI test with a hand-authored
 constraints array (not yet enforced by either solver until Steps 44/45 -
 this step only proves the data reaches `config.constraints`).
+
+**Deviation found during implementation**: `load_json`'s new fourth
+return value would have forced updates across roughly a dozen test files
+that only ever unpack `fixtures.load_small_camp()`'s existing 3-tuple and
+never touch constraints. Kept `load_small_camp()`'s signature unchanged -
+it calls `load_json` and discards the (always-empty, for the small-camp
+fixture) fourth element internally - so only the handful of call sites
+that invoke `load_json` *directly* needed updating. Also added
+`dump_json`'s symmetric `constraint_records` parameter (raw, unresolved
+row dicts, not `ConstraintInstance` objects - there's no lossless
+serialiser back from a resolved instance to a row once its target has
+been expanded to actual `Camper` objects) slightly ahead of when Step 46
+will actually exercise it, since it's a small, natural addition to a file
+already being changed for `load_json`.
 
 **Commit message**: `family_camp2 step 43: load custom constraints from --data and wire into EngineConfig (OQ-19)`
 

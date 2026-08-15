@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.validation.class2 import Tier0Weights
 
 __all__ = ["EngineConfig", "ConfigError", "load_config"]
@@ -32,6 +33,12 @@ class EngineConfig:
     # Content is fixed (one entry per tier); the *order* is what OQ-4 requires be adjustable.
     objective_order: tuple[str, ...] = ("tier0", "tier1", "tier2")
     compulsory_activities: tuple[str, ...] = ()
+    # Per-camper/family custom constraints (REQUIREMENTS.md §3.5/§4.10,
+    # OQ-19) - populated from the --data/--legacy-cache source, not from
+    # this JSON config file (see load_config below): unlike the other
+    # fields here, constraints are camp-specific data tied to real
+    # campers in a given year, not a solver-tuning knob.
+    constraints: tuple[ConstraintInstance, ...] = ()
 
 
 def _parse_tier0_weights(data: dict) -> Tier0Weights:

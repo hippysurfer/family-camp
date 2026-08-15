@@ -48,7 +48,7 @@ def test_main_fetches_and_writes_json_without_real_network_or_oauth(monkeypatch,
     assert calls["fetch"][0] == "sentinel-client"
     assert calls["fetch"][1] == "abc123"
 
-    activities, sessions, campers = load_json(out_path)
+    activities, sessions, campers, constraints = load_json(out_path)
     assert [a.name for a in activities] == ["Archery"]
     assert [c.name for c in campers] == ["Kid"]
 

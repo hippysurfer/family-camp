@@ -2,8 +2,9 @@ import json
 
 import pytest
 
+from family_camp2.constraints.parser import ConstraintParseError
 from family_camp2.io.json_loader import JsonLoadError, dump_json, load_json
-from fixtures import load_small_camp
+from fixtures import SMALL_CAMP_JSON, load_small_camp
 
 
 def test_small_camp_loads_expected_counts():
@@ -64,17 +65,72 @@ def test_camper_with_unknown_optional_activity_raises(tmp_path):
         load_json(path)
 
 
+def test_small_camp_has_no_constraints_by_default():
+    activities, sessions, campers, constraints = load_json(SMALL_CAMP_JSON)
+    assert constraints == []
+
+
+def test_camp_with_a_family_level_constraint(tmp_path):
+    path = tmp_path / "with_constraints.json"
+    path.write_text(json.dumps({
+        "activities": [],
+        "sessions": [],
+        "campers": [
+            {"name": "Kid", "family_id": "F1", "age": 10, "age_group": "Cub", "priorities": [], "optional": []},
+        ],
+        "constraints": [
+            {"family_id": "F1", "camper_name": None, "constraint": "no_activities_on_day(2)", "severity": "hard"},
+        ],
+    }))
+
+    activities, sessions, campers, constraints = load_json(path)
+
+    assert len(constraints) == 1
+    assert constraints[0].severity == "hard"
+    assert [c.name for c in constraints[0].targets] == ["Kid"]
+
+
+def test_camp_with_an_unresolvable_constraint_raises_constraint_parse_error(tmp_path):
+    path = tmp_path / "bad_constraints.json"
+    path.write_text(json.dumps({
+        "activities": [],
+        "sessions": [],
+        "campers": [],
+        "constraints": [
+            {"family_id": "F1", "camper_name": None, "constraint": "no_activities_on_day(2)", "severity": "hard"},
+        ],
+    }))
+
+    with pytest.raises(ConstraintParseError, match="F1"):
+        load_json(path)
+
+
 def test_dump_json_round_trips_through_load_json(tmp_path):
     activities, sessions, campers = load_small_camp()
 
     out_path = tmp_path / "round_trip.json"
     dump_json(activities, sessions, campers, out_path)
-    reloaded_activities, reloaded_sessions, reloaded_campers = load_json(out_path)
+    reloaded_activities, reloaded_sessions, reloaded_campers, reloaded_constraints = load_json(out_path)
 
     assert {a.name for a in reloaded_activities} == {a.name for a in activities}
     assert set(reloaded_activities) == set(activities)
     assert set(reloaded_sessions) == set(sessions)
     assert set(reloaded_campers) == set(campers)
+    assert reloaded_constraints == []
+
+
+def test_dump_json_round_trips_constraint_records(tmp_path):
+    activities, sessions, campers = load_small_camp()
+    records = [
+        {"family_id": "F1", "camper_name": None, "constraint": "no_activities_on_day(2)", "severity": "hard"},
+    ]
+
+    out_path = tmp_path / "round_trip.json"
+    dump_json(activities, sessions, campers, out_path, constraint_records=records)
+    _, _, _, reloaded_constraints = load_json(out_path)
+
+    assert len(reloaded_constraints) == 1
+    assert reloaded_constraints[0].severity == "hard"
 
 
 def test_dump_json_output_matches_documented_schema(tmp_path):
@@ -84,7 +140,7 @@ def test_dump_json_output_matches_documented_schema(tmp_path):
     dump_json(activities, sessions, campers, out_path)
     data = json.loads(out_path.read_text())
 
-    assert set(data.keys()) == {"activities", "sessions", "campers"}
+    assert set(data.keys()) == {"activities", "sessions", "campers", "constraints"}
     archery = next(a for a in data["activities"] if a["name"] == "Archery")
     assert archery["duration_minutes"] == 60
     assert archery["max_occupancy"] == 4

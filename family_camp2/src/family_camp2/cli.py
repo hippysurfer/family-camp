@@ -157,9 +157,13 @@ def _report_to_json(report) -> str:
 
 
 def _load_data(args: argparse.Namespace):
+    """Returns (activities, sessions, campers, constraints). --legacy-cache
+    predates custom constraints (REQUIREMENTS.md §3.5) and has no way to
+    express them, so that path always yields an empty constraint list."""
     if args.data is not None:
         return load_json(args.data)
-    return load_legacy_cache(args.legacy_cache)
+    activities, sessions, campers = load_legacy_cache(args.legacy_cache)
+    return activities, sessions, campers, []
 
 
 def _write_outputs(
@@ -220,8 +224,8 @@ def _write_outputs(
 
 
 def _run_solve(args: argparse.Namespace) -> int:
-    activities, sessions, campers = _load_data(args)
-    config = load_config(args.config)
+    activities, sessions, campers, constraints = _load_data(args)
+    config = dataclasses.replace(load_config(args.config), constraints=tuple(constraints))
 
     progress_reporter = PrintProgressReporter(args.progress_output)
     try:
@@ -236,8 +240,8 @@ def _run_solve(args: argparse.Namespace) -> int:
 
 
 def _run_revalidate(args: argparse.Namespace) -> int:
-    activities, sessions, campers = _load_data(args)
-    config = load_config(args.config)
+    activities, sessions, campers, constraints = _load_data(args)
+    config = dataclasses.replace(load_config(args.config), constraints=tuple(constraints))
 
     if args.schedule.suffix == ".json":
         timetable = load_schedule_json(args.schedule, activities, sessions, campers)

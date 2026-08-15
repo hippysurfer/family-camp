@@ -14,7 +14,12 @@ SMALL_CAMP_JSON = FIXTURES_DIR / "small_camp.json"
 
 
 def load_small_camp() -> tuple[list[Activity], list[Session], list[Camper]]:
-    return load_json(SMALL_CAMP_JSON)
+    """Discards small_camp.json's (empty) constraints list - most callers
+    don't care, and there'd be dozens of call sites to update across the
+    test suite for a value they'd never use. Use load_json directly for a
+    test that specifically needs the fourth element."""
+    activities, sessions, campers, _constraints = load_json(SMALL_CAMP_JSON)
+    return activities, sessions, campers
 
 
 def generate_medium_instance(num_campers=30, num_activities=6, num_sessions=10, seed=42):

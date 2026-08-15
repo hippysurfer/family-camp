@@ -2337,7 +2337,105 @@ defects.
 
 ---
 
-## 7. After this plan
+## 7. Unified report output location (Step 55)
+
+### Context
+
+Implements REQUIREMENTS.md §4.12 (FR-110-112). By Step 54, `solve`/
+`revalidate` had accumulated one opt-in flag per report (`--out`,
+`--export-schedule`, `--report-dir`, `--pdf-dir`/`--pdf-paper`/
+`--pdf-orientation`) plus the status report's own separately-pathed
+`--status-report`. The user asked to tidy this up: every report
+generated unconditionally, no per-report flag, consolidated under a
+single `--out-dir`, with everything for one run in a folder named
+`<camp_name>_<date>_<time>`, and nothing written outside it except
+`fetch_cli.py`'s cached download JSON, which lives directly in
+`--out-dir`.
+
+**REQUIREMENTS.md OQ-29-31 are now answered**:
+
+- **OQ-29 (camp name source)**: derived automatically - the Google
+  Sheet's own title for `fetch_cli.py`, the `--data`/`--legacy-cache`
+  filename's stem for `solve`/`revalidate` - no new `--camp-name` flag
+  anywhere. This only works because `fetch_cli.py` names the file it
+  writes from the same camp name, so `solve`/`revalidate` recover it
+  automatically just by reading their own `--data` argument's filename.
+- **OQ-30 (`fetch_cli.py` in scope)**: yes - it gets the same `--out-dir`
+  (default `fetched_data`), writing `<camp_name>.json` directly into it.
+- **OQ-31 (date/time meaning)**: the run's own timestamp (when
+  `solve`/`revalidate` started), not the camp's dates - guarantees every
+  run gets a folder of its own.
+
+### Step list
+
+### - [x] Step 55: `--out-dir` consolidation (FR-110/111/112)
+
+**Goal**: one output flag, one folder per run, unconditional generation,
+across both `fetch_cli.py` and `cli.py`.
+
+**Add** `src/family_camp2/naming.py`: `slugify(name) -> str`
+(filesystem-safe lowercase slug) and `run_folder_name(camp_name, when)
+-> str` (`<slug>_<YYYYMMDD_HHMMSS>`) - pure functions, no filesystem
+I/O, shared by both CLI tools.
+
+**Change** `io/google_sheets.py`: `fetch_schedule_data` now returns the
+spreadsheet's own `title` as a new first tuple element (`spreadsheet.title`,
+already available on the object `open_spreadsheet` returns) - the source
+of `camp_name` for `fetch_cli.py`, avoiding a `--camp-name` flag.
+
+**Change** `fetch_cli.py`: `--out` (required path) replaced with
+`--out-dir` (default `fetched_data`); writes `<out-dir>/<slugify(title)>.json`,
+creating `--out-dir` if needed.
+
+**Change** `cli.py`: `_add_output_args` reduced from seven flags to one
+(`--out-dir`, default `fetched_data`). New `_camp_name(args)` (the
+`--data`/`--legacy-cache` file's `.stem`) and `_output_dir(args)` (creates
+and returns `<out-dir>/<camp_name>_<run timestamp>/`, appending a
+numeric suffix - `_2`, `_3`, ... - if that exact folder already exists,
+so two runs starting in the same second never collide). `_write_outputs`
+rewritten to always write every report (schedule CSV/JSON, `report.json`,
+the five text reports, both paper-size/orientation variants of all four
+audience PDFs, and `status_report.pdf`) into that one folder, with no
+`if args.x is not None` gates left anywhere. Both `_run_solve`/
+`_run_revalidate` print `Reports written to <path>` once done.
+
+**Tests**: `tests/test_naming.py` (new) for `slugify`/`run_folder_name`;
+`test_google_sheets.py`/`test_fetch_cli.py` updated for the new
+`(title, activities, sessions, campers, constraints)` return shape and
+`--out-dir`; `test_cli.py` rewritten around a `_out_dir_from_output`
+helper that parses the `Reports written to` line rather than
+reimplementing the naming logic, including new coverage for: the
+default-`--out-dir` case (`monkeypatch.chdir`), the run-folder naming
+convention itself, same-second collision avoidance (two real runs back
+to back, asserting two distinct folders), that every report file lands
+inside the folder, and that `revalidate` produces the identical set of
+filenames `solve` does. `test_cp_sat_cli.py`/`test_annealing_cli.py`
+updated to pass `--out-dir <tmp_path>` (previously `--status-report`).
+
+**Deviation found during implementation**: `--pdf-paper`/
+`--pdf-orientation`'s choice-of-one became both combinations generated
+unconditionally (`_a4_portrait`/`_a3_landscape` filename suffixes) -
+inferred from `fetched_data/pdfs/`'s existing real-world contents, which
+already had both variants of every PDF sitting side by side (evidently
+produced by hand-running the old flags twice), rather than asked as a
+fourth clarifying question. Collision avoidance (the numeric-suffix
+retry loop) wasn't explicitly requested but follows from OQ-31's answer:
+a second-precision timestamp alone doesn't guarantee uniqueness for two
+commands run back to back inside the same wall-clock second, so this
+was added as the direct consequence of taking "every run gets its own
+folder" seriously - confirmed with a dedicated test
+(`test_cli_two_runs_in_the_same_out_dir_never_collide`) that runs the
+CLI twice in immediate succession and asserts two distinct folders
+resulted, not one overwritten by the other. Verified manually against a
+real filesystem (not just `tmp_path`) that a full `solve` run produces
+exactly the 15 expected files, all inside the one timestamped subfolder,
+nothing else created anywhere.
+
+**Commit message**: `family_camp2 step 55: consolidate report output under --out-dir (FR-110/111/112)`
+
+---
+
+## 8. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:

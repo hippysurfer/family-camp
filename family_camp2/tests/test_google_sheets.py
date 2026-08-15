@@ -66,8 +66,9 @@ class FakeWorksheet:
 
 
 class FakeSpreadsheet:
-    def __init__(self, worksheets: dict[str, FakeWorksheet]):
+    def __init__(self, worksheets: dict[str, FakeWorksheet], title: str = "Test Camp 2026"):
         self._worksheets = worksheets
+        self.title = title
         self.requested_names = []
 
     def worksheet(self, name):
@@ -160,8 +161,9 @@ def test_fetch_schedule_data_parses_the_three_worksheets():
     spreadsheet = _real_shaped_spreadsheet()
     client = FakeClient(spreadsheet)
 
-    activities, sessions, campers, constraints = fetch_schedule_data(client, "abc123")
+    title, activities, sessions, campers, constraints = fetch_schedule_data(client, "abc123")
 
+    assert title == "Test Camp 2026"
     assert {a.name for a in activities} == {"Archery", "Craft"}
     assert len(sessions) == 2
     assert len(campers) == 3
@@ -193,7 +195,7 @@ def test_fetch_schedule_data_uses_extra_column_not_other_column_for_optional():
     spreadsheet = _real_shaped_spreadsheet(campers_rows=campers_rows)
     client = FakeClient(spreadsheet)
 
-    _, _, campers, _ = fetch_schedule_data(client, "abc123")
+    _, _, _, campers, _ = fetch_schedule_data(client, "abc123")
 
     # "Craft" is a perfectly valid activity, just sitting in the column
     # that's never read for this purpose - not flagged as unknown, simply ignored.
@@ -217,7 +219,7 @@ def test_fetch_schedule_data_skips_and_warns_about_unschedulable_activity_refere
     client = FakeClient(spreadsheet)
 
     with pytest.warns(UserWarning, match="Fencing"):
-        _, _, campers, _ = fetch_schedule_data(client, "abc123")
+        _, _, _, campers, _ = fetch_schedule_data(client, "abc123")
 
     assert campers[0].priorities == ()
     assert campers[0].optional == ()
@@ -234,7 +236,7 @@ def test_fetch_schedule_data_accepts_custom_worksheet_names():
     )
     client = FakeClient(spreadsheet)
 
-    activities, sessions, campers, constraints = fetch_schedule_data(
+    title, activities, sessions, campers, constraints = fetch_schedule_data(
         client, "abc123",
         activities_worksheet="MyActivities",
         sessions_worksheet="MySessions",
@@ -270,7 +272,7 @@ def test_fetch_schedule_data_parses_the_constraints_worksheet_into_raw_records()
     )
     client = FakeClient(spreadsheet)
 
-    _, _, _, constraints = fetch_schedule_data(
+    _, _, _, _, constraints = fetch_schedule_data(
         client, "abc123", constraints_worksheet=DEFAULT_CONSTRAINTS_WORKSHEET
     )
 

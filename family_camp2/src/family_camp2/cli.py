@@ -4,9 +4,16 @@ Two subcommands (OQ-15): ``solve`` generates a schedule with a solver;
 ``revalidate`` takes a previously exported, possibly hand-edited schedule
 (REQUIREMENTS.md §4.9, FR-86-89) and runs it through the same
 validation/reporting pipeline *without* invoking a solver. Both share the
-data-source flags (``_add_data_source_args``) and the output flags
+data-source flags (``_add_data_source_args``) and the output machinery
 (``_add_output_args``/``_write_outputs``), so the two entry points can
 never drift apart on how a report gets written out.
+
+Every report is generated unconditionally, into one fresh
+``<out-dir>/<camp_name>_<run timestamp>/`` folder per run (``naming.py``)
+- there's no per-report opt-in/opt-out flag, and nothing is ever written
+outside that folder (see ``_output_dir``). ``camp_name`` is derived from
+the ``--data``/``--legacy-cache`` file's own name, matching how
+``fetch_cli.py`` already names the file it writes.
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ import argparse
 import dataclasses
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 
 from family_camp2.config import EngineConfig, load_config
@@ -22,6 +30,7 @@ from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.io.json_loader import load_json
 from family_camp2.io.legacy_cache_loader import load_legacy_cache
 from family_camp2.io.schedule_export import dump_schedule_csv, dump_schedule_json, load_schedule_csv, load_schedule_json
+from family_camp2.naming import run_folder_name
 from family_camp2.pdf_reports import (
     PageSpec,
     render_activities_pdf,
@@ -45,6 +54,13 @@ from family_camp2.validation.report import ValidationReport, render_text
 from family_camp2.validation.tiers import find_unmet_optional_requests
 from family_camp2.validation.validator import validate
 
+# Every audience-specific PDF (FR-80/81/84/85) is now generated in both of
+# these (paper size, orientation) combinations unconditionally, rather than
+# the organiser picking one at a time - matches how fetched_data/pdfs/ was
+# already being produced by hand (a compact portrait copy plus a larger
+# landscape one), just automated.
+_PDF_VARIANTS = (("a4", "portrait"), ("a3", "landscape"))
+
 
 def _add_data_source_args(parser: argparse.ArgumentParser) -> None:
     data_source = parser.add_mutually_exclusive_group(required=True)
@@ -57,38 +73,11 @@ def _add_data_source_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_output_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--out", type=Path, default=None, help="If given, also write the full report as JSON to this path."
-    )
-    parser.add_argument(
-        "--export-schedule", type=Path, default=None, dest="export_schedule",
-        help="If given, write the actual generated timetable (not the validation report) to "
-        "<path>.csv and <path>.json (any extension on <path> is stripped first; OQ-11).",
-    )
-    parser.add_argument(
-        "--report-dir", type=Path, default=None, dest="report_dir",
-        help="If given, write family_itinerary.txt, activity_roster.txt, and idle_report.txt "
-        "into this directory (created if needed) (FR-72/FR-73/FR-74).",
-    )
-    parser.add_argument(
-        "--pdf-dir", type=Path, default=None, dest="pdf_dir",
-        help="If given, write activities.pdf, campers.pdf, available_adults.pdf, and "
-        "available_families.pdf into this directory (created if needed) "
-        "(FR-80/FR-81/FR-84/FR-85).",
-    )
-    parser.add_argument(
-        "--pdf-paper", choices=["a4", "a3"], default="a4", dest="pdf_paper",
-        help="Paper size for --pdf-dir output (default a4).",
-    )
-    parser.add_argument(
-        "--pdf-orientation", choices=["portrait", "landscape"], default="portrait", dest="pdf_orientation",
-        help="Orientation for --pdf-dir output (default portrait).",
-    )
-    parser.add_argument(
-        "--status-report", type=Path, default=None, dest="status_report",
-        help="Where to write the schedule status report PDF (FR-97-109/§4.11). Unlike every "
-        "other output here, this is generated unconditionally, not opt-in - this flag only "
-        "overrides its location. Defaults to <export-schedule-stem>_status_report.pdf if "
-        "--export-schedule is given, else ./status_report.pdf.",
+        "--out-dir", type=Path, default=Path("fetched_data"), dest="out_dir",
+        help="Directory to create this run's report folder in (default 'fetched_data') - every "
+        "report (validation report, exported schedule, text reports, PDFs, status report) is "
+        "always generated, into <out-dir>/<camp_name>_<run timestamp>/. Nothing is ever written "
+        "outside that folder.",
     )
 
 
@@ -182,17 +171,31 @@ def _load_data(args: argparse.Namespace):
     return activities, sessions, campers, []
 
 
-def _status_report_path(args: argparse.Namespace) -> Path:
-    """FR-107: an explicit ``--status-report`` always wins; otherwise
-    alongside ``--export-schedule`` when given (matching how that flag's
-    stem already derives ``.csv``/``.json``), else a fixed filename in
-    the current directory."""
-    if args.status_report is not None:
-        return args.status_report
-    if args.export_schedule is not None:
-        stem = args.export_schedule.with_suffix("")
-        return stem.with_name(stem.name + "_status_report.pdf")
-    return Path("status_report.pdf")
+def _camp_name(args: argparse.Namespace) -> str:
+    """Derived from the ``--data``/``--legacy-cache`` file's own name
+    (e.g. ``willesley_2026.json`` -> ``"willesley_2026"``) - matches how
+    ``fetch_cli.py`` already names the file it writes, so no separate
+    ``--camp-name`` flag is needed here either."""
+    return Path(args.data if args.data is not None else args.legacy_cache).stem
+
+
+def _output_dir(args: argparse.Namespace) -> Path:
+    """A fresh ``<out-dir>/<camp_name>_<run timestamp>/`` folder for this
+    run (FR-107-style default, generalised beyond just the status report
+    to every output this CLI produces) - every run gets its own folder,
+    so a later run never overwrites an earlier one's reports, and nothing
+    is ever written outside it. The timestamp alone is only second-
+    precision, so two runs started in the same second append a numeric
+    suffix (``_2``, ``_3``, ...) rather than silently colliding into the
+    same folder."""
+    base_name = run_folder_name(_camp_name(args), datetime.now())
+    out_dir = args.out_dir / base_name
+    suffix = 1
+    while out_dir.exists():
+        suffix += 1
+        out_dir = args.out_dir / f"{base_name}_{suffix}"
+    out_dir.mkdir(parents=True)
+    return out_dir
 
 
 def _write_outputs(
@@ -204,49 +207,41 @@ def _write_outputs(
     config: EngineConfig,
     solver_info: SolverInfo,
     args: argparse.Namespace,
-) -> None:
-    """Everything that can happen to a (Timetable, ValidationReport) pair
-    after it exists, shared verbatim between ``solve`` and ``revalidate``
-    (FR-89) so the two entry points can never write reports differently.
+) -> Path:
+    """Every report this engine can produce, unconditionally, into one
+    fresh output folder - shared verbatim between ``solve`` and
+    ``revalidate`` (FR-89) so the two entry points can never write
+    reports differently. Returns the folder actually used, so the caller
+    can tell the organiser where to look."""
+    out_dir = _output_dir(args)
 
-    The status report (FR-98) is generated unconditionally, unlike every
-    block below it - it isn't gated by an ``if args.x is not None`` check."""
+    (out_dir / "report.json").write_text(_report_to_json(report))
+
+    dump_schedule_csv(timetable, out_dir / "schedule.csv")
+    dump_schedule_json(timetable, out_dir / "schedule.json")
+
+    idle_report = find_idle_slots(timetable, campers, sessions)
+    unmet_optional = find_unmet_optional_requests(timetable, campers)
+    overdemand = find_overdemanding_families(sessions, campers)
+    (out_dir / "family_itinerary.txt").write_text(render_family_itinerary(timetable, campers))
+    (out_dir / "activity_roster.txt").write_text(render_activity_roster(timetable, sessions))
+    (out_dir / "idle_report.txt").write_text(render_idle_report(idle_report))
+    (out_dir / "unmet_optional_report.txt").write_text(render_unmet_optional_report(unmet_optional, overdemand))
+    (out_dir / "unfeasible_families_report.txt").write_text(render_unfeasible_families_report(overdemand))
+
+    for paper_size, orientation in _PDF_VARIANTS:
+        page_spec = PageSpec(paper_size=paper_size, orientation=orientation)
+        suffix = f"{paper_size}_{orientation}"
+        render_activities_pdf(timetable, sessions, out_dir / f"activities_{suffix}.pdf", page_spec)
+        render_campers_pdf(timetable, campers, out_dir / f"campers_{suffix}.pdf", page_spec)
+        render_available_adults_pdf(idle_report, out_dir / f"available_adults_{suffix}.pdf", page_spec)
+        render_available_families_pdf(idle_report, out_dir / f"available_families_{suffix}.pdf", page_spec)
 
     render_status_report_pdf(
-        activities, sessions, campers, timetable, report, config, solver_info, _status_report_path(args)
+        activities, sessions, campers, timetable, report, config, solver_info, out_dir / "status_report.pdf"
     )
 
-    if args.out is not None:
-        args.out.write_text(_report_to_json(report))
-
-    if args.export_schedule is not None:
-        stem = args.export_schedule.with_suffix("")
-        dump_schedule_csv(timetable, stem.with_suffix(".csv"))
-        dump_schedule_json(timetable, stem.with_suffix(".json"))
-
-    if args.report_dir is not None:
-        args.report_dir.mkdir(parents=True, exist_ok=True)
-        idle_report = find_idle_slots(timetable, campers, sessions)
-        unmet_optional = find_unmet_optional_requests(timetable, campers)
-        overdemand = find_overdemanding_families(sessions, campers)
-        (args.report_dir / "family_itinerary.txt").write_text(render_family_itinerary(timetable, campers))
-        (args.report_dir / "activity_roster.txt").write_text(render_activity_roster(timetable, sessions))
-        (args.report_dir / "idle_report.txt").write_text(render_idle_report(idle_report))
-        (args.report_dir / "unmet_optional_report.txt").write_text(
-            render_unmet_optional_report(unmet_optional, overdemand)
-        )
-        (args.report_dir / "unfeasible_families_report.txt").write_text(
-            render_unfeasible_families_report(overdemand)
-        )
-
-    if args.pdf_dir is not None:
-        args.pdf_dir.mkdir(parents=True, exist_ok=True)
-        page_spec = PageSpec(paper_size=args.pdf_paper, orientation=args.pdf_orientation)
-        render_activities_pdf(timetable, sessions, args.pdf_dir / "activities.pdf", page_spec)
-        render_campers_pdf(timetable, campers, args.pdf_dir / "campers.pdf", page_spec)
-        idle_report = find_idle_slots(timetable, campers, sessions)
-        render_available_adults_pdf(idle_report, args.pdf_dir / "available_adults.pdf", page_spec)
-        render_available_families_pdf(idle_report, args.pdf_dir / "available_families.pdf", page_spec)
+    return out_dir
 
 
 def _run_solve(args: argparse.Namespace) -> int:
@@ -264,7 +259,8 @@ def _run_solve(args: argparse.Namespace) -> int:
 
     print(render_text(result.report))
     solver_info = SolverInfo(solver_name=args.solver, duration_seconds=duration_seconds, diagnostics=result.diagnostics)
-    _write_outputs(activities, result.timetable, result.report, campers, sessions, config, solver_info, args)
+    out_dir = _write_outputs(activities, result.timetable, result.report, campers, sessions, config, solver_info, args)
+    print(f"Reports written to {out_dir}")
     return 0
 
 
@@ -288,7 +284,8 @@ def _run_revalidate(args: argparse.Namespace) -> int:
     )
 
     print(render_text(report))
-    _write_outputs(activities, timetable, report, campers, sessions, config, SolverInfo(), args)
+    out_dir = _write_outputs(activities, timetable, report, campers, sessions, config, SolverInfo(), args)
+    print(f"Reports written to {out_dir}")
     return 0
 
 

@@ -321,7 +321,7 @@ def fetch_schedule_data(
     sessions_worksheet: str = DEFAULT_SESSIONS_WORKSHEET,
     campers_worksheet: str = DEFAULT_CAMPERS_WORKSHEET,
     constraints_worksheet: str | None = None,
-) -> tuple[list[Activity], list[Session], list[Camper], list[dict]]:
+) -> tuple[str, list[Activity], list[Session], list[Camper], list[dict]]:
     """Fetch the schedule worksheets from an already-open spreadsheet and
     parse them into domain objects.
 
@@ -329,8 +329,8 @@ def fetch_schedule_data(
     the OAuth dance and the fetch-and-parse logic can be tested
     independently - this function itself needs no real network access if
     ``client`` is a test double exposing the same
-    open_by_key/open_by_url/worksheet/get_all_values interface as
-    ``gspread.Client``.
+    open_by_key/open_by_url/worksheet/get_all_values/title interface as
+    ``gspread.Client``/``gspread.Spreadsheet``.
 
     ``constraints_worksheet`` defaults to ``None`` - unlike the other three
     tabs, the constraints tab (§3.5) is an optional addition most existing
@@ -339,8 +339,15 @@ def fetch_schedule_data(
     ``DEFAULT_CONSTRAINTS_WORKSHEET`` - an explicit opt-in, not an implicit
     probe that would otherwise need to silently swallow a "tab not found"
     error from whatever the client library raises).
+
+    The returned ``title`` (the spreadsheet's own name, e.g. "Willesley
+    2026") is what ``fetch_cli.py`` uses to derive a camp name for its
+    output filename - avoids needing a separate ``--camp-name`` flag, on
+    the theory that a camp organiser's spreadsheet is already sensibly
+    named.
     """
     spreadsheet = open_spreadsheet(client, sheet_id_or_url)
+    title = spreadsheet.title
     acts_rows = spreadsheet.worksheet(activities_worksheet).get_all_values()
     session_rows = spreadsheet.worksheet(sessions_worksheet).get_all_values()
     campers_rows = spreadsheet.worksheet(campers_worksheet).get_all_values()
@@ -362,4 +369,4 @@ def fetch_schedule_data(
         constraint_rows = spreadsheet.worksheet(constraints_worksheet).get_all_values()
         constraint_records = _parse_constraints(constraint_rows)
 
-    return list(activities_by_name.values()), sessions, campers, constraint_records
+    return title, list(activities_by_name.values()), sessions, campers, constraint_records

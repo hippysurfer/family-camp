@@ -10,7 +10,7 @@ from fixtures import SMALL_CAMP_JSON, generate_medium_instance
 def test_cli_solves_small_camp_fully_feasibly_with_cp_sat(tmp_path, capsys):
     exit_code = cli.main([
         "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON),
-        "--status-report", str(tmp_path / "status_report.pdf"),
+        "--out-dir", str(tmp_path),
     ])
 
     assert exit_code == 0

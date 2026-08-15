@@ -4,8 +4,14 @@ the OAuth dance, and save it as a JSON file ready for ``family_camp2``'s
 
 Usage::
 
-    python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL> --out data.json
-    family_camp2-fetch --sheet-id <SHEET_ID_OR_URL> --out data.json   # console script
+    python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL>
+    family_camp2-fetch --sheet-id <SHEET_ID_OR_URL>   # console script
+
+Writes ``<out-dir>/<camp_name>.json``, where ``camp_name`` is derived
+from the spreadsheet's own title (e.g. "Willesley 2026" ->
+"willesley_2026.json") - no separate ``--camp-name`` flag needed, and
+``cli.py``'s ``solve``/``revalidate`` recover the same camp name later
+from this file's own name (see ``naming.py``).
 
 The first run opens a browser for you to sign in to Google and grant
 read-only access; gspread caches the resulting token so later runs don't
@@ -26,6 +32,7 @@ from family_camp2.io.google_sheets import (
     get_client,
 )
 from family_camp2.io.json_loader import dump_json
+from family_camp2.naming import slugify
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,7 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="Download Family Camp schedule input data from Google Sheets and save it as a JSON --data file.",
     )
     parser.add_argument("--sheet-id", required=True, help="Google Sheet ID, or its full URL.")
-    parser.add_argument("--out", type=Path, required=True, help="Where to write the resulting JSON file.")
+    parser.add_argument(
+        "--out-dir", type=Path, default=Path("fetched_data"),
+        help="Directory to write <camp_name>.json into (created if needed; default 'fetched_data').",
+    )
     parser.add_argument(
         "--activities-worksheet", default=DEFAULT_ACTIVITIES_WORKSHEET,
         help=f"Worksheet tab name for activities (default: {DEFAULT_ACTIVITIES_WORKSHEET!r}).",
@@ -71,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     client = get_client(credentials_path=args.credentials, authorized_user_path=args.authorized_user)
-    activities, sessions, campers, constraint_records = fetch_schedule_data(
+    camp_name, activities, sessions, campers, constraint_records = fetch_schedule_data(
         client,
         args.sheet_id,
         activities_worksheet=args.activities_worksheet,
@@ -80,10 +90,12 @@ def main(argv: list[str] | None = None) -> int:
         constraints_worksheet=args.constraints_worksheet,
     )
 
-    dump_json(activities, sessions, campers, args.out, constraint_records)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = args.out_dir / f"{slugify(camp_name)}.json"
+    dump_json(activities, sessions, campers, out_path, constraint_records)
     print(
         f"Wrote {len(activities)} activities, {len(sessions)} sessions, "
-        f"{len(campers)} campers, {len(constraint_records)} constraints to {args.out}"
+        f"{len(campers)} campers, {len(constraint_records)} constraints to {out_path}"
     )
     return 0
 

@@ -11,7 +11,7 @@ def test_cli_solves_small_camp_fully_feasibly_with_annealing(tmp_path, capsys):
     exit_code = cli.main([
         "solve", "--solver", "annealing", "--data", str(SMALL_CAMP_JSON),
         "--num-chains", "4", "--iterations-per-chain", "500", "--seed", "1",
-        "--status-report", str(tmp_path / "status_report.pdf"),
+        "--out-dir", str(tmp_path),
     ])
 
     assert exit_code == 0

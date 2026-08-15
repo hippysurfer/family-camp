@@ -521,15 +521,17 @@ made when this requirement was reviewed (chart library, pagination,
 trigger mechanism, output location, and the `reportlab` dependency).
 
 - **FR-97**: The status report MUST be generated as an A4 PDF document,
-  portrait orientation, fixed (not organiser-configurable per-run like
-  FR-82's `--pdf-paper`/`--pdf-orientation`, since unlike FR-80/81/84/85
+  portrait orientation, fixed (not organiser-configurable per-run the
+  way FR-82's audience-specific PDFs are, since unlike FR-80/81/84/85
   this isn't a per-audience print-out — it's always the same kind of
   read).
 - **FR-98**: The status report MUST be generated at the end of every
-  `solve` run and every `revalidate` run, unconditionally — no opt-in
-  flag gates it, unlike every other export/report output in this
-  document (FR-70, `--report-dir`, `--pdf-dir` are all still opt-in).
-  See FR-107 for where it's written.
+  `solve` run and every `revalidate` run, unconditionally. See FR-107
+  for where it's written. *Superseded in scope by §4.12/FR-110*: this
+  requirement originally motivated making just the status report
+  unconditional while every other export/report output stayed opt-in;
+  the user later asked (§4.12) for that same unconditional treatment to
+  extend to every report this engine produces, not only this one.
 - **FR-99**: The status report MUST contain, at minimum, five sections:
   front matter (FR-100), camp activity information (FR-101), activity
   session loading (FR-102), camper/family activity loading (FR-103/104),
@@ -596,25 +598,63 @@ trigger mechanism, output location, and the `reportlab` dependency).
   so explicitly (e.g. "N/A — re-validated from an edited schedule") —
   never fabricate solver information that doesn't exist, consistent with
   FR-88's "don't treat re-validated input as inherently trustworthy".
-- **FR-107 (Output location)**: With no opt-in flag to hang a path off
-  (FR-98), the default output path is: alongside `--export-schedule`
-  when given (`<stem>_status_report.pdf`, matching how that flag already
-  derives `<stem>.csv`/`<stem>.json`); otherwise `./status_report.pdf` in
-  the current working directory. An explicit `--status-report PATH` flag
-  MAY override either default.
+- **FR-107 (Output location)** — *superseded by §4.12/FR-110*: originally,
+  with no opt-in flag to hang a path off (FR-98), the default output path
+  was alongside `--export-schedule` when given, otherwise
+  `./status_report.pdf`, overridable with `--status-report PATH`. §4.12
+  replaced this status-report-specific rule with one shared location
+  convention for every report this engine produces.
 - **FR-108 (`reportlab` dependency)**: Since generation is unconditional
   (FR-98), `reportlab` MUST move from the optional `pdf` extra
   (`pip install -e ".[pdf]"`) into family_camp2's core install
   dependencies — every `solve`/`revalidate` run now needs it, so there's
   no longer a meaningful "optional" case to guard with the existing
-  `ImportError`-catching pattern (`_write_outputs`'s `--pdf-dir` block).
-  The four existing audience-specific PDFs (FR-80/81/84/85, still behind
-  `--pdf-dir`) benefit incidentally — `reportlab` is now guaranteed
-  present for them too.
+  `ImportError`-catching pattern. The four existing audience-specific
+  PDFs (FR-80/81/84/85) benefit incidentally — `reportlab` is now
+  guaranteed present for them too.
 - **FR-109 (Charting approach)**: Charts (FR-102/103/104) MUST be built
   with `reportlab.graphics.charts` (native bar/stacked-bar support), not
   a new charting dependency (e.g. matplotlib) — consistent with NFR-6
   and every other visual element `pdf_reports.py` already produces.
+
+### 4.12 Unified report output location
+
+Raised by the user wanting to "tidy up the cli arguments for generating
+reports": by this point, `solve`/`revalidate` had accumulated one opt-in
+flag per report (`--out`, `--export-schedule`, `--report-dir`,
+`--pdf-dir`/`--pdf-paper`/`--pdf-orientation`) plus the status report's
+own unconditional-but-separately-pathed `--status-report` (§4.11/FR-98).
+The user asked for every report to be generated unconditionally — no
+flag to exclude any of them — consolidated under one `--out-dir` option,
+with every file for a run living in one folder named from the camp and
+the run's date/time, and nothing ever written outside it except
+`fetch_cli.py`'s cached download JSON.
+
+- **FR-110 (Unconditional, consolidated report generation)**: Every
+  report `solve`/`revalidate` can produce — the exported schedule
+  (FR-70/71), the operational text reports (FR-72-74/76/77), the
+  audience-specific PDFs (FR-80/81/84/85), the validation report JSON,
+  and the status report (§4.11) — MUST be generated on every run, with
+  no per-report flag to exclude any of them. `--pdf-paper`/
+  `--pdf-orientation`'s former choice of one paper size/orientation MUST
+  become both combinations, generated unconditionally, rather than a
+  choice the organiser makes per run.
+- **FR-111 (`--out-dir` and folder naming)**: `solve`/`revalidate` MUST
+  take a single `--out-dir` option (a folder, default `fetched_data`).
+  Every report for one run MUST be written into a subfolder of it named
+  `<camp_name>_<run timestamp>` — `camp_name` derived from the
+  `--data`/`--legacy-cache` input file's own name; the run timestamp
+  captured when the command starts, so two runs never collide into the
+  same folder. No file MUST be created outside that subfolder.
+- **FR-112 (`fetch_cli.py` alignment)**: `fetch_cli.py` MUST take the
+  same `--out-dir` option (default `fetched_data`) and write its cached
+  download JSON directly into it (not a per-run subfolder, per FR-111's
+  exception) — this is a durable cache reused across many later
+  `solve` runs, not one run's own report. `camp_name` for its filename
+  MUST be derived from the Google Sheet's own title, so no separate
+  `--camp-name` flag is needed on either tool, and `solve`/`revalidate`
+  (FR-111) recover the same name automatically from the file `fetch_cli.py`
+  wrote.
 
 ## 5. Non-functional requirements
 
@@ -931,3 +971,28 @@ The rewrite succeeds if, for a real Family Camp dataset conforming to §3:
   path, but a heavier mandatory install)?
 
   [Answer: reportlab becomes a hard dependency]
+
+- **OQ-29 (Camp name source, FR-111/112)**: Neither the JSON data schema,
+  `--legacy-cache`, nor a Google Sheet has an explicit "camp name"
+  concept, but both `fetch_cli.py` and `solve`/`revalidate` need one for
+  their output naming. Should it come from a new explicit `--camp-name`
+  flag (stored in the JSON so downstream commands don't need their own
+  copy), from `--camp-name` required on every command separately, or be
+  derived automatically (the Google Sheet's own title for `fetch_cli.py`;
+  the `--data`/`--legacy-cache` filename's stem for `solve`/`revalidate`)?
+
+  [Answer: derived automatically, no new flag]
+
+- **OQ-30 (`fetch_cli.py` in scope, FR-112)**: Does the `--out-dir`
+  restructuring extend to `fetch_cli.py` (writing its cached download
+  JSON directly into `--out-dir`), or is it scoped to `solve`/
+  `revalidate` only?
+
+  [Answer: yes, fetch_cli.py too]
+
+- **OQ-31 (Run-folder date/time meaning, FR-111)**: Should
+  `<camp_name>_<date>_<time>` represent when the `solve`/`revalidate`
+  command executed (a run identifier), or the camp's own dates (from the
+  session data)?
+
+  [Answer: when the run executed]

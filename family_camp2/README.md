@@ -35,8 +35,7 @@ a schedule with a solver; `revalidate` takes a previously exported
 schedule (optionally hand-edited) and runs it through the same
 validation/reporting pipeline *without* running a solver - see "Manual
 editing and re-validation" below. Both share the `--data`/`--legacy-cache`
-data-source flags and the `--out`/`--export-schedule`/`--report-dir`/
-`--pdf-dir` output flags.
+data-source flags and a single `--out-dir` output flag.
 
 ```sh
 # Constraint programming (Design A) against a JSON camp file
@@ -50,13 +49,10 @@ python -m family_camp2 solve --solver annealing --data tests/fixtures/small_camp
 # family_camp/schedule/fetch_data.py - see io/legacy_cache_loader.py)
 python -m family_camp2 solve --solver cp_sat --legacy-cache ../.cache.pickle
 
-# Write the full structured report to a file as well as stdout
-python -m family_camp2 solve --solver cp_sat --data tests/fixtures/small_camp.json --out report.json
-
-# A long CP-SAT run: progress every 60s to a log file, plus the actual
-# schedule (not just the validation report) and human-readable reports
+# A long CP-SAT run: progress every 60s to a log file, reports into a
+# specific directory tree instead of the default ./fetched_data
 python -m family_camp2 solve --solver cp_sat --data data.json --time-limit 5400 \
-    --progress-output run.log --export-schedule schedule --report-dir reports/
+    --progress-output run.log --out-dir output/
 ```
 
 `solve`-only flags: `--solver {cp_sat,annealing}` (required),
@@ -64,9 +60,8 @@ python -m family_camp2 solve --solver cp_sat --data data.json --time-limit 5400 
 `--num-chains`/`--iterations-per-chain` (annealing only),
 `--progress-output`/`--progress-interval`. Shared with `revalidate`:
 `--data`/`--legacy-cache` (mutually exclusive, required), `--config
-PATH` (an `EngineConfig` JSON file, see below), `--export-schedule`,
-`--report-dir`, `--pdf-dir`/`--pdf-paper`/`--pdf-orientation` (all
-documented in the next section).
+PATH` (an `EngineConfig` JSON file, see below), `--out-dir` (documented
+in the next section).
 
 ## Progress reporting and report generation
 
@@ -89,14 +84,17 @@ Annealing instead reports each time a restart chain finishes (see the
 module note in `solvers/annealing/solver.py` for why - at real-world
 scale, chains finish in seconds, well inside the default cadence anyway).
 
-**Schedule export** (`--export-schedule PATH`): writes the actual
-generated timetable - who's assigned to what, distinct from `--out`'s
-scoring/violation report - as **both** `PATH.csv` and `PATH.json` (any
-extension typed on `PATH` is stripped first). Re-importable via
+Every report below is generated **unconditionally** on every `solve`/
+`revalidate` run - there's no per-report opt-in/opt-out flag, only a
+single `--out-dir PATH` (default `./fetched_data`) controlling *where*
+they all land. See "Report output location" below for the folder layout.
+
+**Schedule export**: writes the actual generated timetable - who's
+assigned to what, distinct from `report.json`'s scoring/violation report
+- as **both** `schedule.csv` and `schedule.json`. Re-importable via
 `family_camp2.io.schedule_export.load_schedule_csv`/`load_schedule_json`.
 
-**Operational reports** (`--report-dir PATH`): writes five text files
-into `PATH` (created if needed):
+**Operational reports**: writes five text files:
 - `family_itinerary.txt` - each family's assigned sessions, in time order.
 - `activity_roster.txt` - each session's assigned campers, with occupancy
   against the activity's limit.
@@ -126,17 +124,19 @@ has several (e.g. annealing's other restart chains) - REQUIREMENTS.md
 FR-75 is a *should*, and OQ-12 confirmed a single best answer is
 sufficient for this rewrite.
 
-**PDF reports** (`--pdf-dir PATH`, `--pdf-paper {a4,a3}` default a4,
-`--pdf-orientation {portrait,landscape}` default portrait): writes
-`activities.pdf`, `campers.pdf`, `available_adults.pdf`, and
-`available_families.pdf` into `PATH` (created if needed) -
+**PDF reports**: writes `activities.pdf`, `campers.pdf`,
+`available_adults.pdf`, and `available_families.pdf` -
 FR-80/81/82/84/85, added at the user's request after reviewing the old
-system's PDF output. Uses `reportlab` (a pure-Python PDF library, no
-external binaries/subprocesses) - a core dependency, installed
-automatically alongside `family_camp2` itself, since the status report
-below (§4.11) needs it unconditionally on every run regardless of
-`--pdf-dir`. Examples of all four (both A4 portrait and A3 landscape)
-generated from real 2026 camp data are in `fetched_data/pdfs/`.
+system's PDF output. Each is written in **both** paper size/orientation
+combinations unconditionally (`_a4_portrait.pdf` and `_a3_landscape.pdf`
+suffixes, e.g. `activities_a4_portrait.pdf` / `activities_a3_landscape.pdf`)
+rather than the organiser picking one at a time - matches how
+`fetched_data/pdfs/` was already being produced by hand (a compact
+portrait copy plus a larger landscape one) before this was automated.
+Uses `reportlab` (a pure-Python PDF library, no external binaries/
+subprocesses) - a core dependency, installed automatically alongside
+`family_camp2` itself, since these and the status report below (§4.11)
+are both generated unconditionally on every run.
 
 Deliberately not a port of the old layout - see
 `family_camp2.pdf_reports`'s module docstring for the two changes that
@@ -161,6 +161,33 @@ logic. `available_families.pdf` narrows this further to adults whose
 adult themselves) - a stronger availability signal, since they won't
 need to break away to rejoin a family member who's mid-activity.
 
+### Report output location (`--out-dir`)
+
+Every report above, plus the exported schedule and the status report
+below, land in one fresh folder per run:
+`<out-dir>/<camp_name>_<run timestamp>/` - nothing is ever written
+outside it. `<out-dir>` defaults to `./fetched_data`; `<camp_name>` is
+derived from the `--data`/`--legacy-cache` file's own name (e.g.
+`willesley_2026.json` -> `willesley_2026`, matching how `fetch_cli.py`
+names the file it writes - see below); `<run timestamp>` is when the
+command started (`YYYYMMDD_HHMMSS`, with a numeric suffix appended on
+the rare case two runs start in the same second, so they never collide).
+Both `solve` and `revalidate` print `Reports written to <path>` once
+they're done, naming the exact folder used:
+
+```sh
+python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json
+# Reports written to fetched_data/willesley_2026_20260815_130300
+
+python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json --out-dir output/
+# Reports written to output/willesley_2026_20260815_130300
+```
+
+That folder ends up containing: `report.json`, `schedule.csv` +
+`schedule.json`, the five operational text reports, all eight PDF
+variants, and `status_report.pdf` - every report this engine can
+produce, every time, all in one place.
+
 ## Schedule status report
 
 REQUIREMENTS.md §4.11 (FR-97-109): a single A4-portrait PDF bringing
@@ -169,23 +196,11 @@ fulfilment, and solver diagnostics - a one-stop overview for the
 organiser reviewing a run, distinct from the audience-specific reports
 above and from the plain violation report (FR-40/41) alone.
 
-Unlike every other output in this document, it's generated
-**unconditionally** on every `solve`/`revalidate` run - there's no
-opt-in flag to switch it off. Its output location defaults to
-`<export-schedule-stem>_status_report.pdf` when `--export-schedule` is
-given, else `./status_report.pdf`; `--status-report PATH` overrides
-either default:
-
-```sh
-python -m family_camp2 solve --solver cp_sat --data data.json
-# -> ./status_report.pdf
-
-python -m family_camp2 solve --solver cp_sat --data data.json --export-schedule out/schedule
-# -> out/schedule_status_report.pdf
-
-python -m family_camp2 solve --solver cp_sat --data data.json --status-report reports/status.pdf
-# -> reports/status.pdf
-```
+Like every other report (see "Report output location" above), it's
+generated **unconditionally** on every `solve`/`revalidate` run, as
+`status_report.pdf` in that run's output folder - the FR-98/§4.11
+requirement that motivated making *all* of this CLI's output
+unconditional in the first place, not just this one file.
 
 Five sections, in order:
 
@@ -227,17 +242,17 @@ throughout `validation/`.
 
 Implements REQUIREMENTS.md §4.9 (FR-86-89) - partially reopens §1.2's
 "manual editing workflow" exclusion, at the user's explicit request. The
-scope is narrow and specifically *not* an interactive editor: take a
-schedule `solve --export-schedule` already wrote out, hand-edit the CSV
-(or JSON) in a spreadsheet, and get it back through the exact same
-validation and reporting `solve` would have run, without re-running a
-solver.
+scope is narrow and specifically *not* an interactive editor: take the
+`schedule.csv`/`schedule.json` a `solve` run already wrote into its
+output folder, hand-edit the CSV (or JSON) in a spreadsheet, and get it
+back through the exact same validation and reporting `solve` would have
+run, without re-running a solver.
 
 ```sh
-python -m family_camp2 solve --solver cp_sat --data data.json --export-schedule schedule
-# ...open schedule.csv, tweak who's assigned where, save...
-python -m family_camp2 revalidate --data data.json --schedule schedule.csv \
-    --report-dir reports/ --pdf-dir pdfs/
+python -m family_camp2 solve --solver cp_sat --data data.json
+# Reports written to fetched_data/data_20260815_130300
+# ...open fetched_data/data_20260815_130300/schedule.csv, tweak who's assigned where, save...
+python -m family_camp2 revalidate --data data.json --schedule fetched_data/data_20260815_130300/schedule.csv
 ```
 
 `--schedule PATH` (required) is dispatched to `io.schedule_export.load_schedule_csv`/
@@ -257,11 +272,11 @@ special-case this: it calls the exact same `validate(...)` `solve` does,
 so a bad edit shows up in `Feasible: False` and the itemised Class 1
 section exactly like any other violation would.
 
-`revalidate` accepts every output flag `solve` does (`--out`,
-`--export-schedule`, `--report-dir`, `--pdf-dir`/`--pdf-paper`/
-`--pdf-orientation`), so a revalidated schedule can itself be
-re-exported and edited again for a second round (FR-89). Not built:
-a diff summary against the schedule being edited (OQ-17 - deferred).
+`revalidate` produces the exact same set of reports `solve` does, in its
+own fresh output folder (`--out-dir`, same as `solve` - FR-89), so a
+revalidated schedule can itself be re-exported and edited again for a
+second round. Not built: a diff summary against the schedule being
+edited (OQ-17 - deferred).
 
 ## Input data
 
@@ -307,16 +322,25 @@ without needing any new data-fetch work.
 `fetch_cli.py` downloads the same three worksheets the old system reads
 ("Activities for schedule", "Sessions for schedule", "Activities") and
 saves them straight into this package's own JSON format, ready for
-`--data`:
+`--data`, as `<out-dir>/<camp_name>.json` - `<camp_name>` is derived
+from the spreadsheet's own title (e.g. "Willesley 2026" ->
+`willesley_2026.json`), so no separate `--camp-name` flag is needed;
+`solve`/`revalidate` later recover the same camp name from this file's
+own name (see "Report output location" above). `--out-dir` defaults to
+`./fetched_data`, same default as `solve`/`revalidate` - this is the one
+file this whole CLI writes directly into `--out-dir` rather than into a
+per-run subfolder, since it's a durable cache to be reused across many
+solve runs, not a report from any one of them.
 
 ```sh
 pip install -e ".[google]"   # pulls in gspread, only needed for this tool
 
-python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL> --out data.json
+python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL>
 # or, via the console script installed by pip:
-family_camp2-fetch --sheet-id <SHEET_ID_OR_URL> --out data.json
+family_camp2-fetch --sheet-id <SHEET_ID_OR_URL>
+# Wrote 12 activities, 91 sessions, 283 campers, 0 constraints to fetched_data/willesley_2026.json
 
-python -m family_camp2 solve --solver cp_sat --data data.json
+python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json
 ```
 
 Authentication is the interactive **user OAuth flow**, not the old

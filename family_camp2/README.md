@@ -9,7 +9,7 @@ package: this package has its own PDF reports (`pdf_reports.py`, below)
 and its own hand-editing/re-validation workflow (`revalidate`, below),
 but the old package's other tooling (packs, the booking-site automation)
 is untouched. It does include its own way to fetch input data from
-Google Sheets (`fetch_cli.py`, below) — independent of the old
+Google Sheets (the `fetch` subcommand, below) — independent of the old
 `family_camp/schedule/fetch_data.py`, and producing this package's own
 JSON format rather than a pickle cache. See:
 
@@ -30,38 +30,66 @@ pytest
 
 ## CLI usage
 
-`python -m family_camp2` has two subcommands (OQ-15): `solve` generates
-a schedule with a solver; `revalidate` takes a previously exported
-schedule (optionally hand-edited) and runs it through the same
-validation/reporting pipeline *without* running a solver - see "Manual
-editing and re-validation" below. Both share the `--data`/`--legacy-cache`
-data-source flags and a single `--out-dir` output flag.
+`family_camp2` (or `python -m family_camp2`) is a single unified CLI with
+three subcommands: `fetch` downloads camp data from a Google Sheet;
+`solve` generates a schedule with a solver; `revalidate` takes a
+previously exported schedule (optionally hand-edited) and runs it
+through the same validation/reporting pipeline *without* running a
+solver - see "Manual editing and re-validation" below. The everyday flow
+is just the first two, in order, with no further flags:
 
 ```sh
-# Constraint programming (Design A) against a JSON camp file
+family_camp2 fetch --url https://docs.google.com/spreadsheets/d/<...>
+# Wrote 12 activities, 91 sessions, 283 campers, 0 constraints for 'Willesley 2026' to fetched_data/camp.json
+
+family_camp2 solve --solver cp_sat
+# Reports written to fetched_data/willesley_2026_20260815_130300
+```
+
+`solve` (and `revalidate`) automatically use `fetched_data/camp.json` -
+the file `fetch` just wrote - with no `--data` flag needed. If nothing's
+been fetched yet, they stop with a clear error rather than a bare
+`FileNotFoundError`:
+
+```sh
+$ family_camp2 solve --solver cp_sat
+No downloaded camp data found at fetched_data/camp.json.
+Run 'family_camp2 fetch --url <GOOGLE_SHEET_URL>' first (or pass --data/--legacy-cache explicitly).
+```
+
+`--data`/`--legacy-cache` remain available on `solve`/`revalidate` as
+explicit overrides - useful for test fixtures, hand-written JSON files,
+or a real camp's existing `.cache.pickle` (produced by the unmodified
+`family_camp/schedule/fetch_data.py` - see `io/legacy_cache_loader.py`):
+
+```sh
+# Constraint programming (Design A) against a specific JSON camp file
 python -m family_camp2 solve --solver cp_sat --data tests/fixtures/small_camp.json
 
 # Simulated annealing (Design B), tuned, with a reproducible seed
 python -m family_camp2 solve --solver annealing --data tests/fixtures/small_camp.json \
     --num-chains 8 --iterations-per-chain 2000 --seed 1
 
-# Against a real camp's existing .cache.pickle (produced by the unmodified
-# family_camp/schedule/fetch_data.py - see io/legacy_cache_loader.py)
 python -m family_camp2 solve --solver cp_sat --legacy-cache ../.cache.pickle
 
 # A long CP-SAT run: progress every 60s to a log file, reports into a
 # specific directory tree instead of the default ./fetched_data
-python -m family_camp2 solve --solver cp_sat --data data.json --time-limit 5400 \
+python -m family_camp2 solve --solver cp_sat --time-limit 5400 \
     --progress-output run.log --out-dir output/
 ```
 
-`solve`-only flags: `--solver {cp_sat,annealing}` (required),
-`--time-limit SECONDS` (both solvers), `--seed INT` (both solvers),
-`--num-chains`/`--iterations-per-chain` (annealing only),
-`--progress-output`/`--progress-interval`. Shared with `revalidate`:
-`--data`/`--legacy-cache` (mutually exclusive, required), `--config
-PATH` (an `EngineConfig` JSON file, see below), `--out-dir` (documented
-in the next section).
+`fetch`-only flags: `--url` (required - a Google Sheets URL, or a bare
+sheet ID), `--activities-worksheet`/`--sessions-worksheet`/
+`--campers-worksheet`/`--constraints-worksheet`, `--credentials`/
+`--authorized-user` (all documented in "Fetching data from Google
+Sheets" below). `solve`-only flags: `--solver {cp_sat,annealing}`
+(required), `--time-limit SECONDS` (both solvers), `--seed INT` (both
+solvers), `--num-chains`/`--iterations-per-chain` (annealing only),
+`--progress-output`/`--progress-interval`. Shared between `solve`/
+`revalidate`: `--data`/`--legacy-cache` (optional, mutually exclusive -
+see above), `--config PATH` (an `EngineConfig` JSON file, see below),
+`--out-dir` (documented in the next section - shared with `fetch`,
+same default).
 
 ## Progress reporting and report generation
 
@@ -166,20 +194,22 @@ need to break away to rejoin a family member who's mid-activity.
 Every report above, plus the exported schedule and the status report
 below, land in one fresh folder per run:
 `<out-dir>/<camp_name>_<run timestamp>/` - nothing is ever written
-outside it. `<out-dir>` defaults to `./fetched_data`; `<camp_name>` is
-derived from the `--data`/`--legacy-cache` file's own name (e.g.
-`willesley_2026.json` -> `willesley_2026`, matching how `fetch_cli.py`
-names the file it writes - see below); `<run timestamp>` is when the
-command started (`YYYYMMDD_HHMMSS`, with a numeric suffix appended on
-the rare case two runs start in the same second, so they never collide).
-Both `solve` and `revalidate` print `Reports written to <path>` once
-they're done, naming the exact folder used:
+outside it. `<out-dir>` defaults to `./fetched_data` (the same default
+`fetch` uses); `<camp_name>` is the `camp_name` field `fetch` wrote into
+`camp.json` (the Google Sheet's own title, e.g. "Willesley 2026" ->
+`willesley_2026`), falling back to the input file's own name when that
+field is absent (a hand-written `--data` file, or `--legacy-cache`,
+which predates it entirely); `<run timestamp>` is when the command
+started (`YYYYMMDD_HHMMSS`, with a numeric suffix appended on the rare
+case two runs start in the same second, so they never collide). Both
+`solve` and `revalidate` print `Reports written to <path>` once they're
+done, naming the exact folder used:
 
 ```sh
-python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json
+family_camp2 solve --solver cp_sat
 # Reports written to fetched_data/willesley_2026_20260815_130300
 
-python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json --out-dir output/
+family_camp2 solve --solver cp_sat --out-dir output/
 # Reports written to output/willesley_2026_20260815_130300
 ```
 
@@ -317,30 +347,29 @@ unmodified `family_camp/schedule/fetch_data.py` — see
 expects. This lets the new engine run against real historical camp data
 without needing any new data-fetch work.
 
-### Fetching data from Google Sheets (`fetch_cli.py`)
+### Fetching data from Google Sheets (`fetch`)
 
-`fetch_cli.py` downloads the same three worksheets the old system reads
-("Activities for schedule", "Sessions for schedule", "Activities") and
-saves them straight into this package's own JSON format, ready for
-`--data`, as `<out-dir>/<camp_name>.json` - `<camp_name>` is derived
-from the spreadsheet's own title (e.g. "Willesley 2026" ->
-`willesley_2026.json`), so no separate `--camp-name` flag is needed;
-`solve`/`revalidate` later recover the same camp name from this file's
-own name (see "Report output location" above). `--out-dir` defaults to
-`./fetched_data`, same default as `solve`/`revalidate` - this is the one
-file this whole CLI writes directly into `--out-dir` rather than into a
-per-run subfolder, since it's a durable cache to be reused across many
-solve runs, not a report from any one of them.
+`family_camp2 fetch` downloads the same three worksheets the old system
+reads ("Activities for schedule", "Sessions for schedule", "Activities")
+and saves them straight into this package's own JSON format, as
+`<out-dir>/camp.json` - the fixed filename `solve`/`revalidate`
+auto-discover (see "CLI usage" above), so there's normally no `--data`
+flag to pass at all. `--out-dir` defaults to `./fetched_data`, the same
+default `solve`/`revalidate` use - this is the one file this whole CLI
+writes directly into `--out-dir` rather than into a per-run subfolder,
+since it's a durable cache meant to be reused across many `solve` runs,
+not a report from any one of them. `camp_name` inside that file (used to
+name later `solve`/`revalidate` output folders - see "Report output
+location" above) comes from the spreadsheet's own title, so there's no
+separate `--camp-name` flag either.
 
 ```sh
-pip install -e ".[google]"   # pulls in gspread, only needed for this tool
+pip install -e ".[google]"   # pulls in gspread, only needed for this subcommand
 
-python -m family_camp2.fetch_cli --sheet-id <SHEET_ID_OR_URL>
-# or, via the console script installed by pip:
-family_camp2-fetch --sheet-id <SHEET_ID_OR_URL>
-# Wrote 12 activities, 91 sessions, 283 campers, 0 constraints to fetched_data/willesley_2026.json
+family_camp2 fetch --url <SHEET_URL_OR_ID>
+# Wrote 12 activities, 91 sessions, 283 campers, 0 constraints for 'Willesley 2026' to fetched_data/camp.json
 
-python -m family_camp2 solve --solver cp_sat --data fetched_data/willesley_2026.json
+family_camp2 solve --solver cp_sat
 ```
 
 Authentication is the interactive **user OAuth flow**, not the old
@@ -359,9 +388,14 @@ Unlike the other three, it's not fetched unless you ask for it —
 `--constraints-worksheet` with no value uses the default tab name
 ("Constraints for schedule"); give it a value to use a different tab name.
 
+Fetching a different camp into the same `--out-dir` overwrites
+`camp.json` - only one camp's data is cached per `--out-dir` at a time;
+use a different `--out-dir` to work with more than one camp at once.
+
 See `family_camp2.io.google_sheets` for the fetch/parse logic (it shares
 its row-parsing with `io/legacy_cache_loader.py`, since both start from
-the same raw worksheet-row shape) and `fetch_cli.py` for the full CLI.
+the same raw worksheet-row shape) and `cli.py`'s `_run_fetch` for the
+full subcommand.
 
 ### Engine config (`--config`)
 
@@ -419,7 +453,7 @@ Each record has four fields:
 In `--data` JSON this is the top-level `"constraints"` array, one object
 per record: `family_id`, `camper_name` (`null`/omitted applies to the
 whole family), `constraint`, `severity`, `note`. On a Google Sheet
-([see above](#fetching-data-from-google-sheets-fetch_clipy)) it's the
+([see above](#fetching-data-from-google-sheets-fetch)) it's the
 same five fields as spreadsheet columns: `Group Ref`, `Camper Name`,
 `Constraint`, `Severity`, `Note`.
 
@@ -479,8 +513,8 @@ solvers/
   registry.py         name -> Solver lookup, used by the CLI
   cp_sat.py           Design A: OR-Tools CP-SAT, three-phase lexicographic solve, wall-clock progress heartbeat
   annealing/          Design B: simulated annealing with domain-aware moves, per-chain progress
-cli.py                argparse entry point, subcommands: solve (--solver cp_sat|annealing), revalidate (FR-86-89)
-fetch_cli.py          argparse entry point to download --data input from Google Sheets
+cli.py                argparse entry point, subcommands: fetch, solve (--solver cp_sat|annealing), revalidate (FR-86-89)
+naming.py             shared camp-name slugify / output-folder-naming helpers
 ```
 
 The validator (`validation/validator.py`) is the single source of truth

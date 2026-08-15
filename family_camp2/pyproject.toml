@@ -15,12 +15,12 @@ dependencies = ["ortools", "reportlab"]
 
 [project.optional-dependencies]
 dev = ["pytest", "hypothesis"]
-# Only needed for fetch_cli.py (downloading input data from Google Sheets) -
-# not required to run or test the scheduling engine itself.
+# Only needed for cli.py's 'fetch' subcommand (downloading input data from
+# Google Sheets) - not required to run or test the scheduling engine itself.
 google = ["gspread"]
 
 [project.scripts]
-family_camp2-fetch = "family_camp2.fetch_cli:main"
+family_camp2 = "family_camp2.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

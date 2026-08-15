@@ -1,10 +1,12 @@
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from family_camp2 import cli
-from family_camp2.io.json_loader import load_json
+from family_camp2.domain import Activity, Camper, Session
+from family_camp2.io.json_loader import load_json, peek_camp_name
 from family_camp2.io.schedule_export import dump_schedule_csv, load_schedule_csv, load_schedule_json
 from fixtures import SMALL_CAMP_JSON
 
@@ -22,6 +24,140 @@ def _out_dir_from_output(out: str) -> Path:
     raise AssertionError(f"no 'Reports written to <path>' line in output: {out!r}")
 
 
+# --- fetch ---
+
+
+def _canned_fetch_data(title="Test Camp 2026"):
+    archery = Activity(name="Archery", duration=timedelta(minutes=60), min_occupancy=1, max_occupancy=4)
+    session = Session(activity=archery, label="Morning", start=datetime(2026, 8, 1, 9, 0))
+    kid = Camper(name="Kid", family_id="F1", age=10, age_group="Cub", priorities=(archery,))
+    return title, [archery], [session], [kid], []
+
+
+def test_fetch_requires_a_url():
+    with pytest.raises(SystemExit):
+        cli.main(["fetch"])
+
+
+def test_fetch_writes_camp_json_into_out_dir(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data())
+
+    exit_code = cli.main(["fetch", "--url", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    out_path = tmp_path / "camp.json"
+    assert out_path.exists()
+    activities, sessions, campers, constraints = load_json(out_path)
+    assert [a.name for a in activities] == ["Archery"]
+    out = capsys.readouterr().out
+    assert "1 activities" in out
+    assert str(out_path) in out
+
+
+def test_fetch_stores_the_spreadsheet_title_as_camp_name(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data(title="Willesley 2026"))
+
+    cli.main(["fetch", "--url", "https://docs.google.com/spreadsheets/d/abc123", "--out-dir", str(tmp_path)])
+
+    assert peek_camp_name(tmp_path / "camp.json") == "Willesley 2026"
+
+
+def test_fetch_passes_through_worksheet_overrides(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    seen = {}
+
+    def fake_fetch(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
+        seen["args"] = (sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet)
+        return _canned_fetch_data()
+
+    monkeypatch.setattr(cli, "fetch_schedule_data", fake_fetch)
+
+    cli.main([
+        "fetch", "--url", "abc123", "--out-dir", str(tmp_path),
+        "--activities-worksheet", "MyActs",
+        "--sessions-worksheet", "MySessions",
+        "--campers-worksheet", "MyCampers",
+        "--constraints-worksheet", "MyConstraints",
+    ])
+
+    assert seen["args"] == ("abc123", "MyActs", "MySessions", "MyCampers", "MyConstraints")
+
+
+def test_fetch_creates_out_dir_if_it_does_not_exist(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    monkeypatch.setattr(cli, "fetch_schedule_data", lambda *a, **k: _canned_fetch_data())
+
+    out_dir = tmp_path / "does" / "not" / "exist"
+    cli.main(["fetch", "--url", "abc123", "--out-dir", str(out_dir)])
+
+    assert (out_dir / "camp.json").exists()
+
+
+# --- solve/revalidate auto-discovery of the fetched file ---
+
+
+def test_solve_uses_the_fetched_file_when_no_data_flag_is_given(tmp_path, capsys):
+    fetched_path = tmp_path / "camp.json"
+    fetched_path.write_text(SMALL_CAMP_JSON.read_text())
+
+    exit_code = cli.main(["solve", "--solver", "cp_sat", "--out-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    assert "Validation Report" in capsys.readouterr().out
+
+
+def test_solve_stops_with_a_clear_error_when_nothing_was_fetched(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["solve", "--solver", "cp_sat", "--out-dir", str(tmp_path)])
+
+    message = str(excinfo.value)
+    assert "fetch" in message
+    assert str(tmp_path / "camp.json") in message
+
+
+def test_revalidate_stops_with_a_clear_error_when_nothing_was_fetched(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main([
+            "revalidate", "--out-dir", str(tmp_path), "--schedule", str(tmp_path / "schedule.csv"),
+        ])
+
+    assert "fetch" in str(excinfo.value)
+
+
+def test_solve_output_folder_uses_the_camp_name_fetch_stored(tmp_path, capsys):
+    """The embedded camp_name (from the spreadsheet title) drives the
+    output folder name, not the generic 'camp.json' filename."""
+    data = json.loads(SMALL_CAMP_JSON.read_text())
+    data["camp_name"] = "Willesley 2026"
+    (tmp_path / "camp.json").write_text(json.dumps(data))
+
+    exit_code = cli.main(["solve", "--solver", "cp_sat", "--out-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    out_dir = _out_dir_from_output(capsys.readouterr().out)
+    assert out_dir.name.startswith("willesley_2026_")
+
+
+def test_explicit_data_flag_still_overrides_the_fetched_file(tmp_path, capsys):
+    # A camp.json sits in --out-dir, but --data should still win.
+    (tmp_path / "camp.json").write_text(json.dumps({"activities": [], "sessions": [], "campers": []}))
+
+    exit_code = cli.main([
+        "solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--out-dir", str(tmp_path),
+    ])
+
+    assert exit_code == 0
+    out_dir = _out_dir_from_output(capsys.readouterr().out)
+    assert out_dir.name.startswith("small_camp_")  # SMALL_CAMP_JSON's own stem, not camp.json's
+
+
+# --- solve ---
+
+
 def test_cli_runs_end_to_end_with_json_data(tmp_path, capsys):
     exit_code = cli.main(["solve", "--solver", "cp_sat", "--data", str(SMALL_CAMP_JSON), "--out-dir", str(tmp_path)])
 
@@ -33,11 +169,6 @@ def test_cli_runs_end_to_end_with_json_data(tmp_path, capsys):
 def test_cli_rejects_invalid_solver():
     with pytest.raises(SystemExit):
         cli.main(["solve", "--solver", "bogus", "--data", str(SMALL_CAMP_JSON)])
-
-
-def test_cli_requires_a_data_source():
-    with pytest.raises(SystemExit):
-        cli.main(["solve", "--solver", "cp_sat"])
 
 
 def test_cli_rejects_both_data_sources_at_once(tmp_path):

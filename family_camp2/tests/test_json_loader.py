@@ -3,7 +3,7 @@ import json
 import pytest
 
 from family_camp2.constraints.parser import ConstraintParseError
-from family_camp2.io.json_loader import JsonLoadError, dump_json, load_json
+from family_camp2.io.json_loader import JsonLoadError, dump_json, load_json, peek_camp_name
 from fixtures import SMALL_CAMP_JSON, load_small_camp
 
 
@@ -140,10 +140,39 @@ def test_dump_json_output_matches_documented_schema(tmp_path):
     dump_json(activities, sessions, campers, out_path)
     data = json.loads(out_path.read_text())
 
-    assert set(data.keys()) == {"activities", "sessions", "campers", "constraints"}
+    assert set(data.keys()) == {"activities", "sessions", "campers", "constraints", "camp_name"}
     archery = next(a for a in data["activities"] if a["name"] == "Archery")
     assert archery["duration_minutes"] == 60
     assert archery["max_occupancy"] == 4
 
     kid1_session = next(s for s in data["sessions"] if s["label"] == "Morning" and s["activity"] == "Archery")
     assert kid1_session["start"] == "2026-08-01T09:00:00"
+
+
+def test_dump_json_writes_the_given_camp_name(tmp_path):
+    activities, sessions, campers = load_small_camp()
+    out_path = tmp_path / "with_name.json"
+
+    dump_json(activities, sessions, campers, out_path, camp_name="Willesley 2026")
+
+    assert json.loads(out_path.read_text())["camp_name"] == "Willesley 2026"
+
+
+def test_dump_json_defaults_camp_name_to_null(tmp_path):
+    activities, sessions, campers = load_small_camp()
+    out_path = tmp_path / "no_name.json"
+
+    dump_json(activities, sessions, campers, out_path)
+
+    assert json.loads(out_path.read_text())["camp_name"] is None
+
+
+def test_peek_camp_name_reads_the_field_without_full_load(tmp_path):
+    path = tmp_path / "named.json"
+    path.write_text(json.dumps({"activities": [], "sessions": [], "campers": [], "camp_name": "Willesley 2026"}))
+
+    assert peek_camp_name(path) == "Willesley 2026"
+
+
+def test_peek_camp_name_returns_none_when_the_field_is_absent():
+    assert peek_camp_name(SMALL_CAMP_JSON) is None

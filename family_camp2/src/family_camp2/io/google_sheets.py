@@ -2,8 +2,9 @@
 
 This is the tool that *produces* the prerequisite REQUIREMENTS.md §1.2
 treats Google Sheets access as - it doesn't widen family_camp2's scope,
-it's an on-ramp: run this, then use the resulting JSON file with
-``--data`` exactly like any hand-written one (see fetch_cli.py).
+it's an on-ramp: run ``cli.py``'s ``fetch`` subcommand, then ``solve``/
+``revalidate`` use the resulting JSON file automatically (or via
+``--data`` explicitly, like any hand-written one).
 
 Authenticates via the interactive user OAuth flow ("the OAuth dance":
 ``get_client`` opens a browser for one-time consent and caches the
@@ -341,10 +342,10 @@ def fetch_schedule_data(
     error from whatever the client library raises).
 
     The returned ``title`` (the spreadsheet's own name, e.g. "Willesley
-    2026") is what ``fetch_cli.py`` uses to derive a camp name for its
-    output filename - avoids needing a separate ``--camp-name`` flag, on
-    the theory that a camp organiser's spreadsheet is already sensibly
-    named.
+    2026") is what ``cli.py``'s ``fetch`` subcommand stores as the
+    cached JSON's ``camp_name`` field - avoids needing a separate
+    ``--camp-name`` flag, on the theory that a camp organiser's
+    spreadsheet is already sensibly named.
     """
     spreadsheet = open_spreadsheet(client, sheet_id_or_url)
     title = spreadsheet.title

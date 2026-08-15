@@ -2435,7 +2435,103 @@ nothing else created anywhere.
 
 ---
 
-## 8. After this plan
+## 8. Unified CLI (Step 56)
+
+### Context
+
+Implements REQUIREMENTS.md §4.13 (FR-113-116). The user asked for "a
+single unified cli": fold `fetch_cli.py` (a separate script/console
+entry point) into `cli.py` as a third subcommand, taking a Google Sheets
+URL; `solve` automatically uses whatever `fetch` most recently
+downloaded, with no `--data` flag needed for the common case; and a
+clear, descriptive error - not a bare `FileNotFoundError` - when `solve`
+is run with nothing fetched yet.
+
+The knock-on design consequence (FR-116): `fetch`'s output filename had
+to become fixed (`camp.json`) rather than derived from the camp name
+(`<camp_name>.json`, Step 55's original scheme) - `solve` needs one
+predictable path to look for automatically, and a name that varies with
+which camp was fetched defeats that. Camp-name-driven output-folder
+naming (FR-111, unaffected in spirit) therefore had to move from "derive
+from the input filename" to "read a `camp_name` field embedded in the
+JSON itself", since the filename alone (`camp.json`) is no longer
+informative.
+
+### Step list
+
+### - [x] Step 56: `fetch` subcommand + automatic input discovery (FR-113/114/115/116)
+
+**Goal**: one CLI, one command to fetch, one command to solve with no
+further flags needed in between.
+
+**Add** `src/family_camp2/io/json_loader.py`: `peek_camp_name(path) ->
+str | None` (reads just the top-level `camp_name` field, without the
+rest of `load_json`'s parsing) and a `camp_name: str | None = None`
+parameter on `dump_json` (written as a new top-level `"camp_name"` key,
+`null` when not given) - the mechanism FR-116 needs, kept independent of
+`load_json`'s return shape so none of its ~15 existing call sites needed
+touching.
+
+**Change** `cli.py`: `fetch` becomes a third subparser (`--url`
+required, plus the worksheet-name/credential flags `fetch_cli.py` used
+to have) with its own `_run_fetch`, writing `<out-dir>/camp.json` (a new
+`_FETCHED_DATA_FILENAME` constant) via `dump_json(..., camp_name=...)`.
+`_add_data_source_args`'s `--data`/`--legacy-cache` group is no longer
+`required`. New `_resolve_data_path(args) -> Path`: an explicit
+override if given, else `<out-dir>/camp.json` - raising `SystemExit`
+with a message naming `fetch` as the fix if that file doesn't exist
+either. `_camp_name` takes the resolved `data_path` (not `args`) and
+prefers `peek_camp_name(data_path)` over the filename stem, falling back
+to the stem when the field is absent (unnamed hand-written `--data`
+files, `--legacy-cache`). `_output_dir`/`_write_outputs` reshaped to
+take an already-resolved `out_dir`/`data_path` rather than reaching into
+`args` themselves, so `_run_solve`/`_run_revalidate` compute
+`data_path`/`out_dir` once each and thread them through explicitly.
+
+**Delete** `src/family_camp2/fetch_cli.py`, `tests/test_fetch_cli.py`.
+
+**Change** `pyproject.toml`: removes the `family_camp2-fetch` console
+script, adds `family_camp2 = "family_camp2.cli:main"` (this package had
+no direct console script before - only `python -m family_camp2` - so
+this both completes the "unified" story and adds a small convenience).
+
+**Change** `io/google_sheets.py`/`README.md`: doc updates only - the
+`fetch_schedule_data` return-shape change (title as a new first element)
+was already Step 55's change, not new here.
+
+**Tests**: `test_json_loader.py` gains `peek_camp_name`/`dump_json`
+`camp_name` coverage. `test_fetch_cli.py`'s tests move into `test_cli.py`
+under a new `--- fetch ---` section, adapted from `fetch_cli.main(...)`
++ `monkeypatch.setattr(fetch_cli, ...)` to `cli.main(["fetch", ...])` +
+`monkeypatch.setattr(cli, ...)` (the module doing the importing changed,
+not the faking technique). New coverage specific to this step: `solve`
+auto-using a hand-placed `camp.json` with no `--data` flag; `solve`/
+`revalidate` raising a descriptive `SystemExit` (asserted to mention
+both `fetch` and the exact missing path) when neither `--data` nor a
+fetched file exists; the output folder name coming from an embedded
+`camp_name` field rather than `camp.json`'s own generic filename; an
+explicit `--data` still overriding an existing `camp.json` in the same
+`--out-dir`. The old `test_cli_requires_a_data_source` (asserted
+`SystemExit` for `solve` with no `--data`, relying on the *ambient*
+working directory not having a stray `fetched_data/camp.json`) was
+removed as unreliable/superseded, not fixed in place - the new
+`test_solve_stops_with_a_clear_error_when_nothing_was_fetched` covers
+the same scenario with proper `tmp_path` isolation.
+
+**Deviation found during implementation**: none beyond what's captured
+above - manually verified end-to-end against a real filesystem (not just
+`tmp_path`) that `family_camp2 solve --solver cp_sat` with nothing
+fetched yet prints the expected two-line error and exits 1, and that
+`family_camp2 fetch --url ...` followed by `family_camp2 solve --solver
+cp_sat` (no further flags) succeeds, confirming the console script
+itself (not just `python -m family_camp2`) resolves correctly after the
+`pyproject.toml` change.
+
+**Commit message**: `family_camp2 step 56: fold fetch into a unified CLI with automatic input discovery (FR-113/114/115/116)`
+
+---
+
+## 9. After this plan
 
 Not part of this plan, but worth flagging for a follow-up plan once this
 one is complete and in real use:

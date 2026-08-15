@@ -21,7 +21,8 @@ Schema::
       "constraints": [
         {"family_id": "F1", "camper_name": null, "constraint": "no_activities_on_day(2)",
          "severity": "hard", "note": "optional free text"}
-      ]
+      ],
+      "camp_name": "Willesley 2026"
     }
 
 ``min_age`` on an activity, and ``priorities``/``optional`` on a camper, may
@@ -38,6 +39,13 @@ the constraint expression syntax and how invalid records are reported
 (``constraints.parser.ConstraintParseError``, not wrapped as a
 ``JsonLoadError``, propagates as-is so constraint-specific problems stay
 distinguishable from JSON-shape problems).
+
+``camp_name`` is optional, free text, never interpreted by ``load_json``
+itself (it doesn't even appear in this module's return value) - written
+by ``cli.py``'s ``fetch`` subcommand from the Google Sheet's own title,
+and read back by ``peek_camp_name`` to name a later ``solve``/
+``revalidate`` run's output folder without needing the input file's own
+name to be meaningful.
 """
 
 from __future__ import annotations
@@ -50,7 +58,7 @@ from family_camp2.constraints.base import ConstraintInstance
 from family_camp2.constraints.parser import build_constraint_instances
 from family_camp2.domain import Activity, Camper, Session
 
-__all__ = ["JsonLoadError", "load_json", "dump_json"]
+__all__ = ["JsonLoadError", "load_json", "dump_json", "peek_camp_name"]
 
 
 class JsonLoadError(ValueError):
@@ -108,16 +116,29 @@ def load_json(
     return list(activities_by_name.values()), sessions, campers, constraints
 
 
+def peek_camp_name(path: Path | str) -> str | None:
+    """Reads just the optional top-level ``camp_name`` field, without the
+    rest of ``load_json``'s parsing/validation - used by ``cli.py`` to
+    name a ``solve``/``revalidate`` run's output folder from data that
+    was written by ``fetch`` (which sets this from the Google Sheet's
+    own title), falling back to the input file's own name when it's
+    absent (e.g. a hand-written ``--data`` file)."""
+    data = json.loads(Path(path).read_text())
+    return data.get("camp_name")
+
+
 def dump_json(
     activities: list[Activity],
     sessions: list[Session],
     campers: list[Camper],
     path: Path | str,
     constraint_records: list[dict] = (),
+    camp_name: str | None = None,
 ) -> None:
     """The counterpart to load_json: serialise domain objects back to this
-    module's documented schema. Used by fetch_cli.py to save data fetched
-    live from Google Sheets (io/google_sheets.py) ready for --data.
+    module's documented schema. Used by cli.py's ``fetch`` subcommand to
+    save data fetched live from Google Sheets (io/google_sheets.py) ready
+    for ``solve``/``revalidate``.
 
     ``constraint_records`` are the *raw* per-row dicts (family_id/
     camper_name/constraint/severity/note), not resolved
@@ -154,6 +175,7 @@ def dump_json(
             for c in campers
         ],
         "constraints": list(constraint_records),
+        "camp_name": camp_name,
     }
     Path(path).write_text(json.dumps(data, indent=2))
 

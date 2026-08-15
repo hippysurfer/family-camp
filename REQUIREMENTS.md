@@ -642,19 +642,54 @@ the run's date/time, and nothing ever written outside it except
 - **FR-111 (`--out-dir` and folder naming)**: `solve`/`revalidate` MUST
   take a single `--out-dir` option (a folder, default `fetched_data`).
   Every report for one run MUST be written into a subfolder of it named
-  `<camp_name>_<run timestamp>` — `camp_name` derived from the
-  `--data`/`--legacy-cache` input file's own name; the run timestamp
-  captured when the command starts, so two runs never collide into the
-  same folder. No file MUST be created outside that subfolder.
-- **FR-112 (`fetch_cli.py` alignment)**: `fetch_cli.py` MUST take the
-  same `--out-dir` option (default `fetched_data`) and write its cached
-  download JSON directly into it (not a per-run subfolder, per FR-111's
-  exception) — this is a durable cache reused across many later
-  `solve` runs, not one run's own report. `camp_name` for its filename
-  MUST be derived from the Google Sheet's own title, so no separate
-  `--camp-name` flag is needed on either tool, and `solve`/`revalidate`
-  (FR-111) recover the same name automatically from the file `fetch_cli.py`
-  wrote.
+  `<camp_name>_<run timestamp>` — the run timestamp captured when the
+  command starts, so two runs never collide into the same folder. No
+  file MUST be created outside that subfolder. *`camp_name`'s source
+  refined by §4.13/FR-114*, since this was written before `fetch` became
+  a subcommand of the same CLI with a fixed output filename.
+- **FR-112 (Fetch tool alignment)** — *fixed filename refined by
+  §4.13/FR-115*: the tool that downloads camp data from a Google Sheet
+  MUST take the same `--out-dir` option (default `fetched_data`) and
+  write its cached download JSON directly into it (not a per-run
+  subfolder, per FR-111's exception) — this is a durable cache reused
+  across many later `solve` runs, not one run's own report. `camp_name`
+  for it MUST be derived from the Google Sheet's own title, so no
+  separate `--camp-name` flag is needed, and `solve`/`revalidate`
+  (FR-111) recover the same name automatically.
+
+### 4.13 Unified CLI (`fetch` as a subcommand)
+
+Raised by the user wanting "a single unified cli": at the point §4.12
+was implemented, fetching (`fetch_cli.py`, a separate script/console
+entry point) and scheduling (`cli.py`'s `solve`/`revalidate`) were still
+two different command-line tools that happened to agree on a shared
+`--out-dir` convention. The user asked for one tool with `fetch` as a
+third subcommand, `fetch` taking a Google Sheets URL, and `solve`
+automatically using whatever `fetch` most recently downloaded — stopping
+with a clear, descriptive error (not a bare stack trace) if nothing has
+been fetched yet.
+
+- **FR-113 (Single CLI)**: `fetch` MUST be a subcommand of the same CLI
+  as `solve`/`revalidate` (`family_camp2 fetch ...`), not a separate
+  script/console entry point.
+- **FR-114 (Automatic input discovery)**: `solve`/`revalidate` MUST NOT
+  require `--data`/`--legacy-cache` — when neither is given, they MUST
+  use the file `fetch` most recently wrote into `--out-dir`
+  automatically. Explicit `--data`/`--legacy-cache` MUST still be
+  accepted, overriding the automatic choice.
+- **FR-115 (Descriptive missing-data error)**: If `solve`/`revalidate`
+  is run with no explicit `--data`/`--legacy-cache` and nothing has been
+  fetched into `--out-dir` yet, the engine MUST stop with a clear,
+  descriptive error explaining that `fetch` needs to be run first
+  (naming the command), not an unhandled `FileNotFoundError` or similar.
+- **FR-116 (Camp name propagation)**: Since `fetch`'s output filename is
+  now fixed (FR-114 needs one predictable path to look for, so it can no
+  longer vary by camp name the way §4.12 originally specified), the camp
+  name FR-111's output-folder naming needs MUST instead be carried
+  inside the cached JSON itself (a `camp_name` field, set by `fetch` from
+  the Google Sheet's own title) and read back by `solve`/`revalidate` -
+  falling back to the input file's own name when that field is absent
+  (a hand-written `--data` file, or `--legacy-cache`, which predates it).
 
 ## 5. Non-functional requirements
 

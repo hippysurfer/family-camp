@@ -1,20 +1,26 @@
 from datetime import datetime, timedelta
 
-from family_camp2.domain import Activity, Camper, Session
+from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable
 from family_camp2.status_report import (
     ActivityTableRow,
     DayBlock,
     FrontMatterSummary,
+    SessionLoadingRow,
     _activity_table_rows,
     _activity_timetable_blocks,
     _camp_date_range,
     _distinct_camp_days,
     _front_matter_summary,
+    _paginate,
     _render_activity_table,
     _render_activity_timetable_drawing,
     _render_activity_timetable_fallback,
     _render_front_matter,
+    _render_session_loading_charts,
+    _session_loading_rows,
+    _session_loading_stats,
 )
+from family_camp2.validation.class2 import Class2Report, UnderMinimumSession
 
 DAY1 = datetime(2026, 8, 1, 9, 0)
 DAY2 = datetime(2026, 8, 2, 9, 0)
@@ -173,3 +179,84 @@ def test_render_activity_timetable_fallback_has_one_row_per_session_plus_header(
     table = _render_activity_timetable_fallback(sessions)
 
     assert len(table._cellvalues) == 4  # header + 3 sessions
+
+
+# --- activity session loading (FR-102) ---
+
+
+def test_session_loading_rows_computes_occupancy_spare_and_under_minimum_flag():
+    archery = activity("Archery", min_occ=2, max_occ=4)
+    s1 = session(archery, "Full", DAY1)
+    s2 = session(archery, "Under", DAY1 + timedelta(hours=2))
+    kid = camper("Kid")
+    parent = camper("Parent", age=40)
+    timetable = Timetable(frozenset({Assignment(kid, s1), Assignment(parent, s1)}))
+    class2_report = Class2Report(under_minimum_sessions=[UnderMinimumSession(session=s2, count=0, min_occupancy=2)])
+
+    rows = _session_loading_rows(timetable, [s1, s2], class2_report)
+
+    by_label = {r.session.label: r for r in rows}
+    assert by_label["Full"].occupancy == 2
+    assert by_label["Full"].capacity == 4
+    assert by_label["Full"].spare == 2
+    assert by_label["Full"].under_minimum is False
+    assert by_label["Under"].occupancy == 0
+    assert by_label["Under"].spare == 4
+    assert by_label["Under"].under_minimum is True
+
+
+def test_session_loading_rows_sorted_by_activity_then_start():
+    craft = activity("Craft")
+    archery = activity("Archery")
+    s1 = session(craft, "A", DAY1)
+    s2 = session(archery, "B", DAY1 + timedelta(hours=1))
+    rows = _session_loading_rows(Timetable(), [s1, s2], Class2Report())
+    assert [r.session.activity.name for r in rows] == ["Archery", "Craft"]
+
+
+def test_session_loading_stats_computes_mean_and_stdev_of_spare_capacity():
+    rows = [
+        SessionLoadingRow(session=None, capacity=10, occupancy=8, spare=2, under_minimum=False),
+        SessionLoadingRow(session=None, capacity=10, occupancy=4, spare=6, under_minimum=False),
+        SessionLoadingRow(session=None, capacity=10, occupancy=10, spare=0, under_minimum=True),
+    ]
+
+    stats = _session_loading_stats(rows)
+
+    assert stats.mean_spare == (2 + 6 + 0) / 3
+    assert stats.under_minimum_count == 1
+
+
+def test_session_loading_stats_handles_no_sessions():
+    stats = _session_loading_stats([])
+    assert stats.mean_spare == 0.0
+    assert stats.stdev_spare == 0.0
+    assert stats.under_minimum_count == 0
+
+
+# --- pagination ---
+
+
+def test_paginate_splits_evenly():
+    assert _paginate([1, 2, 3, 4], per_page=2) == [[1, 2], [3, 4]]
+
+
+def test_paginate_handles_a_remainder_page():
+    assert _paginate([1, 2, 3, 4, 5], per_page=2) == [[1, 2], [3, 4], [5]]
+
+
+def test_paginate_handles_empty_input():
+    assert _paginate([], per_page=2) == []
+
+
+def test_render_session_loading_charts_produces_one_drawing_per_page():
+    archery = activity("Archery")
+    rows = [
+        SessionLoadingRow(session=session(archery, f"S{i}", DAY1), capacity=10, occupancy=i, spare=10 - i, under_minimum=False)
+        for i in range(5)
+    ]
+
+    drawings = _render_session_loading_charts(rows, width=400, per_page=2)
+
+    assert len(drawings) == 3  # 2 + 2 + 1
+    assert all(len(d.contents) == 1 for d in drawings)  # one chart per page

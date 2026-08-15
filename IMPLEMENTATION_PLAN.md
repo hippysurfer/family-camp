@@ -2075,7 +2075,7 @@ used by `io/google_sheets.py`'s import of
 
 ---
 
-### - [ ] Step 50: Activity session loading (FR-102)
+### - [x] Step 50: Activity session loading (FR-102)
 
 **Goal**: the third section - how full each session ran, camp-wide.
 
@@ -2107,6 +2107,18 @@ sessions - exact numeric assertions, not just "doesn't crash";
 `_paginate` behaviour (even split, remainder page, empty input).
 
 **Commit message**: `family_camp2 step 50: activity session loading section (FR-102)`
+
+**Deviation found during implementation**: reportlab's stacked-bar
+support turned out to be `HorizontalBarChart.categoryAxis.style =
+"stacked"` plus per-series `.bars[i].fillColor` - and, for the
+under-minimum highlight specifically, per-*bar* overrides via
+`.bars[(series_index, category_index)].fillColor` (confirmed this
+addresses one specific bar, not the whole series, by testing both
+indices interactively before committing to the design). No dedicated
+stats-rendering test was added beyond `_render_session_loading_stats`
+existing as a one-line `Paragraph` builder - trivial enough that the
+`_session_loading_stats` data test already covers the only thing that
+could go wrong (the numbers themselves).
 
 ---
 

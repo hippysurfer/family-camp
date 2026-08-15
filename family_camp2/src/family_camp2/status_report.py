@@ -28,22 +28,37 @@ validator already produces.
 
 from __future__ import annotations
 
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
 from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
 from reportlab.platypus import Paragraph, Table
 
-from family_camp2.domain import Activity, Camper, Session
+from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.pdf_reports import _GRID_COLOR, _HEADER_COLOR, _MUTED_COLOR, _styles, _table_style
+from family_camp2.validation.class2 import Class2Report
 
 __all__ = [
     "FrontMatterSummary",
     "ActivityTableRow",
     "DayBlock",
+    "SessionLoadingRow",
+    "SessionLoadingStats",
 ]
+
+# FR-102: sessions flagged under_minimum are drawn in this colour instead
+# of the normal "used capacity" colour, so they're visually distinguished
+# rather than only implied by a short bar.
+_UNDER_MINIMUM_COLOR = "#C53030"
+_SPARE_CAPACITY_COLOR = "#CBD5E0"
+
+_CHART_ROW_HEIGHT = 14
+_CHART_LABEL_WIDTH = 160
+_SESSION_CHART_ROWS_PER_PAGE = 40
 
 
 def _camp_date_range(sessions: list[Session]) -> tuple[datetime, datetime]:
@@ -278,3 +293,104 @@ def _render_activity_timetable_fallback(sessions: list[Session]) -> Table:
     table = Table(rows, repeatRows=1)
     table.setStyle(_table_style())
     return table
+
+
+# --- FR-102: activity session loading ---
+
+
+@dataclass(frozen=True)
+class SessionLoadingRow:
+    session: Session
+    capacity: int
+    occupancy: int
+    spare: int
+    under_minimum: bool
+
+
+def _session_loading_rows(
+    timetable: Timetable, sessions: list[Session], class2_report: Class2Report
+) -> list[SessionLoadingRow]:
+    under_minimum_sessions = {u.session for u in class2_report.under_minimum_sessions}
+    rows = [
+        SessionLoadingRow(
+            session=s,
+            capacity=s.activity.max_occupancy,
+            occupancy=len(timetable.campers_in(s)),
+            spare=s.activity.max_occupancy - len(timetable.campers_in(s)),
+            under_minimum=s in under_minimum_sessions,
+        )
+        for s in sessions
+    ]
+    return sorted(rows, key=lambda r: (r.session.activity.name, r.session.start))
+
+
+@dataclass(frozen=True)
+class SessionLoadingStats:
+    mean_spare: float
+    stdev_spare: float
+    under_minimum_count: int
+
+
+def _session_loading_stats(rows: list[SessionLoadingRow]) -> SessionLoadingStats:
+    """"Ideal" session size is a session's own capacity (OQ-26) - spare
+    capacity *is* the deviation-from-ideal statistic, nothing further to
+    compute. Population stdev (``pstdev``, not sample ``stdev``) since
+    ``rows`` is the complete set of sessions, not a sample of a larger
+    population."""
+    spares = [r.spare for r in rows]
+    return SessionLoadingStats(
+        mean_spare=statistics.mean(spares) if spares else 0.0,
+        stdev_spare=statistics.pstdev(spares) if spares else 0.0,
+        under_minimum_count=sum(1 for r in rows if r.under_minimum),
+    )
+
+
+def _render_session_loading_stats(stats: SessionLoadingStats) -> Paragraph:
+    return Paragraph(
+        f"Mean spare capacity: {stats.mean_spare:.1f} seats/session "
+        f"(&#963; {stats.stdev_spare:.1f}). "
+        f"{stats.under_minimum_count} session(s) below minimum occupancy.",
+        _styles["table_cell"],
+    )
+
+
+def _paginate(rows: list, per_page: int) -> list[list]:
+    if not rows:
+        return []
+    return [rows[i : i + per_page] for i in range(0, len(rows), per_page)]
+
+
+def _session_loading_label(row: SessionLoadingRow) -> str:
+    return f"{row.session.activity.name} {row.session.start.strftime('%a %H:%M')}"
+
+
+def _render_session_loading_page(rows: list[SessionLoadingRow], width: float) -> Drawing:
+    """One stacked horizontal bar per session (used vs. spare capacity),
+    ``under_minimum`` sessions drawn in a distinct colour rather than only
+    implied by a short bar (FR-102)."""
+    chart_height = len(rows) * _CHART_ROW_HEIGHT
+    chart = HorizontalBarChart()
+    chart.x = _CHART_LABEL_WIDTH
+    chart.y = 0
+    chart.width = width - _CHART_LABEL_WIDTH
+    chart.height = chart_height
+    chart.data = [tuple(r.occupancy for r in rows), tuple(r.spare for r in rows)]
+    chart.categoryAxis.categoryNames = [_session_loading_label(r) for r in rows]
+    chart.categoryAxis.style = "stacked"
+    chart.categoryAxis.labels.fontSize = 6
+    chart.valueAxis.labels.fontSize = 6
+    chart.bars[0].fillColor = colors.HexColor(_HEADER_COLOR)
+    chart.bars[1].fillColor = colors.HexColor(_SPARE_CAPACITY_COLOR)
+    for i, row in enumerate(rows):
+        if row.under_minimum:
+            chart.bars[(0, i)].fillColor = colors.HexColor(_UNDER_MINIMUM_COLOR)
+
+    drawing = Drawing(width, chart_height)
+    drawing.add(chart)
+    return drawing
+
+
+def _render_session_loading_charts(
+    rows: list[SessionLoadingRow], width: float, per_page: int = _SESSION_CHART_ROWS_PER_PAGE
+) -> list[Drawing]:
+    return [_render_session_loading_page(page, width) for page in _paginate(rows, per_page)]

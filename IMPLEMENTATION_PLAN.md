@@ -1638,7 +1638,7 @@ unknown name.
 
 ---
 
-### - [ ] Step 42: Safe expression parser + target resolution (FR-91/92/93)
+### - [x] Step 42: Safe expression parser + target resolution (FR-91/92/93)
 
 **Goal**: Turn one raw constraint record (family_id, camper_name,
 constraint expression string, severity, note) into a `ConstraintInstance`

@@ -41,6 +41,7 @@ from reportlab.platypus import Paragraph, Table
 from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.pdf_reports import _GRID_COLOR, _HEADER_COLOR, _MUTED_COLOR, _styles, _table_style
 from family_camp2.validation.class2 import Class2Report
+from family_camp2.validation.feasibility import FamilyOverdemand
 from family_camp2.validation.tiers import UnmetOptionalRequest
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "SessionLoadingRow",
     "SessionLoadingStats",
     "CamperLoadingRow",
+    "FamilyLoadingRow",
 ]
 
 # FR-102: sessions flagged under_minimum are drawn in this colour instead
@@ -70,6 +72,7 @@ _CHART_ROW_HEIGHT = 14
 _CHART_LABEL_WIDTH = 160
 _SESSION_CHART_ROWS_PER_PAGE = 40
 _CAMPER_CHART_ROWS_PER_PAGE = 40
+_FAMILY_CHART_ROWS_PER_PAGE = 40
 
 
 def _camp_date_range(sessions: list[Session]) -> tuple[datetime, datetime]:
@@ -495,3 +498,105 @@ def _render_camper_loading_charts(
     rows: list[CamperLoadingRow], width: float, per_page: int = _CAMPER_CHART_ROWS_PER_PAGE
 ) -> list[Drawing]:
     return [_render_camper_loading_page(page, width) for page in _paginate(rows, per_page)]
+
+
+# --- FR-104/105: family activity loading + anomaly callouts ---
+
+
+@dataclass(frozen=True)
+class FamilyLoadingRow:
+    family_id: str
+    priorities_met: int
+    priorities_unmet: int
+    optional_met: int
+    optional_unmet: int
+    has_unmet_priority: bool
+
+
+def _family_loading_rows(camper_rows: list[CamperLoadingRow]) -> list[FamilyLoadingRow]:
+    """Aggregates Step 51's per-camper rows by ``family_id`` - built
+    *from* ``_camper_loading_rows``'s output, not a second independent
+    pass over ``campers``/``timetable``, so the camper- and family-level
+    sections can never disagree with each other on the underlying
+    counts."""
+    by_family: dict[str, list[CamperLoadingRow]] = defaultdict(list)
+    for row in camper_rows:
+        by_family[row.camper.family_id].append(row)
+
+    rows = [
+        FamilyLoadingRow(
+            family_id=family_id,
+            priorities_met=sum(r.priorities_met for r in members),
+            priorities_unmet=sum(r.priorities_unmet for r in members),
+            optional_met=sum(r.optional_met for r in members),
+            optional_unmet=sum(r.optional_unmet for r in members),
+            has_unmet_priority=any(r.has_unmet_priority for r in members),
+        )
+        for family_id, members in by_family.items()
+    ]
+    return sorted(rows, key=lambda r: r.family_id)
+
+
+def _render_family_loading_page(rows: list[FamilyLoadingRow], width: float) -> Drawing:
+    """Same shape as ``_render_camper_loading_page`` - one stacked bar
+    per family, with the same FR-105 double-distinguishing treatment for
+    families with any member's unmet priority."""
+    chart_height = len(rows) * _CHART_ROW_HEIGHT
+    chart = HorizontalBarChart()
+    chart.x = _CHART_LABEL_WIDTH
+    chart.y = 0
+    chart.width = width - _CHART_LABEL_WIDTH
+    chart.height = chart_height
+    chart.data = [
+        tuple(r.priorities_met for r in rows),
+        tuple(r.optional_met for r in rows),
+        tuple(r.priorities_unmet for r in rows),
+        tuple(r.optional_unmet for r in rows),
+    ]
+    chart.categoryAxis.categoryNames = [r.family_id for r in rows]
+    chart.categoryAxis.style = "stacked"
+    chart.categoryAxis.labels.fontSize = 6
+    chart.valueAxis.labels.fontSize = 6
+    chart.bars[0].fillColor = colors.HexColor(_HEADER_COLOR)
+    chart.bars[1].fillColor = colors.HexColor(_OPTIONAL_MET_COLOR)
+    chart.bars[2].fillColor = colors.HexColor(_UNMET_PRIORITY_COLOR)
+    chart.bars[3].fillColor = colors.HexColor(_UNMET_OPTIONAL_COLOR)
+    for i, row in enumerate(rows):
+        if row.has_unmet_priority:
+            chart.categoryAxis.labels[i].fillColor = colors.HexColor(_UNMET_PRIORITY_COLOR)
+
+    drawing = Drawing(width, chart_height)
+    drawing.add(chart)
+    return drawing
+
+
+def _render_family_loading_charts(
+    rows: list[FamilyLoadingRow], width: float, per_page: int = _FAMILY_CHART_ROWS_PER_PAGE
+) -> list[Drawing]:
+    return [_render_family_loading_page(page, width) for page in _paginate(rows, per_page)]
+
+
+def _render_overdemand_callout(overdemand: list[FamilyOverdemand]) -> Table | None:
+    """FR-105/FR-77: families who could never fit their requests
+    regardless of capacity - a structural, time-based ceiling no solver
+    could work around. Reuses ``find_overdemanding_families`` (called by
+    the caller, not here) rather than a new computation. ``None`` (not an
+    empty table) when there's nothing to report."""
+    if not overdemand:
+        return None
+
+    header = [
+        Paragraph("Family", _styles["table_header"]),
+        Paragraph("Requested activities", _styles["table_header"]),
+        Paragraph("Max non-overlapping slots", _styles["table_header"]),
+    ]
+    rows = [header]
+    for fo in sorted(overdemand, key=lambda fo: fo.family_id):
+        rows.append([
+            Paragraph(fo.family_id, _styles["table_cell"]),
+            Paragraph(str(fo.requested_count), _styles["table_cell_center"]),
+            Paragraph(str(fo.available_timeslots), _styles["table_cell_center"]),
+        ])
+    table = Table(rows, repeatRows=1)
+    table.setStyle(_table_style())
+    return table

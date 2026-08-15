@@ -5,6 +5,7 @@ from family_camp2.status_report import (
     ActivityTableRow,
     CamperLoadingRow,
     DayBlock,
+    FamilyLoadingRow,
     FrontMatterSummary,
     SessionLoadingRow,
     _activity_table_rows,
@@ -12,18 +13,22 @@ from family_camp2.status_report import (
     _camp_date_range,
     _camper_loading_rows,
     _distinct_camp_days,
+    _family_loading_rows,
     _front_matter_summary,
     _paginate,
     _render_activity_table,
     _render_activity_timetable_drawing,
     _render_activity_timetable_fallback,
     _render_camper_loading_charts,
+    _render_family_loading_charts,
     _render_front_matter,
+    _render_overdemand_callout,
     _render_session_loading_charts,
     _session_loading_rows,
     _session_loading_stats,
 )
 from family_camp2.validation.class2 import Class2Report, MissingPriority, UnderMinimumSession
+from family_camp2.validation.feasibility import FamilyOverdemand
 from family_camp2.validation.tiers import UnmetOptionalRequest
 
 DAY1 = datetime(2026, 8, 1, 9, 0)
@@ -323,3 +328,65 @@ def test_render_camper_loading_charts_produces_one_drawing_per_page():
 
     assert len(drawings) == 3  # 3 + 3 + 1
     assert all(len(d.contents) == 1 for d in drawings)
+
+
+# --- family activity loading + overdemand callout (FR-104/105) ---
+
+
+def test_family_loading_rows_aggregates_camper_rows_by_family():
+    camper_rows = [
+        CamperLoadingRow(
+            camper=camper("Amy", family="F1"), priorities_met=1, priorities_unmet=0,
+            optional_met=1, optional_unmet=0, has_unmet_priority=False,
+        ),
+        CamperLoadingRow(
+            camper=camper("Bob", family="F1"), priorities_met=0, priorities_unmet=1,
+            optional_met=0, optional_unmet=1, has_unmet_priority=True,
+        ),
+        CamperLoadingRow(
+            camper=camper("Zoe", family="F2"), priorities_met=2, priorities_unmet=0,
+            optional_met=0, optional_unmet=0, has_unmet_priority=False,
+        ),
+    ]
+
+    rows = _family_loading_rows(camper_rows)
+
+    by_family = {r.family_id: r for r in rows}
+    assert by_family["F1"].priorities_met == 1
+    assert by_family["F1"].priorities_unmet == 1
+    assert by_family["F1"].optional_met == 1
+    assert by_family["F1"].optional_unmet == 1
+    assert by_family["F1"].has_unmet_priority is True
+    assert by_family["F2"].has_unmet_priority is False
+    assert [r.family_id for r in rows] == ["F1", "F2"]  # sorted
+
+
+def test_render_family_loading_charts_produces_one_drawing_per_page():
+    rows = [
+        FamilyLoadingRow(
+            family_id=f"F{i}", priorities_met=1, priorities_unmet=0, optional_met=0, optional_unmet=0,
+            has_unmet_priority=False,
+        )
+        for i in range(5)
+    ]
+
+    drawings = _render_family_loading_charts(rows, width=400, per_page=2)
+
+    assert len(drawings) == 3  # 2 + 2 + 1
+    assert all(len(d.contents) == 1 for d in drawings)
+
+
+def test_render_overdemand_callout_returns_none_when_nothing_is_overdemanding():
+    assert _render_overdemand_callout([]) is None
+
+
+def test_render_overdemand_callout_returns_a_table_with_a_row_per_family():
+    overdemand = [
+        FamilyOverdemand(family_id="F1", members=(camper("Amy", family="F1"),), requested_count=5, available_timeslots=3),
+        FamilyOverdemand(family_id="F2", members=(camper("Zoe", family="F2"),), requested_count=4, available_timeslots=2),
+    ]
+
+    table = _render_overdemand_callout(overdemand)
+
+    assert table is not None
+    assert len(table._cellvalues) == 3  # header + 2 families

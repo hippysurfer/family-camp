@@ -2165,7 +2165,7 @@ Step 50's per-bar `under_minimum` highlight).
 
 ---
 
-### - [ ] Step 52: Family activity loading + anomaly callouts (FR-104/105)
+### - [x] Step 52: Family activity loading + anomaly callouts (FR-104/105)
 
 **Goal**: the family-granularity mirror of Step 51, plus the
 structural-overdemand callout FR-105 requires.

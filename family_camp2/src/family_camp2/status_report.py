@@ -41,6 +41,7 @@ from reportlab.platypus import Paragraph, Table
 from family_camp2.domain import Activity, Camper, Session, Timetable
 from family_camp2.pdf_reports import _GRID_COLOR, _HEADER_COLOR, _MUTED_COLOR, _styles, _table_style
 from family_camp2.validation.class2 import Class2Report
+from family_camp2.validation.tiers import UnmetOptionalRequest
 
 __all__ = [
     "FrontMatterSummary",
@@ -48,6 +49,7 @@ __all__ = [
     "DayBlock",
     "SessionLoadingRow",
     "SessionLoadingStats",
+    "CamperLoadingRow",
 ]
 
 # FR-102: sessions flagged under_minimum are drawn in this colour instead
@@ -56,9 +58,18 @@ __all__ = [
 _UNDER_MINIMUM_COLOR = "#C53030"
 _SPARE_CAPACITY_COLOR = "#CBD5E0"
 
+# FR-103/105: priorities/optional met vs. unmet, per camper/family - unmet
+# priorities use the same "something's wrong" red as _UNDER_MINIMUM_COLOR
+# (same semantic, different section), unmet optionals a milder amber
+# (less severe - optional requests are explicitly best-effort).
+_OPTIONAL_MET_COLOR = "#63B3ED"
+_UNMET_PRIORITY_COLOR = "#C53030"
+_UNMET_OPTIONAL_COLOR = "#DD6B20"
+
 _CHART_ROW_HEIGHT = 14
 _CHART_LABEL_WIDTH = 160
 _SESSION_CHART_ROWS_PER_PAGE = 40
+_CAMPER_CHART_ROWS_PER_PAGE = 40
 
 
 def _camp_date_range(sessions: list[Session]) -> tuple[datetime, datetime]:
@@ -394,3 +405,93 @@ def _render_session_loading_charts(
     rows: list[SessionLoadingRow], width: float, per_page: int = _SESSION_CHART_ROWS_PER_PAGE
 ) -> list[Drawing]:
     return [_render_session_loading_page(page, width) for page in _paginate(rows, per_page)]
+
+
+# --- FR-103: camper activity loading ---
+
+
+@dataclass(frozen=True)
+class CamperLoadingRow:
+    camper: Camper
+    priorities_met: int
+    priorities_unmet: int
+    optional_met: int
+    optional_unmet: int
+    has_unmet_priority: bool
+
+
+def _camper_loading_rows(
+    campers: list[Camper], class2_report: Class2Report, unmet_optional: list[UnmetOptionalRequest]
+) -> list[CamperLoadingRow]:
+    """Derives met/unmet counts from the already-computed
+    ``class2_report.missing_priorities``/``unmet_optional`` - no new
+    fulfilment logic, pure aggregation. Sorted by ``(family_id, name)``
+    so a family's members stay adjacent (FR-103), matching Step 52's
+    family-level view."""
+    missing_priorities: dict[Camper, set[Activity]] = defaultdict(set)
+    for mp in class2_report.missing_priorities:
+        missing_priorities[mp.camper].add(mp.activity)
+    unmet_optional_by_camper: dict[Camper, set[Activity]] = defaultdict(set)
+    for uo in unmet_optional:
+        unmet_optional_by_camper[uo.camper].add(uo.activity)
+
+    rows = []
+    for camper in campers:
+        priorities_unmet = len(missing_priorities.get(camper, ()))
+        optional_unmet = len(unmet_optional_by_camper.get(camper, ()))
+        rows.append(
+            CamperLoadingRow(
+                camper=camper,
+                priorities_met=len(camper.priorities) - priorities_unmet,
+                priorities_unmet=priorities_unmet,
+                optional_met=len(camper.optional) - optional_unmet,
+                optional_unmet=optional_unmet,
+                has_unmet_priority=priorities_unmet > 0,
+            )
+        )
+    return sorted(rows, key=lambda r: (r.camper.family_id, r.camper.name))
+
+
+def _camper_loading_label(row: CamperLoadingRow) -> str:
+    return f"{row.camper.name} ({row.camper.family_id})"
+
+
+def _render_camper_loading_page(rows: list[CamperLoadingRow], width: float) -> Drawing:
+    """One stacked horizontal bar per camper: priorities met, optional
+    met, priorities unmet, optional unmet. A camper with an unmet
+    priority is doubly distinguished (FR-105) - its own bar segment (a
+    row with no unmet priorities simply has none of that colour) and its
+    category-axis label, coloured to match."""
+    chart_height = len(rows) * _CHART_ROW_HEIGHT
+    chart = HorizontalBarChart()
+    chart.x = _CHART_LABEL_WIDTH
+    chart.y = 0
+    chart.width = width - _CHART_LABEL_WIDTH
+    chart.height = chart_height
+    chart.data = [
+        tuple(r.priorities_met for r in rows),
+        tuple(r.optional_met for r in rows),
+        tuple(r.priorities_unmet for r in rows),
+        tuple(r.optional_unmet for r in rows),
+    ]
+    chart.categoryAxis.categoryNames = [_camper_loading_label(r) for r in rows]
+    chart.categoryAxis.style = "stacked"
+    chart.categoryAxis.labels.fontSize = 6
+    chart.valueAxis.labels.fontSize = 6
+    chart.bars[0].fillColor = colors.HexColor(_HEADER_COLOR)
+    chart.bars[1].fillColor = colors.HexColor(_OPTIONAL_MET_COLOR)
+    chart.bars[2].fillColor = colors.HexColor(_UNMET_PRIORITY_COLOR)
+    chart.bars[3].fillColor = colors.HexColor(_UNMET_OPTIONAL_COLOR)
+    for i, row in enumerate(rows):
+        if row.has_unmet_priority:
+            chart.categoryAxis.labels[i].fillColor = colors.HexColor(_UNMET_PRIORITY_COLOR)
+
+    drawing = Drawing(width, chart_height)
+    drawing.add(chart)
+    return drawing
+
+
+def _render_camper_loading_charts(
+    rows: list[CamperLoadingRow], width: float, per_page: int = _CAMPER_CHART_ROWS_PER_PAGE
+) -> list[Drawing]:
+    return [_render_camper_loading_page(page, width) for page in _paginate(rows, per_page)]

@@ -3,24 +3,28 @@ from datetime import datetime, timedelta
 from family_camp2.domain import Activity, Assignment, Camper, Session, Timetable
 from family_camp2.status_report import (
     ActivityTableRow,
+    CamperLoadingRow,
     DayBlock,
     FrontMatterSummary,
     SessionLoadingRow,
     _activity_table_rows,
     _activity_timetable_blocks,
     _camp_date_range,
+    _camper_loading_rows,
     _distinct_camp_days,
     _front_matter_summary,
     _paginate,
     _render_activity_table,
     _render_activity_timetable_drawing,
     _render_activity_timetable_fallback,
+    _render_camper_loading_charts,
     _render_front_matter,
     _render_session_loading_charts,
     _session_loading_rows,
     _session_loading_stats,
 )
-from family_camp2.validation.class2 import Class2Report, UnderMinimumSession
+from family_camp2.validation.class2 import Class2Report, MissingPriority, UnderMinimumSession
+from family_camp2.validation.tiers import UnmetOptionalRequest
 
 DAY1 = datetime(2026, 8, 1, 9, 0)
 DAY2 = datetime(2026, 8, 2, 9, 0)
@@ -260,3 +264,62 @@ def test_render_session_loading_charts_produces_one_drawing_per_page():
 
     assert len(drawings) == 3  # 2 + 2 + 1
     assert all(len(d.contents) == 1 for d in drawings)  # one chart per page
+
+
+# --- camper activity loading (FR-103) ---
+
+
+def test_camper_loading_rows_computes_met_and_unmet_counts():
+    archery = activity("Archery")
+    craft = activity("Craft")
+    zipline = activity("Zipline")
+    fully_satisfied = camper("Fully", priorities=(archery,), optional=(craft,))
+    partly_unmet = camper("Partly", priorities=(archery, zipline), optional=(craft,))
+
+    class2_report = Class2Report(missing_priorities=[MissingPriority(camper=partly_unmet, activity=zipline)])
+    unmet_optional = [UnmetOptionalRequest(camper=partly_unmet, activity=craft)]
+
+    rows = _camper_loading_rows([fully_satisfied, partly_unmet], class2_report, unmet_optional)
+
+    by_name = {r.camper.name: r for r in rows}
+    assert by_name["Fully"].priorities_met == 1
+    assert by_name["Fully"].priorities_unmet == 0
+    assert by_name["Fully"].optional_met == 1
+    assert by_name["Fully"].optional_unmet == 0
+    assert by_name["Fully"].has_unmet_priority is False
+
+    assert by_name["Partly"].priorities_met == 1
+    assert by_name["Partly"].priorities_unmet == 1
+    assert by_name["Partly"].optional_met == 0
+    assert by_name["Partly"].optional_unmet == 1
+    assert by_name["Partly"].has_unmet_priority is True
+
+
+def test_camper_loading_rows_sorted_by_family_then_name():
+    rows = _camper_loading_rows(
+        [
+            camper("Zoe", family="F2"),
+            camper("Bob", family="F1"),
+            camper("Amy", family="F1"),
+        ],
+        Class2Report(),
+        [],
+    )
+    assert [(r.camper.family_id, r.camper.name) for r in rows] == [
+        ("F1", "Amy"), ("F1", "Bob"), ("F2", "Zoe"),
+    ]
+
+
+def test_render_camper_loading_charts_produces_one_drawing_per_page():
+    rows = [
+        CamperLoadingRow(
+            camper=camper(f"C{i}"), priorities_met=1, priorities_unmet=0, optional_met=0, optional_unmet=0,
+            has_unmet_priority=False,
+        )
+        for i in range(7)
+    ]
+
+    drawings = _render_camper_loading_charts(rows, width=400, per_page=3)
+
+    assert len(drawings) == 3  # 3 + 3 + 1
+    assert all(len(d.contents) == 1 for d in drawings)

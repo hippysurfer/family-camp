@@ -2122,7 +2122,7 @@ could go wrong (the numbers themselves).
 
 ---
 
-### - [ ] Step 51: Camper activity loading (FR-103)
+### - [x] Step 51: Camper activity loading (FR-103)
 
 **Goal**: the fourth section, camper granularity - one paginated
 stacked-bar chart per page, every camper included.
@@ -2149,6 +2149,19 @@ fully-satisfied/partially-satisfied/unmet-priority campers - exact
 counts per camper, and family-adjacent sort order confirmed.
 
 **Commit message**: `family_camp2 step 51: camper activity loading section (FR-103)`
+
+**Deviation found during implementation**: `_camper_loading_rows` dropped
+`timetable` from its signature (the plan's sketch included it) - every
+count it needs (met = requested minus the already-computed unmet set)
+comes from `class2_report.missing_priorities`/`unmet_optional`, so
+threading `timetable` through as well would have been an unused
+parameter. FR-105's anomaly highlight ended up doubled rather than
+singular: a camper with an unmet priority already shows a visibly
+distinct bar segment (the unmet-priority colour only appears when
+`priorities_unmet > 0`), and its category-axis *label* is additionally
+coloured to match, confirmed via `reportlab`'s per-index
+`categoryAxis.labels[i].fillColor` override (same per-index mechanism as
+Step 50's per-bar `under_minimum` highlight).
 
 ---
 

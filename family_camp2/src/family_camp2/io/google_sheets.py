@@ -42,6 +42,7 @@ __all__ = [
     "DEFAULT_ACTIVITIES_WORKSHEET",
     "DEFAULT_SESSIONS_WORKSHEET",
     "DEFAULT_CAMPERS_WORKSHEET",
+    "DEFAULT_CONSTRAINTS_WORKSHEET",
     "GoogleSheetsClient",
     "GoogleSheetsFetchError",
     "get_client",
@@ -55,6 +56,9 @@ __all__ = [
 DEFAULT_ACTIVITIES_WORKSHEET = "Activities for schedule"
 DEFAULT_SESSIONS_WORKSHEET = "Sessions for schedule"
 DEFAULT_CAMPERS_WORKSHEET = "Activities"
+# REQUIREMENTS.md §3.5/§4.10 - a new tab, unlike the three above it has no
+# precedent in the old family_camp/schedule/fetch_data.py to match.
+DEFAULT_CONSTRAINTS_WORKSHEET = "Constraints for schedule"
 
 # The first cell of each worksheet's header row, used to locate it amongst
 # any preamble rows above it (both the activities and sessions worksheets
@@ -62,6 +66,9 @@ DEFAULT_CAMPERS_WORKSHEET = "Activities"
 _ACTIVITIES_HEADER_MARKER = "Activity"
 _SESSIONS_HEADER_MARKER = "Activity"
 _CAMPERS_HEADER_MARKER = "Group Ref"
+# Reuses "Group Ref" (the Campers tab's own family-identifier column name)
+# so organisers recognise it as the same identifier, not a new concept.
+_CONSTRAINTS_HEADER_MARKER = "Group Ref"
 
 
 class GoogleSheetsFetchError(ValueError):
@@ -279,15 +286,44 @@ def _parse_campers(
     return campers, unknown_activities
 
 
+def _parse_constraints(rows: list[list[str]]) -> list[dict]:
+    """Parses the optional constraints tab (REQUIREMENTS.md §3.5) into raw
+    records with the same keys ``constraints.parser.build_constraint_instances``
+    expects (``family_id``/``camper_name``/``constraint``/``severity``/
+    ``note``) - resolution against actual campers happens later, not here,
+    matching how ``fetch_schedule_data`` leaves activity/session/camper
+    cross-references to their own parse functions too."""
+    header, data_rows = _extract_table(rows, _CONSTRAINTS_HEADER_MARKER)
+    family_col = _column_index(header, "Group Ref")
+    camper_col = _column_index(header, "Camper Name")
+    constraint_col = _column_index(header, "Constraint")
+    severity_col = _column_index(header, "Severity")
+    note_col = _column_index(header, "Note")
+
+    records: list[dict] = []
+    for row in data_rows:
+        records.append(
+            {
+                "family_id": row[family_col].strip(),
+                "camper_name": row[camper_col].strip() or None,
+                "constraint": row[constraint_col].strip(),
+                "severity": row[severity_col].strip(),
+                "note": row[note_col].strip(),
+            }
+        )
+    return records
+
+
 def fetch_schedule_data(
     client: GoogleSheetsClient,
     sheet_id_or_url: str,
     activities_worksheet: str = DEFAULT_ACTIVITIES_WORKSHEET,
     sessions_worksheet: str = DEFAULT_SESSIONS_WORKSHEET,
     campers_worksheet: str = DEFAULT_CAMPERS_WORKSHEET,
-) -> tuple[list[Activity], list[Session], list[Camper]]:
-    """Fetch the three schedule worksheets from an already-open spreadsheet
-    and parse them into domain objects.
+    constraints_worksheet: str | None = None,
+) -> tuple[list[Activity], list[Session], list[Camper], list[dict]]:
+    """Fetch the schedule worksheets from an already-open spreadsheet and
+    parse them into domain objects.
 
     Takes an already-authorized client (typically from ``get_client``) so
     the OAuth dance and the fetch-and-parse logic can be tested
@@ -295,6 +331,14 @@ def fetch_schedule_data(
     ``client`` is a test double exposing the same
     open_by_key/open_by_url/worksheet/get_all_values interface as
     ``gspread.Client``.
+
+    ``constraints_worksheet`` defaults to ``None`` - unlike the other three
+    tabs, the constraints tab (§3.5) is an optional addition most existing
+    spreadsheets won't have, so it's only fetched when a name is explicitly
+    given (e.g. via ``--constraints-worksheet``, which itself defaults to
+    ``DEFAULT_CONSTRAINTS_WORKSHEET`` - an explicit opt-in, not an implicit
+    probe that would otherwise need to silently swallow a "tab not found"
+    error from whatever the client library raises).
     """
     spreadsheet = open_spreadsheet(client, sheet_id_or_url)
     acts_rows = spreadsheet.worksheet(activities_worksheet).get_all_values()
@@ -313,4 +357,9 @@ def fetch_schedule_data(
             stacklevel=2,
         )
 
-    return list(activities_by_name.values()), sessions, campers
+    constraint_records: list[dict] = []
+    if constraints_worksheet is not None:
+        constraint_rows = spreadsheet.worksheet(constraints_worksheet).get_all_values()
+        constraint_records = _parse_constraints(constraint_rows)
+
+    return list(activities_by_name.values()), sessions, campers, constraint_records

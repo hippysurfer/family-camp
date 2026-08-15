@@ -5,6 +5,7 @@ import pytest
 from family_camp2.io.google_sheets import (
     DEFAULT_ACTIVITIES_WORKSHEET,
     DEFAULT_CAMPERS_WORKSHEET,
+    DEFAULT_CONSTRAINTS_WORKSHEET,
     DEFAULT_SESSIONS_WORKSHEET,
     GoogleSheetsFetchError,
     _extract_table,
@@ -43,6 +44,16 @@ CAMPERS_ROWS = [
     ["001/One", "One", "Parent", "One", "", "Adult (over 18 years)", "18+", "Received", "Archery", "", ""],
     ["001/One", "One", "Kid", "One", "None", "Child (between 5 and 18 years)", "10", "", "", "Craft", ""],
     ["002/Two", "Two", "Alex", "Two", "", "Adult (over 18 years)", "", "Received", "", "", ""],
+]
+
+# A new, optional tab (REQUIREMENTS.md §3.5) - preamble row, then a header
+# reusing "Group Ref" from the Campers tab, matching the realism of the
+# other fixtures above.
+CONSTRAINTS_ROWS = [
+    ["Custom constraints - see README for syntax", "", "", "", ""],
+    ["Group Ref", "Camper Name", "Constraint", "Severity", "Note"],
+    ["001/One", "Kid One", "no_activity_before(time=\"11:00\")", "hard", "sleeps in"],
+    ["001/One", "", "no_activities_on_day(2)", "soft", ""],
 ]
 
 
@@ -149,7 +160,7 @@ def test_fetch_schedule_data_parses_the_three_worksheets():
     spreadsheet = _real_shaped_spreadsheet()
     client = FakeClient(spreadsheet)
 
-    activities, sessions, campers = fetch_schedule_data(client, "abc123")
+    activities, sessions, campers, constraints = fetch_schedule_data(client, "abc123")
 
     assert {a.name for a in activities} == {"Archery", "Craft"}
     assert len(sessions) == 2
@@ -167,6 +178,8 @@ def test_fetch_schedule_data_parses_the_three_worksheets():
     blank_age_adult = next(c for c in campers if c.name == "Alex Two")
     assert blank_age_adult.age == 18  # blank Age column, falls back via "18?" column
 
+    assert constraints == []  # constraints_worksheet not given - not fetched at all
+
 
 def test_fetch_schedule_data_uses_extra_column_not_other_column_for_optional():
     """Regression guard, confirmed against the real sheet: "Extra" holds
@@ -180,7 +193,7 @@ def test_fetch_schedule_data_uses_extra_column_not_other_column_for_optional():
     spreadsheet = _real_shaped_spreadsheet(campers_rows=campers_rows)
     client = FakeClient(spreadsheet)
 
-    _, _, campers = fetch_schedule_data(client, "abc123")
+    _, _, campers, _ = fetch_schedule_data(client, "abc123")
 
     # "Craft" is a perfectly valid activity, just sitting in the column
     # that's never read for this purpose - not flagged as unknown, simply ignored.
@@ -204,7 +217,7 @@ def test_fetch_schedule_data_skips_and_warns_about_unschedulable_activity_refere
     client = FakeClient(spreadsheet)
 
     with pytest.warns(UserWarning, match="Fencing"):
-        _, _, campers = fetch_schedule_data(client, "abc123")
+        _, _, campers, _ = fetch_schedule_data(client, "abc123")
 
     assert campers[0].priorities == ()
     assert campers[0].optional == ()
@@ -216,19 +229,67 @@ def test_fetch_schedule_data_accepts_custom_worksheet_names():
             "MyActivities": FakeWorksheet(ACTIVITIES_ROWS),
             "MySessions": FakeWorksheet(SESSIONS_ROWS),
             "MyCampers": FakeWorksheet(CAMPERS_ROWS),
+            "MyConstraints": FakeWorksheet(CONSTRAINTS_ROWS),
         }
     )
     client = FakeClient(spreadsheet)
 
-    activities, sessions, campers = fetch_schedule_data(
+    activities, sessions, campers, constraints = fetch_schedule_data(
         client, "abc123",
         activities_worksheet="MyActivities",
         sessions_worksheet="MySessions",
         campers_worksheet="MyCampers",
+        constraints_worksheet="MyConstraints",
     )
 
     assert {a.name for a in activities} == {"Archery", "Craft"}
-    assert spreadsheet.requested_names == ["MyActivities", "MySessions", "MyCampers"]
+    assert spreadsheet.requested_names == ["MyActivities", "MySessions", "MyCampers", "MyConstraints"]
+    assert len(constraints) == 2
+
+
+def test_fetch_schedule_data_does_not_touch_the_constraints_tab_by_default():
+    """§3.5's constraints tab is optional - unlike the other three, most
+    spreadsheets won't have it, so fetch_schedule_data must not even try to
+    open it unless a worksheet name is explicitly given."""
+    spreadsheet = _real_shaped_spreadsheet()
+    client = FakeClient(spreadsheet)
+
+    fetch_schedule_data(client, "abc123")
+
+    assert DEFAULT_CONSTRAINTS_WORKSHEET not in spreadsheet.requested_names
+
+
+def test_fetch_schedule_data_parses_the_constraints_worksheet_into_raw_records():
+    spreadsheet = FakeSpreadsheet(
+        {
+            DEFAULT_ACTIVITIES_WORKSHEET: FakeWorksheet(ACTIVITIES_ROWS),
+            DEFAULT_SESSIONS_WORKSHEET: FakeWorksheet(SESSIONS_ROWS),
+            DEFAULT_CAMPERS_WORKSHEET: FakeWorksheet(CAMPERS_ROWS),
+            DEFAULT_CONSTRAINTS_WORKSHEET: FakeWorksheet(CONSTRAINTS_ROWS),
+        }
+    )
+    client = FakeClient(spreadsheet)
+
+    _, _, _, constraints = fetch_schedule_data(
+        client, "abc123", constraints_worksheet=DEFAULT_CONSTRAINTS_WORKSHEET
+    )
+
+    assert constraints == [
+        {
+            "family_id": "001/One",
+            "camper_name": "Kid One",
+            "constraint": 'no_activity_before(time="11:00")',
+            "severity": "hard",
+            "note": "sleeps in",
+        },
+        {
+            "family_id": "001/One",
+            "camper_name": None,
+            "constraint": "no_activities_on_day(2)",
+            "severity": "soft",
+            "note": "",
+        },
+    ]
 
 
 def test_get_client_raises_a_clear_error_when_gspread_is_missing(monkeypatch):

@@ -1842,7 +1842,7 @@ camp at once.
 
 ---
 
-### - [ ] Step 46: Google Sheets fetch integration
+### - [x] Step 46: Google Sheets fetch integration
 
 **Goal**: The real-world input path - a new "Constraints for schedule"
 worksheet, fetched the same way the other three already are.
@@ -1863,6 +1863,31 @@ existing fixtures' realism) parses to the expected `ConstraintInstance`
 list.
 
 **Commit message**: `family_camp2 step 46: fetch custom constraints from a new Google Sheets tab`
+
+**Deviation found during implementation**: `fetch_schedule_data` produces
+raw `dict` records (the same `family_id`/`camper_name`/`constraint`/
+`severity`/`note` shape `dump_json`'s `constraint_records` param and
+`build_constraint_instances` already expect), not resolved
+`ConstraintInstance` objects - resolving against actual `Camper` objects
+happens later, when the written JSON is loaded via `--data`, exactly
+mirroring how `dump_json`'s own docstring (Step 43) explains there's no
+lossless way to serialise an already-resolved `ConstraintInstance` back
+to a family-vs-single-member-family record. Unlike the other three
+worksheets, the new tab is genuinely optional in practice, not just in
+principle: `fetch_schedule_data` gained `constraints_worksheet: str |
+None = None` and simply never calls `spreadsheet.worksheet(...)` for it
+unless a name is given, rather than fetching
+`DEFAULT_CONSTRAINTS_WORKSHEET` unconditionally and swallowing a
+"tab not found" error (which would have needed coupling to whichever
+exception type the injected client happens to raise - a real
+`gspread.exceptions.WorksheetNotFound` versus a test double's plain
+`KeyError` - for no real benefit over just asking the organiser to opt
+in). `fetch_cli.py`'s `--constraints-worksheet` flag uses
+`nargs="?", const=DEFAULT_CONSTRAINTS_WORKSHEET, default=None` (new to
+this codebase - no other flag needed a three-state "omitted / bare /
+with a value" shape before), so omitting the flag entirely fetches
+nothing, passing it bare uses the default tab name, and passing it with
+a value overrides that name.
 
 ---
 

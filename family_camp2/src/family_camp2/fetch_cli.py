@@ -20,6 +20,7 @@ from pathlib import Path
 from family_camp2.io.google_sheets import (
     DEFAULT_ACTIVITIES_WORKSHEET,
     DEFAULT_CAMPERS_WORKSHEET,
+    DEFAULT_CONSTRAINTS_WORKSHEET,
     DEFAULT_SESSIONS_WORKSHEET,
     fetch_schedule_data,
     get_client,
@@ -47,6 +48,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Worksheet tab name for camper registrations (default: {DEFAULT_CAMPERS_WORKSHEET!r}).",
     )
     parser.add_argument(
+        "--constraints-worksheet", nargs="?", const=DEFAULT_CONSTRAINTS_WORKSHEET, default=None,
+        help=(
+            "Worksheet tab name for custom constraints (REQUIREMENTS.md "
+            f"§3.5) - optional, not fetched unless given; pass with no "
+            f"value to use the default ({DEFAULT_CONSTRAINTS_WORKSHEET!r})."
+        ),
+    )
+    parser.add_argument(
         "--credentials", type=Path, default=None,
         help="OAuth client secrets JSON file (defaults to gspread's own config location).",
     )
@@ -62,18 +71,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     client = get_client(credentials_path=args.credentials, authorized_user_path=args.authorized_user)
-    activities, sessions, campers = fetch_schedule_data(
+    activities, sessions, campers, constraint_records = fetch_schedule_data(
         client,
         args.sheet_id,
         activities_worksheet=args.activities_worksheet,
         sessions_worksheet=args.sessions_worksheet,
         campers_worksheet=args.campers_worksheet,
+        constraints_worksheet=args.constraints_worksheet,
     )
 
-    dump_json(activities, sessions, campers, args.out)
+    dump_json(activities, sessions, campers, args.out, constraint_records)
     print(
         f"Wrote {len(activities)} activities, {len(sessions)} sessions, "
-        f"{len(campers)} campers to {args.out}"
+        f"{len(campers)} campers, {len(constraint_records)} constraints to {args.out}"
     )
     return 0
 

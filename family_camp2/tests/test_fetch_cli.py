@@ -23,7 +23,7 @@ def _canned_data():
     archery = Activity(name="Archery", duration=timedelta(minutes=60), min_occupancy=1, max_occupancy=4)
     session = Session(activity=archery, label="Morning", start=datetime(2026, 8, 1, 9, 0))
     kid = Camper(name="Kid", family_id="F1", age=10, age_group="Cub", priorities=(archery,))
-    return [archery], [session], [kid]
+    return [archery], [session], [kid], []
 
 
 def test_main_fetches_and_writes_json_without_real_network_or_oauth(monkeypatch, tmp_path, capsys):
@@ -33,7 +33,9 @@ def test_main_fetches_and_writes_json_without_real_network_or_oauth(monkeypatch,
         calls["get_client"] = (credentials_path, authorized_user_path)
         return "sentinel-client"
 
-    def fake_fetch_schedule_data(client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet):
+    def fake_fetch_schedule_data(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
         calls["fetch"] = (client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet)
         return _canned_data()
 
@@ -61,8 +63,10 @@ def test_main_passes_through_credentials_and_worksheet_overrides(monkeypatch, tm
     monkeypatch.setattr(fetch_cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
     seen = {}
 
-    def fake_fetch(client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet):
-        seen["worksheets"] = (activities_worksheet, sessions_worksheet, campers_worksheet)
+    def fake_fetch(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
+        seen["worksheets"] = (activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet)
         return _canned_data()
 
     monkeypatch.setattr(fetch_cli, "fetch_schedule_data", fake_fetch)
@@ -73,6 +77,45 @@ def test_main_passes_through_credentials_and_worksheet_overrides(monkeypatch, tm
         "--activities-worksheet", "MyActs",
         "--sessions-worksheet", "MySessions",
         "--campers-worksheet", "MyCampers",
+        "--constraints-worksheet", "MyConstraints",
     ])
 
-    assert seen["worksheets"] == ("MyActs", "MySessions", "MyCampers")
+    assert seen["worksheets"] == ("MyActs", "MySessions", "MyCampers", "MyConstraints")
+
+
+def test_constraints_worksheet_defaults_to_none_when_flag_omitted(monkeypatch, tmp_path):
+    monkeypatch.setattr(fetch_cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    seen = {}
+
+    def fake_fetch(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
+        seen["constraints_worksheet"] = constraints_worksheet
+        return _canned_data()
+
+    monkeypatch.setattr(fetch_cli, "fetch_schedule_data", fake_fetch)
+
+    out_path = tmp_path / "data.json"
+    fetch_cli.main(["--sheet-id", "abc123", "--out", str(out_path)])
+
+    assert seen["constraints_worksheet"] is None
+
+
+def test_constraints_worksheet_flag_with_no_value_uses_the_default_name(monkeypatch, tmp_path):
+    from family_camp2.io.google_sheets import DEFAULT_CONSTRAINTS_WORKSHEET
+
+    monkeypatch.setattr(fetch_cli, "get_client", lambda credentials_path=None, authorized_user_path=None: "client")
+    seen = {}
+
+    def fake_fetch(
+        client, sheet_id_or_url, activities_worksheet, sessions_worksheet, campers_worksheet, constraints_worksheet
+    ):
+        seen["constraints_worksheet"] = constraints_worksheet
+        return _canned_data()
+
+    monkeypatch.setattr(fetch_cli, "fetch_schedule_data", fake_fetch)
+
+    out_path = tmp_path / "data.json"
+    fetch_cli.main(["--sheet-id", "abc123", "--out", str(out_path), "--constraints-worksheet"])
+
+    assert seen["constraints_worksheet"] == DEFAULT_CONSTRAINTS_WORKSHEET

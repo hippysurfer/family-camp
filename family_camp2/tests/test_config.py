@@ -14,7 +14,7 @@ def test_default_config_with_no_path():
 
 
 def test_constraints_is_not_a_config_file_field(tmp_path):
-    """Constraints are camp data (OQ-19): they flow in via --data, not the
+    """Constraints are camp data: they flow in via --data, not the
     --config JSON file - a config file that tries to set them is rejected
     like any other unknown key."""
     path = tmp_path / "config.json"
@@ -48,6 +48,16 @@ def test_family_split_weight_is_a_valid_override(tmp_path):
     config = load_config(path)
 
     assert config.tier0_weights.family_split == 7
+    assert config.tier0_weights.family_safety == EngineConfig().tier0_weights.family_safety
+
+
+def test_custom_constraint_weight_is_a_valid_override(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"tier0_weights": {"custom_constraint": 42}}))
+
+    config = load_config(path)
+
+    assert config.tier0_weights.custom_constraint == 42
     assert config.tier0_weights.family_safety == EngineConfig().tier0_weights.family_safety
 
 

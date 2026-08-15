@@ -1,10 +1,10 @@
 """The constraint-rule contract (REQUIREMENTS.md §3.5/§4.10, FR-90).
 
-A **Tier A** rule - everything this phase implements (FR-96), per OQ-22 -
-is one that reduces to a per-(camper, session) predicate: "would this
-session violate the rule for this camper?" That's deliberately the same
-shape as the eligibility check that already makes Class 1 structurally
-guaranteed in both solvers (``_is_eligible`` in ``solvers/cp_sat.py`` and
+A **Tier A** rule - everything currently implemented (FR-96) - is one
+that reduces to a per-(camper, session) predicate: "would this session
+violate the rule for this camper?" That's deliberately the same shape as
+the eligibility check that already makes Class 1 structurally guaranteed
+in both solvers (``_is_eligible`` in ``solvers/cp_sat.py`` and
 ``solvers/annealing/moves.py``) - a hard Tier A constraint plugs into
 that existing mechanism directly, with no new solver-specific modeling
 per rule (FR-94). A soft one is scored the same way Class 2 already
@@ -12,9 +12,9 @@ scores ``missing_priority``/etc. (FR-95).
 
 Tier B rules (relational, e.g. "must always be with camper X"; aggregate,
 e.g. "no more than 2 activities per day") don't fit this single-session
-shape and are an explicitly deferred extension (IMPLEMENTATION_PLAN.md
-§6) - the registry (``registry.py``) doesn't prevent registering one, but
-nothing here helps enforce it automatically the way Tier A rules are.
+shape and aren't implemented - the registry (``registry.py``) doesn't
+prevent registering one, but nothing here helps enforce it automatically
+the way Tier A rules are.
 """
 
 from __future__ import annotations

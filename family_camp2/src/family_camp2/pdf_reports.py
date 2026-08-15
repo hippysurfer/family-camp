@@ -1,26 +1,19 @@
 """PDF report generation - native Python via reportlab (a pure-Python
-library; no external binaries or subprocesses involved), not part of the
-original scope (REQUIREMENTS.md §1.2 explicitly excluded printing), added
-at the user's explicit request after reviewing the old system's PDF
-output (see fetched_data/old_reports/ for the originals this design
-reacts against).
+library; no external binaries or subprocesses involved).
 
 Two separate documents, matching how they're actually used on the day:
 ``render_activities_pdf`` for staff running each session, ``render_campers_pdf``
-for a family to find their own itinerary at a glance. Both deliberately
-depart from the old system's layout (`family_camp/schedule/schedule_printer.py`)
-in two ways that drove its page count up (41 pages at A4 for one camp):
+for a family to find their own itinerary at a glance. Both are laid out to
+keep page counts manageable at real camp scale (hundreds of campers) in
+two ways:
 
-1. The old layout gave every camper attending a session their own
-   Paragraph line. Here, a session's attendees are one wrapped Paragraph
-   in one table cell/row - a session of 19 people takes a handful of
-   wrapped lines, not 19.
-2. The old layout forced a page break before every single activity/family,
-   regardless of how much room was left on the current page. Here,
-   nothing is force-broken: entries flow through an adaptive multi-column
-   frame (the number of columns is computed from the page's actual
-   width, not hardcoded to 2 or 4 like the old system), so short entries
-   pack in next to each other instead of each claiming a fresh page.
+1. A session's attendees are one wrapped Paragraph in one table cell/row,
+   not one Paragraph line per attending camper - a session of 19 people
+   takes a handful of wrapped lines, not 19.
+2. Nothing is force-broken onto a new page: entries flow through an
+   adaptive multi-column frame (the number of columns is computed from
+   the page's actual width), so short entries pack in next to each other
+   instead of each claiming a fresh page.
 
 The campers document also uses a different shape entirely: one small
 attendance-matrix table per family (rows = distinct sessions anyone in
@@ -129,9 +122,7 @@ _styles = {
 
 
 class _NumberedCanvas(canvas.Canvas):
-    """Draws a running title/rule and "Page N of TOTAL" footer - a single,
-    non-duplicated version of the old system's ``NumberedCanvas`` (which
-    had two drifted copies pasted into the same file)."""
+    """Draws a running title/rule and "Page N of TOTAL" footer."""
 
     def __init__(self, *args, title: str, pagesize: tuple[float, float], **kwargs):
         super().__init__(*args, **kwargs)
@@ -167,10 +158,9 @@ class _NumberedCanvas(canvas.Canvas):
 
 def _build_doc(output_path: Path, page_spec: PageSpec) -> tuple[BaseDocTemplate, float]:
     """A document whose page template has as many equal-width columns as
-    comfortably fit the page - unlike the old system's hardcoded 2/4
-    column count, this adapts to whatever paper size/orientation was
-    asked for. Returns the doc and the resulting column width (needed by
-    callers to size their tables)."""
+    comfortably fit the page, adapting to whatever paper size/orientation
+    was asked for. Returns the doc and the resulting column width (needed
+    by callers to size their tables)."""
 
     pagesize = page_spec.pagesize
     doc = BaseDocTemplate(
@@ -239,7 +229,7 @@ def render_activities_pdf(
 ) -> None:
     """One table per activity: each row is a session (not a camper), with
     its attendees wrapped into a single cell - see the module docstring
-    for why this is dramatically more compact than the old system."""
+    for why this stays compact at real camp scale."""
 
     doc, column_width = _build_doc(output_path, page_spec)
     time_w = column_width * 0.30

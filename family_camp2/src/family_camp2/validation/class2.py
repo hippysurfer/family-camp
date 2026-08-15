@@ -100,8 +100,7 @@ class Class2Report:
     # Excluded from is_clean for the same reason family_splits is: the
     # organiser explicitly marked these "soft" (best-effort), so failing
     # to honour one shouldn't flip Feasible to False - it's still scored
-    # via score_tier0, and at a higher severity than missing_priority
-    # (OQ-21).
+    # via score_tier0, at a higher severity than missing_priority.
     custom_constraint_violations: list[CustomConstraintViolation] = field(default_factory=list)
 
     @property
@@ -118,7 +117,7 @@ class Class2Report:
 @dataclass(frozen=True)
 class Tier0Weights:
     """Severity ordering, most severe first: **custom constraint**
-    (FR-95/OQ-21 - an organiser-authored soft constraint outranks even a
+    (FR-95 - an organiser-authored soft constraint outranks even a
     missing priority) > priority > family safety (time conflicts /
     poorly supervised splits) > family split occurrence (FR-24 - avoided
     as a last resort, even when properly supervised) > min occupancy >
@@ -131,34 +130,21 @@ class Tier0Weights:
     this is what makes ``score_tier0`` behave as a severity ranking rather
     than an arbitrary trade-off.
 
-    ``missing_priority`` through ``compulsory`` are unchanged from before
-    ``custom_constraint`` was added - proven safe against real ~283-camper
-    data across several earlier phases. ``custom_constraint`` was added
-    as one further 1,000x step *above* that existing, unchanged scale,
-    not by scaling every band up to preserve a bigger ratio at the *same*
-    top value: Step 34 found that CP-SAT rejects a model as MODEL_INVALID
-    once the objective's coefficients get large enough to risk integer
-    overflow internally, so moving ``missing_priority`` itself upward to
-    make room for a new band above it (rather than leaving it alone and
-    only extending the ceiling) is exactly the mistake that triggered
-    that failure previously.
-
-    Re-verified against the same real ~283-camper data (IMPLEMENTATION_PLAN.md
-    Step 45) with a realistic set of custom constraints - several separate
-    soft rules, each targeting a single camper or a small family, matching
-    the FR-90 per-camper/family use case - which stays well clear of
-    MODEL_INVALID. Unlike the other five bands, ``custom_constraint``'s
-    term count is *not* intrinsically bounded to a small number by the camp's
-    structure (one term per family/activity pair, one per session, etc.) -
-    it is one term per (camper, session) pair that some soft constraint
+    CP-SAT rejects a model as ``MODEL_INVALID`` once the objective's
+    integer coefficients get large enough to risk overflow internally, so
+    these weights can't simply be scaled up arbitrarily to add more bands
+    or headroom. Unlike the other five bands, ``custom_constraint``'s term
+    count is *not* intrinsically bounded to a small number by the camp's
+    structure (one term per family/activity pair, one per session, etc.)
+    - it is one term per (camper, session) pair that some soft constraint
     forbids, so a single constraint row that broadly targets most of the
-    camp with a rule matching most sessions can in principle still push the
-    objective towards overflow (empirically, above roughly 9,000 such terms
-    against this data). This is considered out of scope for the per-camper/
-    per-family constraints this feature is designed for (FR-90); a rule
-    intended to apply camp-wide belongs in the core scheduling model (e.g.
-    ``Activity.min_age``, compulsory activities), not this extension point.
-    Configurable per NFR-4.
+    camp with a rule matching most sessions can in principle push the
+    objective towards overflow (empirically, above roughly 9,000 such
+    terms against a real ~283-camper dataset). This is out of scope for
+    the per-camper/per-family constraints this feature is designed for
+    (FR-90); a rule intended to apply camp-wide belongs in the core
+    scheduling model (e.g. ``Activity.min_age``, compulsory activities),
+    not this extension point. Configurable per NFR-4.
     """
 
     custom_constraint: int = 10**15

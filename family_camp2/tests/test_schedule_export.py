@@ -86,9 +86,9 @@ def test_load_json_raises_on_unknown_session(tmp_path):
 
 
 def test_load_csv_reports_every_bad_row_not_just_the_first(tmp_path):
-    """OQ-16: a hand-editing session is likely to have more than one
-    mistake - all of them should surface in one error, not just the
-    first, so they can all be fixed in one pass."""
+    """A hand-editing session is likely to have more than one mistake -
+    all of them should surface in one error, not just the first, so they
+    can all be fixed in one pass."""
     activities, sessions, campers, timetable = _small_timetable()
     path = tmp_path / "schedule.csv"
     path.write_text(

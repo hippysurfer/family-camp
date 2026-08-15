@@ -2,13 +2,12 @@
 
 See DESIGN_OPTIONS.md §4.1. The accept/reject *decision* always uses
 strict lexicographic tuple comparison (``compare``), never a scalarised
-combination - this is what lets Design B express OQ-4's "must be a
-ranking, not a weighting" inside a local-search acceptance rule, and is
-exactly the fitness-sign-convention bug class flagged in DESIGN.md §3.1
-that a scalarised weighted fitness is prone to. A scalar magnitude is
-still used, but only to drive the annealing temperature's acceptance
-*probability* for moves that are lexicographically worse - never to
-decide whether a move is better or worse in the first place.
+combination - this is what lets Design B honour the tier ranking (a
+higher tier must never be traded away for a better lower tier) inside a
+local-search acceptance rule. A scalar magnitude is still used, but only
+to drive the annealing temperature's acceptance *probability* for moves
+that are lexicographically worse - never to decide whether a move is
+better or worse in the first place.
 """
 
 from __future__ import annotations

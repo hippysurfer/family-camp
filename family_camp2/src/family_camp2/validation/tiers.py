@@ -1,7 +1,7 @@
 """Tier 1 (FR-20/FR-21) and Tier 2 (FR-22) objective scoring.
 
-See DESIGN_OPTIONS.md §2.3. FR-23 (idle time) is deliberately not scored
-here - per OQ-3 it is reporting-only (see idle.py), not an objective.
+See DESIGN_OPTIONS.md §2.3. Idle time is reporting-only (see idle.py),
+not an objective scored here.
 """
 
 from __future__ import annotations

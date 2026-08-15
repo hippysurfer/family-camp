@@ -12,13 +12,13 @@ data transformations over ``Activity``/``Session``/``Camper``/
 ``Timetable``/``ValidationReport`` with no ``reportlab`` involvement,
 independently unit-testable; the ``_render_*`` functions turn that data
 into ``reportlab`` flowables, assembled into one document by
-``render_status_report_pdf`` (Step 53). Reuses ``pdf_reports.py``'s
+``render_status_report_pdf``. Reuses ``pdf_reports.py``'s
 styling/table/canvas helpers rather than duplicating them, for visual
 consistency with the other PDFs this engine produces (the same private-
 helper cross-module import pattern already used by
 ``io/google_sheets.py``'s import of ``legacy_cache_loader._parse_duration``).
 
-Camper/family fulfilment data (Steps 51/52) reuses the existing
+Camper/family fulfilment data reuses the existing
 ``find_missing_priorities`` (``validation/class2.py``),
 ``find_unmet_optional_requests`` (``validation/tiers.py``), and
 ``find_overdemanding_families`` (``validation/feasibility.py``) - no new
@@ -354,7 +354,7 @@ class SessionLoadingStats:
 
 
 def _session_loading_stats(rows: list[SessionLoadingRow]) -> SessionLoadingStats:
-    """"Ideal" session size is a session's own capacity (OQ-26) - spare
+    """"Ideal" session size is a session's own capacity - spare
     capacity *is* the deviation-from-ideal statistic, nothing further to
     compute. Population stdev (``pstdev``, not sample ``stdev``) since
     ``rows`` is the complete set of sessions, not a sample of a larger
@@ -437,8 +437,8 @@ def _camper_loading_rows(
     """Derives met/unmet counts from the already-computed
     ``class2_report.missing_priorities``/``unmet_optional`` - no new
     fulfilment logic, pure aggregation. Sorted by ``(family_id, name)``
-    so a family's members stay adjacent (FR-103), matching Step 52's
-    family-level view."""
+    so a family's members stay adjacent (FR-103), matching the
+    family-level view ``_family_loading_rows`` builds from it."""
     missing_priorities: dict[Camper, set[Activity]] = defaultdict(set)
     for mp in class2_report.missing_priorities:
         missing_priorities[mp.camper].add(mp.activity)
@@ -522,8 +522,8 @@ class FamilyLoadingRow:
 
 
 def _family_loading_rows(camper_rows: list[CamperLoadingRow]) -> list[FamilyLoadingRow]:
-    """Aggregates Step 51's per-camper rows by ``family_id`` - built
-    *from* ``_camper_loading_rows``'s output, not a second independent
+    """Aggregates ``_camper_loading_rows``'s per-camper rows by
+    ``family_id`` - built *from* that output, not a second independent
     pass over ``campers``/``timetable``, so the camper- and family-level
     sections can never disagree with each other on the underlying
     counts."""

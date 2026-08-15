@@ -25,11 +25,10 @@ Column layout:
                     "comma,separated,optional,activities"]
                    (the first campers row is a header and is skipped)
 
-The legacy schema predates OQ-8 (activity minimum age), so every Activity
-parsed this way has ``min_age=None``. It also predates family_camp2's
-config-level compulsory-activities concept (§ EngineConfig) - unlike the
-old system, this never mixes a compulsory-activities list into a camper's
-priorities.
+The legacy schema has no minimum-age column, so every Activity parsed
+this way has ``min_age=None``. It also has no compulsory-activities
+concept - that lives entirely in ``EngineConfig`` on the family_camp2
+side, never mixed into a camper's own priorities list.
 """
 
 from __future__ import annotations

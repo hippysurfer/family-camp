@@ -1,10 +1,8 @@
-"""Shared camp-name/output-folder naming for the CLI tools' --out-dir
-convention: ``family_camp2-fetch`` writes its cached download JSON
-directly into ``--out-dir`` as ``<camp_name>.json``; ``cli.py``'s
-``solve``/``revalidate`` write everything else into a fresh
-``<camp_name>_<run timestamp>`` subfolder of it, derived from the
-``--data``/``--legacy-cache`` file's own name - so a camp's name only
-ever needs to be decided once, at fetch time.
+"""Shared camp-name/output-folder naming for the CLI's --out-dir
+convention (REQUIREMENTS.md §4.12/§4.13): ``fetch`` writes its cached
+download JSON directly into ``--out-dir`` as ``camp.json``; ``solve``/
+``revalidate`` write everything else into a fresh
+``<camp_name>_<run timestamp>`` subfolder of it.
 """
 
 from __future__ import annotations

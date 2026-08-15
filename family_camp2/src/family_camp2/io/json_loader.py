@@ -1,8 +1,8 @@
 """A minimal, documented JSON format for describing a camp instance.
 
-Implements the input data contract in REQUIREMENTS.md §3 (plus ``min_age``
-per OQ-8). Usable standalone for manual runs and as the format every test
-fixture in this repo is built from.
+Implements the input data contract in REQUIREMENTS.md §3. Usable
+standalone for manual runs and as the format every test fixture in this
+repo is built from.
 
 Schema::
 

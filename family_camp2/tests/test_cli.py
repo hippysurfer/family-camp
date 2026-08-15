@@ -249,9 +249,10 @@ def test_cli_writes_a_round_trippable_json_report(tmp_path, capsys):
 
 
 def test_cli_solve_loads_custom_constraints_from_data_without_error(tmp_path):
-    """Step 43 only proves the data reaches config.constraints - hard/soft
-    enforcement is Steps 44/45, not yet wired here, so this just confirms
-    a --data file with a "constraints" array solves without error."""
+    """Only proves the data reaches config.constraints - hard/soft
+    enforcement itself is exercised elsewhere (test_cp_sat_solver.py,
+    test_custom_constraints_soft.py), so this just confirms a --data file
+    with a "constraints" array solves without error."""
     data = json.loads(SMALL_CAMP_JSON.read_text())
     data["constraints"] = [
         {"family_id": "F1", "camper_name": None, "constraint": "no_activities_on_day(2)", "severity": "hard"},

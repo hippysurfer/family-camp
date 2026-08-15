@@ -1,12 +1,11 @@
 """Design B: a constructive starting point for each annealing chain.
 
-The spirit of the old system's ``gen_seed_individual`` (DESIGN.md §2.4),
-rewritten from scratch against the new State/move primitives: walk every
-session, and for each family that wants that session's activity, admit
-them with a weighted coin-flip (more likely if it's a priority for someone
-in the family, less likely if only optional) - biasing the starting point
-towards a reasonably good state without needing to be valid or complete,
-since the annealing search (solver.py) repairs and improves it from there.
+Walks every session, and for each family that wants that session's
+activity, admits them with a weighted coin-flip (more likely if it's a
+priority for someone in the family, less likely if only optional) -
+biasing the starting point towards a reasonably good state without
+needing to be valid or complete, since the annealing search (solver.py)
+repairs and improves it from there.
 """
 
 from __future__ import annotations

@@ -1,20 +1,19 @@
-"""FR-23: idle-time reporting, extended per FR-74 to also cover whole
-idle family/groups and individually-named idle adults.
+"""FR-74: idle-time reporting for staffing/supervision planning - who has
+nothing scheduled at a given time, and two more targeted views on top of
+that plain camper-level list.
 
-Per OQ-3, idle time is reporting-only (useful for staffing awareness), not
-an optimisation objective - so this lives separately from tiers.py.
+Idle time is reporting-only (useful for staffing awareness), not an
+optimisation objective - so this lives separately from tiers.py.
 Deliberately makes no assumption about camp length (FR-3/NFR-5): the time
 range covered is derived from the actual sessions passed in, not a
 hardcoded number of days.
 
-FR-74 asks for two views beyond the plain camper-level list, matching the
-old system's staffing-relevant distinction (`deep.py:print_individual`'s
-separate ``inactive_groups_out``/``inactive_adult_campers_out``): a whole
-family with *nobody* active is a different signal than "this specific
-adult happens to be free" - the former flags a possible scheduling gap for
-that family, the latter flags who could help elsewhere. Both are derived
-from the same active-session scan already needed for ``idle_campers`` -
-no second full pass over campers/sessions (NFR-9).
+A whole family with *nobody* active is a different signal than "this
+specific adult happens to be free": the former flags a possible
+scheduling gap for that family, the latter flags who could help
+elsewhere. Both are derived from the same active-session scan already
+needed for ``idle_campers`` - no second full pass over campers/sessions
+(NFR-9).
 """
 
 from __future__ import annotations

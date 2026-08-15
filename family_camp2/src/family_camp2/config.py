@@ -18,7 +18,7 @@ __all__ = ["EngineConfig", "ConfigError", "load_config"]
 
 VALID_TIERS = frozenset({"tier0", "tier1", "tier2"})
 _TIER0_WEIGHT_FIELDS = frozenset(
-    {"missing_priority", "family_safety", "family_split", "under_minimum", "compulsory"}
+    {"custom_constraint", "missing_priority", "family_safety", "family_split", "under_minimum", "compulsory"}
 )
 _TOP_LEVEL_FIELDS = frozenset({"tier0_weights", "objective_order", "compulsory_activities"})
 
@@ -30,14 +30,14 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class EngineConfig:
     tier0_weights: Tier0Weights = field(default_factory=Tier0Weights)
-    # Content is fixed (one entry per tier); the *order* is what OQ-4 requires be adjustable.
+    # Content is fixed (one entry per tier); only the *order* is adjustable (FR-20-22).
     objective_order: tuple[str, ...] = ("tier0", "tier1", "tier2")
     compulsory_activities: tuple[str, ...] = ()
-    # Per-camper/family custom constraints (REQUIREMENTS.md §3.5/§4.10,
-    # OQ-19) - populated from the --data/--legacy-cache source, not from
-    # this JSON config file (see load_config below): unlike the other
-    # fields here, constraints are camp-specific data tied to real
-    # campers in a given year, not a solver-tuning knob.
+    # Per-camper/family custom constraints (REQUIREMENTS.md §3.5/§4.10) -
+    # populated from the --data/--legacy-cache source, not from this JSON
+    # config file (see load_config below): unlike the other fields here,
+    # constraints are camp-specific data tied to real campers in a given
+    # year, not a solver-tuning knob.
     constraints: tuple[ConstraintInstance, ...] = ()
 
 

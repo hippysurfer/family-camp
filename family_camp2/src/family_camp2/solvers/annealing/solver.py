@@ -1,12 +1,11 @@
 """Design B: the simulated-annealing solver (DESIGN_OPTIONS.md §4.1).
 
 ``run_chain`` is a single evolving chain. ``run_restarts`` runs many
-independent chains (optionally in parallel, mirroring the current
-system's use of ``multiprocessing`` for fitness evaluation - see DESIGN.md
-§2.3) from independent constructive seeds (seed.py) and keeps the best
-result across all of them, per DESIGN_OPTIONS.md §4.1's restart strategy -
-the main lever Design B has for compensating for any single chain's lack
-of an optimality guarantee. ``AnnealingSolver`` wraps this as a ``Solver``.
+independent chains (optionally in parallel, via ``multiprocessing``) from
+independent constructive seeds (seed.py) and keeps the best result across
+all of them, per DESIGN_OPTIONS.md §4.1's restart strategy - the main
+lever Design B has for compensating for any single chain's lack of an
+optimality guarantee. ``AnnealingSolver`` wraps this as a ``Solver``.
 """
 
 from __future__ import annotations
@@ -213,7 +212,8 @@ def _report_chain_results(
     CP-SAT's isn't directly usable without a cross-process progress queue
     - and measured on real ~283-camper data, a full multi-chain run
     completes in a couple of minutes, i.e. individual chains land well
-    inside the OQ-9 60-second default cadence in practice anyway."""
+    inside CP-SAT's 60-second default progress cadence in practice
+    anyway."""
     results_by_seed: dict[int, State] = {}
     completed = 0
     for seed, state in results:

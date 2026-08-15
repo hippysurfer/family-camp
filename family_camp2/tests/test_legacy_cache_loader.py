@@ -45,7 +45,7 @@ def test_legacy_cache_parses_into_expected_domain_objects(tmp_path):
     assert [a.name for a in kid.optional] == ["Craft"]
 
     archery = next(a for a in activities if a.name == "Archery")
-    assert archery.min_age is None  # legacy schema predates OQ-8
+    assert archery.min_age is None  # legacy schema has no minimum-age column
 
 
 def test_session_with_unknown_activity_raises(tmp_path):

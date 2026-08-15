@@ -1,7 +1,5 @@
 """Human-readable operational reports from a timetable (REQUIREMENTS.md
-§4.7, FR-72/FR-73/FR-74/FR-76/FR-77) - matching the *content* of the old
-system's ``campers_out``/``activites_out``/``inactive_*_out`` reports
-(`deep.py:print_individual`), not their exact formatting.
+§4.7, FR-72/FR-73/FR-74/FR-76/FR-77).
 
 Per NFR-10, these read only ``Timetable``/domain objects and the
 already-computed ``IdleReport``/``UnmetOptionalRequest``/
@@ -30,9 +28,8 @@ _TIME_FORMAT = "%a %H:%M"
 
 
 def render_family_itinerary(timetable: Timetable, campers: list[Camper]) -> str:
-    """For each family (sorted alphabetically by family_id, matching the
-    old system's human-friendly ordering), its members' sessions in time
-    order."""
+    """For each family (sorted alphabetically by family_id), its members'
+    sessions in time order."""
 
     campers_by_family: dict[str, list[Camper]] = defaultdict(list)
     for c in campers:

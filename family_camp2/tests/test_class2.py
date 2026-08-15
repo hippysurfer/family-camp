@@ -180,9 +180,8 @@ def test_family_split_with_adult_and_child_in_every_session_is_not_flagged():
 
 
 def test_unsupervised_family_split_applies_to_optional_not_just_priority_activities():
-    """FR-17 tightens OQ-7: the old rule only checked priority activities -
-    the motivating real-world case (022/Glen) was a split on two *optional*
-    activities."""
+    """FR-17 covers both priority and optional activities - a family split
+    confined entirely to optional activities must still be detected."""
     bushcraft = activity("Bushcraft skills", max_occ=1)
     parent = camper("Parent", age=40, age_group="Adult", optional=(bushcraft,))
     kid = camper("Kid", age=10, optional=(bushcraft,))

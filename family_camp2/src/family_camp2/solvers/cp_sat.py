@@ -1,10 +1,11 @@
 """Design A: constraint programming via Google OR-Tools CP-SAT.
 
-See DESIGN_OPTIONS.md §3. This module is built up over several
-implementation-plan steps: Step 12 (this one) builds the decision
-variables and Class 1 structural constraints only; Step 13 adds Class 2
-violation indicators and the Tier 0 objective; Step 14 completes the
-three-phase lexicographic solve and the ``CpSatSolver`` itself.
+See DESIGN_OPTIONS.md §3. Builds the decision variables and Class 1
+structural constraints (``build_model``), the Class 2 violation
+indicators and Tier 0 objective (``add_class2_indicators``/
+``tier0_expr``), and the three-phase lexicographic solve
+(``solve_phase1``/``solve_phase2``/``solve_phase3``) that ``CpSatSolver``
+drives end to end.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ class VarIndex:
 
     A pair is only eligible - and only gets a variable - if the camper
     requested the session's activity (priority or optional) and is
-    age-eligible for it (OQ-8). This is what makes Class 1's
+    age-eligible for it (FR-18). This is what makes Class 1's
     unrequested-activity and age-eligibility rules structural rather than
     something the objective has to discourage (DESIGN_OPTIONS.md §3.1):
     the model has no way to represent an invalid assignment at all.
@@ -453,7 +454,7 @@ def tier0_expr(class2_vars: Class2Vars, weights: Tier0Weights = Tier0Weights()):
 # CpSolverSolutionCallback only fires when the solver finds a new,
 # improving solution - during a long stall (observed for real on a
 # 283-camper instance) it can fire rarely or not at all, so it cannot by
-# itself satisfy a wall-clock cadence (OQ-9: every 60s by default). The
+# itself satisfy a wall-clock cadence (every 60s by default). The
 # callback's only job is to cheaply record the latest solution into a
 # lock-protected holder (Solve() may run CP-SAT's own internal search
 # threads, so the callback can fire from a thread other than the caller's
@@ -745,7 +746,7 @@ class CpSatSolver:
     Takes ``time_limit_seconds``/``random_seed``/``progress_reporter``/
     ``progress_interval_seconds`` directly (rather than a single params
     object) so it can be constructed uniformly via
-    ``registry.get_solver(name, **kwargs)`` from CLI flags (Step 15/26).
+    ``registry.get_solver(name, **kwargs)`` from CLI flags.
     """
 
     def __init__(

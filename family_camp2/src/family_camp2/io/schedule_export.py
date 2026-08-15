@@ -5,15 +5,15 @@ report (FR-40/41), which describes how *good* a schedule is, not what it
 data: the CLI's ``--out`` only ever wrote the validation report, never
 the schedule itself.
 
-Both CSV and JSON are supported (OQ-11) from one shared row-building
+Both CSV and JSON are supported (FR-70) from one shared row-building
 helper, so "what does an exported assignment look like" exists exactly
 once regardless of format.
 
 Also the re-import path a hand-edited schedule goes through
 (REQUIREMENTS.md §4.9, FR-86/87): ``load_schedule_csv``/``load_schedule_json``
 collect *every* row that can't be resolved to a known camper/session
-before raising, rather than stopping at the first (OQ-16) - friendlier
-for a hand-editing session likely to contain more than one mistake.
+before raising, rather than stopping at the first - friendlier for a
+hand-editing session likely to contain more than one mistake.
 """
 
 from __future__ import annotations
@@ -101,8 +101,8 @@ def _resolve_rows(
     campers_by_key: dict[tuple[str, str], Camper],
     sessions_by_key: dict[tuple[str, str, datetime], Session],
 ) -> frozenset[Assignment]:
-    """Resolves every row, collecting *all* unresolvable ones (OQ-16)
-    rather than stopping at the first - a hand-editing session is likely
+    """Resolves every row, collecting *all* unresolvable ones rather than
+    stopping at the first - a hand-editing session is likely
     to contain more than one typo, and finding them one fix-and-rerun at
     a time is tedious. Row numbers are 1-based over the data rows only
     (matching what a spreadsheet's row selector would show once its

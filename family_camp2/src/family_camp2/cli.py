@@ -1,7 +1,6 @@
 """Command-line entry point for the family_camp2 scheduling engine.
 
-Three subcommands (OQ-15, extended by the unified-CLI request that added
-``fetch``): ``fetch`` downloads camp data from a Google Sheet and caches
+Three subcommands: ``fetch`` downloads camp data from a Google Sheet and caches
 it locally; ``solve`` generates a schedule with a solver; ``revalidate``
 takes a previously exported, possibly hand-edited schedule
 (REQUIREMENTS.md §4.9, FR-86-89) and runs it through the same
@@ -185,12 +184,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     solve_parser.add_argument(
         "--progress-output", type=str, default="-", dest="progress_output",
-        help='Where to write progress updates: "-" for stdout (default), or a file path (OQ-10). '
+        help='Where to write progress updates: "-" for stdout (default), or a file path. '
         "There's no separate on/off switch - redirect to a file you won't read (or /dev/null) to silence it.",
     )
     solve_parser.add_argument(
         "--progress-interval", type=float, default=60.0, dest="progress_interval",
-        help="Wall-clock seconds between progress updates (OQ-9, default 60). CP-SAT only - "
+        help="Wall-clock seconds between progress updates (default 60). CP-SAT only - "
         "annealing reports per restart-chain completion instead (see solvers/annealing/solver.py).",
     )
     _add_output_args(solve_parser)

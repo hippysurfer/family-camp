@@ -8,8 +8,7 @@ arguments - this is organiser-edited spreadsheet data, not trusted source
 code (FR-92). Every unresolvable record - a bad target, an unparseable
 expression, an unknown rule name, wrong arguments for it - is collected
 and reported together, not just the first (FR-93), the same shape
-``io/schedule_export.py``'s ``_resolve_rows`` already established for
-schedule re-import (OQ-16's precedent).
+``io/schedule_export.py``'s ``_resolve_rows`` uses for schedule re-import.
 """
 
 from __future__ import annotations

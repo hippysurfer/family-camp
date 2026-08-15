@@ -203,9 +203,9 @@ def _parse_age(age_text: str, age_group_text: str) -> int:
     for adults who didn't fill in an exact age) or a "18+" style value
     rather than a plain integer. Falls back on the age-group label when no
     usable number is present. Not exact, but errs in the safe direction
-    for the rules that depend on it (OQ-7 adult supervision treats 18 as
-    adult; OQ-8 minimum ages only ever gate children upward, not adults
-    downward)."""
+    for the rules that depend on it (FR-17's adult-supervision check
+    treats 18 as adult; FR-18's minimum ages only ever gate children
+    upward, not adults downward)."""
     text = age_text.strip().rstrip("+")
     if text.isdigit():
         return int(text)

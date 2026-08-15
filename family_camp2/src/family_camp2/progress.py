@@ -1,12 +1,11 @@
 """Solver-agnostic progress reporting (REQUIREMENTS.md §4.6, FR-60/FR-61).
 
 Every solver's default is a no-op (``NullProgressReporter``), so reporting
-never costs anything unless requested (NFR-9). ``PeriodicHeartbeat`` is
-what makes reporting genuinely wall-clock-cadenced (OQ-9: 60s default, not
-event-based) rather than tied to how often a solver happens to find
-something new to report - a plain "report when something improves" hook
-goes silent during a long stall, which is exactly the gap felt running a
-real multi-hour CP-SAT job with no progress reporting at all.
+never costs anything unless requested (NFR-9). ``PeriodicHeartbeat`` makes
+reporting genuinely wall-clock-cadenced (60s default) rather than tied to
+how often a solver happens to find something new to report - a plain
+"report when something improves" hook would go silent during a long
+stall in the search, leaving no signal that the run is still alive.
 """
 
 from __future__ import annotations
@@ -50,8 +49,8 @@ class PrintProgressReporter:
 
     ``destination`` is resolved once, at construction, not per call (a
     single write per report is the whole cost - NFR-9): ``"-"`` resolves
-    to stdout (OQ-10's default); anything else is opened as a file path
-    for writing.
+    to stdout (the default); anything else is opened as a file path for
+    writing.
     """
 
     def __init__(self, destination: str = "-"):

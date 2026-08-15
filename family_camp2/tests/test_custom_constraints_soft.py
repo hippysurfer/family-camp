@@ -101,7 +101,7 @@ def test_cp_sat_avoids_a_soft_forbidden_session_when_a_compliant_alternative_exi
 
 
 def test_cp_sat_prefers_a_missing_priority_over_a_soft_custom_constraint_violation():
-    """REQUIREMENTS.md OQ-21: custom-constraint ranks ABOVE missing_priority,
+    """FR-95: custom-constraint ranks ABOVE missing_priority,
     so when the only session that would satisfy a priority also violates a
     soft custom constraint, the solver leaves the priority unmet rather
     than accept the (more severe) soft violation."""

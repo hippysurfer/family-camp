@@ -6,6 +6,7 @@ from family_camp2.config import EngineConfig
 from family_camp2.domain import Activity, Camper, Session
 from family_camp2.solvers.cp_sat import (
     CpSatSolver,
+    _phase_failure_message,
     add_class2_indicators,
     build_model,
     extract_timetable,
@@ -157,3 +158,23 @@ def test_solve_falls_back_to_phase2_result_when_phase3_finds_nothing(monkeypatch
     assert result.report is not None
     assert "SKIPPED" in result.diagnostics["phase3_status"]
     assert result.report.tier0_score == result.diagnostics["tier0_optimum"]
+
+
+def test_phase_failure_message_is_friendlier_for_an_unbounded_run_stopped_with_nothing_found():
+    """CP-SAT has its own built-in graceful handling of an interrupt (e.g.
+    Ctrl-C): it ends the phase's search and returns whatever it has - if
+    that's nothing at all (UNKNOWN) and no --time-limit was set to blame,
+    that's the realistic cause (Class 1 always admits a trivially feasible
+    solution otherwise), so the message should say so rather than reading
+    like a bare solver failure."""
+    message = _phase_failure_message("Phase 1", cp_model.UNKNOWN, solver=None, time_limit_seconds=None)
+    assert "interrupt" in message
+    assert "nothing to write" in message
+
+
+def test_phase_failure_message_is_unchanged_when_a_time_limit_was_set():
+    """UNKNOWN with a --time-limit set is unremarkable (the limit was just
+    tight) - no reason to suggest an interrupt happened."""
+    solver = cp_model.CpSolver()
+    message = _phase_failure_message("Phase 1", cp_model.UNKNOWN, solver, time_limit_seconds=5.0)
+    assert message == "CP-SAT Phase 1 solve failed with status UNKNOWN"

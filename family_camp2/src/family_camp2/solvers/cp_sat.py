@@ -510,6 +510,29 @@ def _make_get_event(callback: _ProgressCallback, stage: str, tier_index: int, st
     return get_event
 
 
+def _phase_failure_message(
+    phase_name: str, status: int, solver: cp_model.CpSolver, time_limit_seconds: float | None
+) -> str:
+    """CP-SAT has its own built-in graceful handling of an interrupt
+    (e.g. Ctrl-C): it ends the current phase's search and returns
+    whatever it has, same as it would for OPTIMAL/FEASIBLE - already
+    handled by the caller's tolerant status check, no special-casing
+    needed here. The one genuinely bad outcome that reaches this
+    function is UNKNOWN with no time limit set: since Class 1 always
+    admits a trivially feasible "nobody assigned anywhere" solution,
+    the only realistic way to see UNKNOWN with no time limit to blame is
+    that very interrupt landing before the search found anything at
+    all - worth a clearer message than a bare solver-failure one, even
+    though it can't be told apart from a genuine (very unlikely) solver
+    problem with certainty."""
+    if status == cp_model.UNKNOWN and time_limit_seconds is None:
+        return (
+            f"CP-SAT {phase_name} was stopped (e.g. by an interrupt) before finding any "
+            "feasible solution - nothing to write."
+        )
+    return f"CP-SAT {phase_name} solve failed with status {solver.StatusName(status)}"
+
+
 def solve_phase1(
     model: cp_model.CpModel,
     objective,
@@ -541,7 +564,7 @@ def solve_phase1(
         )
     )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        raise RuntimeError(f"CP-SAT Phase 1 solve failed with status {solver.StatusName(status)}")
+        raise RuntimeError(_phase_failure_message("Phase 1", status, solver, time_limit_seconds))
     return solver, round(solver.ObjectiveValue())
 
 
@@ -690,7 +713,7 @@ def solve_phase2(
         )
     )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        raise RuntimeError(f"CP-SAT Phase 2 solve failed with status {solver.StatusName(status)}")
+        raise RuntimeError(_phase_failure_message("Phase 2", status, solver, time_limit_seconds))
     return solver, round(solver.ObjectiveValue())
 
 
@@ -727,7 +750,7 @@ def solve_phase3(
         )
     )
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        raise RuntimeError(f"CP-SAT Phase 3 solve failed with status {solver.StatusName(status)}")
+        raise RuntimeError(_phase_failure_message("Phase 3", status, solver, time_limit_seconds))
     return solver
 
 
